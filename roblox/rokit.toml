@@ -1,0 +1,5 @@
+# Rokit toolchain manifest — pins the Roblox tools this project uses so every
+# machine gets the same versions. Run `rokit install` in this folder to fetch them.
+
+[tools]
+rojo = "rojo-rbx/rojo@7.7.0"
