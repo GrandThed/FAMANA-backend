@@ -5,11 +5,13 @@ local PlayerService = require(script:WaitForChild("PlayerService"))
 local HealthService = require(script:WaitForChild("HealthService"))
 local ToolService = require(script:WaitForChild("ToolService"))
 local GatheringService = require(script:WaitForChild("GatheringService"))
+local EnemyService = require(script:WaitForChild("EnemyService"))
 
 PlayerService.start()
 HealthService.start()
 ToolService.start()
 GatheringService.start()
+EnemyService.start()
 
 print("[FAMANA] Server systems started (cell "
 	.. require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config")).cell
