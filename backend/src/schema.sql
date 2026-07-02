@@ -40,3 +40,16 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 );
 
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created_at ON admin_audit (created_at DESC);
+
+-- Per-player event queue. Admin mutations enqueue rows; the game's poll loop
+-- drains them (DELETE ... RETURNING) to push live updates to online players.
+CREATE TABLE IF NOT EXISTS player_events (
+    id           BIGSERIAL PRIMARY KEY,
+    player_id    BIGINT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
+    kind         TEXT   NOT NULL,
+    message      TEXT,
+    payload      JSONB  NOT NULL DEFAULT '{}'::jsonb,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_player_events_player ON player_events (player_id);

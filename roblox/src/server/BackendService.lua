@@ -119,4 +119,23 @@ function BackendService.removeItem(userId, itemId, quantity)
 	return false, nil
 end
 
+-- Fetch the player's current inventory (used to refresh after an admin edit).
+function BackendService.getInventory(userId)
+	local ok, data = request("GET", "/player/" .. tostring(userId) .. "/inventory")
+	if ok and data then
+		return data.inventory
+	end
+	return nil
+end
+
+-- Drain pending events for the given online user ids. Returns a list of
+-- { playerId, kind, message, payload } or nil on failure.
+function BackendService.pollEvents(userIds)
+	local ok, data = request("POST", "/player/events", { userIds = userIds })
+	if ok and data then
+		return data.events
+	end
+	return nil
+end
+
 return BackendService

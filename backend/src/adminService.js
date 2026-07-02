@@ -3,7 +3,12 @@
 
 import { query, withTransaction } from "./db.js";
 import { getInventory, addItem, removeItem } from "./inventory.js";
+import { enqueueEvent } from "./events.js";
 import { ITEMS } from "./items.js";
+
+function itemName(itemId) {
+  return ITEMS[itemId]?.name || itemId;
+}
 
 // Whitelist of sortable columns → SQL, so we never interpolate user input.
 const SORT_COLUMNS = {
@@ -208,6 +213,13 @@ export async function adminAddItem(playerId, itemId, quantity, actor) {
       targetPlayer: playerId,
       detail: { itemId, quantity },
     });
+    await enqueueEvent(
+      client,
+      playerId,
+      "inventory",
+      `An admin gave you ${quantity}× ${itemName(itemId)}.`,
+      { action: "add", itemId, quantity }
+    );
     const inventory = await getInventory(client, playerId);
     return { ...result, inventory };
   });
@@ -224,6 +236,13 @@ export async function adminRemoveItem(playerId, itemId, quantity, actor) {
       targetPlayer: playerId,
       detail: { itemId, quantity },
     });
+    await enqueueEvent(
+      client,
+      playerId,
+      "inventory",
+      `An admin removed ${quantity}× ${itemName(itemId)} from your inventory.`,
+      { action: "remove", itemId, quantity }
+    );
     const inventory = await getInventory(client, playerId);
     return { ...result, inventory };
   });

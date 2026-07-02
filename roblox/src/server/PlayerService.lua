@@ -96,6 +96,20 @@ function PlayerService.addItem(player, itemId, quantity)
 	return false
 end
 
+-- Re-fetch the inventory from the backend and push it to the client + tools.
+-- Used to reflect out-of-band changes (e.g. an admin edit) on an online player.
+function PlayerService.refreshInventory(player)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary then
+		return
+	end
+	local inventory = BackendService.getInventory(player.UserId)
+	if inventory then
+		profile.inventory = inventory
+		PlayerService.pushInventory(player)
+	end
+end
+
 function PlayerService.removeItem(player, itemId, quantity)
 	local profile = cache[player.UserId]
 	if not profile or profile._temporary then

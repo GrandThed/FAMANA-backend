@@ -1,4 +1,5 @@
 import { loadPlayer, createPlayer, savePlayer } from "../playerService.js";
+import { drainEvents } from "../events.js";
 
 // Validates and parses a Roblox UserId path param.
 function parseId(request, reply) {
@@ -11,6 +12,14 @@ function parseId(request, reply) {
 }
 
 export default async function playerRoutes(fastify) {
+  // Drain pending events for the given online players. Called by the game's
+  // poll loop; returns and removes events so each is delivered once.
+  fastify.post("/player/events", async (request) => {
+    const { userIds } = request.body || {};
+    const events = await drainEvents(userIds || []);
+    return { events };
+  });
+
   // Load full player state.
   fastify.get("/player/:id", async (request, reply) => {
     const id = parseId(request, reply);
