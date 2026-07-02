@@ -10,7 +10,7 @@ local GridConfig = {}
 -- ==========================================================================
 GridConfig.cells = {
 	A = {
-		placeId = 0, -- TODO: Cell A's Place id
+		placeId = 130890869057243, -- Cell A (start place)
 		neighbors = { east = "B" },
 		theme = {
 			name = "CELL A",
@@ -19,7 +19,7 @@ GridConfig.cells = {
 		},
 	},
 	B = {
-		placeId = 0, -- TODO: Cell B's Place id
+		placeId = 96623482055191, -- Cell B
 		neighbors = { west = "A" },
 		theme = {
 			name = "CELL B",
