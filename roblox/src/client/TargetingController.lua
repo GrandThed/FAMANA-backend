@@ -1,35 +1,86 @@
--- Enemy focus/targeting. The enemy nearest the camera's aim (screen center) is
--- focused: it gets a highlight outline and a large target health bar at the top
--- of the screen. Enemy HP is read from the health-bar that the server places on
--- each enemy (its Fill scale replicates), so no extra networking is needed.
+-- Tool-aware focus/targeting. While aiming (right mouse held), focuses the best
+-- object for whatever is equipped — sword→enemies, axe→trees, pickaxe→rocks —
+-- but only if it's within that tool's reach. The focus gets a highlight and a
+-- top-screen target panel (with an HP bar for enemies). Enemy HP is read from
+-- the replicated health-bar fill, so no extra networking.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Items = require(Shared:WaitForChild("Items"))
+local Config = require(Shared:WaitForChild("Config"))
+local ClientState = require(script.Parent.ClientState)
 
 local player = Players.LocalPlayer
 
 local TargetingController = {}
 
-local MAX_DIST = 90 -- studs
-local MAX_SCREEN_FRACTION = 0.35 -- how close to screen-center (as a fraction of height) an enemy must be
+-- What the equipped item focuses, and where those objects live.
+local function equippedFocus(character)
+	local tool = character and character:FindFirstChildOfClass("Tool")
+	if not tool then
+		return nil
+	end
+	local def = Items.get(tool:GetAttribute("itemId"))
+	if not def then
+		return nil
+	end
+	if def.type == "weapon" then
+		return { category = "enemy", reach = Config.reach.weapon }
+	elseif def.type == "tool" and def.toolType then
+		return { category = def.toolType, reach = Config.reach[def.toolType] }
+	end
+	return nil
+end
 
-local function enemies()
-	local folder = Workspace:FindFirstChild("Enemies")
-	return folder and folder:GetChildren() or {}
+-- Candidate targets for a category: { adornee, anchor (BasePart), name, hasHp }.
+local function candidates(category)
+	local out = {}
+	if category == "enemy" then
+		local folder = Workspace:FindFirstChild("Enemies")
+		if folder then
+			for _, e in ipairs(folder:GetChildren()) do
+				if e:IsA("BasePart") then
+					table.insert(out, { adornee = e, anchor = e, name = e.Name, hasHp = true })
+				end
+			end
+		end
+	elseif category == "axe" then
+		local folder = Workspace:FindFirstChild("Resources")
+		if folder then
+			for _, m in ipairs(folder:GetChildren()) do
+				if m:IsA("Model") and m.Name == "Tree" then
+					local trunk = m.PrimaryPart or m:FindFirstChild("Trunk")
+					if trunk then
+						table.insert(out, { adornee = m, anchor = trunk, name = "Tree", hasHp = false })
+					end
+				end
+			end
+		end
+	elseif category == "pickaxe" then
+		local folder = Workspace:FindFirstChild("Resources")
+		if folder then
+			for _, r in ipairs(folder:GetChildren()) do
+				if r:IsA("BasePart") and r.Name == "Rock" then
+					table.insert(out, { adornee = r, anchor = r, name = "Rock", hasHp = false })
+				end
+			end
+		end
+	end
+	return out
 end
 
 local function hpFraction(enemyPart)
 	local billboard = enemyPart:FindFirstChild("HealthBar")
 	local fill = billboard and billboard:FindFirstChild("Fill", true)
-	if fill then
-		return math.clamp(fill.Size.X.Scale, 0, 1)
-	end
-	return nil
+	return fill and math.clamp(fill.Size.X.Scale, 0, 1) or nil
 end
 
 function TargetingController.start()
-	-- ---- target bar UI (top-center) ----
+	-- ---- target panel (top-center) ----
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "TargetUI"
 	gui.ResetOnSpawn = false
@@ -44,11 +95,10 @@ function TargetingController.start()
 	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
 	panel.BackgroundTransparency = 0.2
 	panel.BorderSizePixel = 0
-	panel.Parent = gui
-
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = panel
+	panel.Parent = gui
 
 	local nameLabel = Instance.new("TextLabel")
 	nameLabel.Size = UDim2.new(1, -16, 0, 18)
@@ -81,59 +131,73 @@ function TargetingController.start()
 	highlight.OutlineColor = Color3.fromRGB(255, 230, 120)
 	highlight.OutlineTransparency = 0
 
-	local current
+	local currentAdornee
 
-	local function setTarget(part)
-		if current == part then
-			return
-		end
-		current = part
-		if part then
-			highlight.Adornee = part
-			highlight.Parent = part
-			nameLabel.Text = part.Name
-			gui.Enabled = true
-		else
+	local function clear()
+		if currentAdornee then
+			currentAdornee = nil
 			highlight.Adornee = nil
 			highlight.Parent = nil
 			gui.Enabled = false
 		end
 	end
 
+	local function setTarget(cand)
+		if cand.adornee ~= currentAdornee then
+			currentAdornee = cand.adornee
+			highlight.Adornee = cand.adornee
+			highlight.Parent = cand.adornee
+			nameLabel.Text = cand.name
+			barBg.Visible = cand.hasHp
+			gui.Enabled = true
+		end
+	end
+
 	RunService.RenderStepped:Connect(function()
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local camera = Workspace.CurrentCamera
-		if not camera then
+
+		if not (ClientState.aiming and root and camera) then
+			clear()
 			return
 		end
+
+		local focus = equippedFocus(character)
+		if not focus then
+			clear()
+			return
+		end
+
 		local vp = camera.ViewportSize
 		local center = Vector2.new(vp.X / 2, vp.Y / 2)
 
 		local best, bestScore
-		for _, enemy in ipairs(enemies()) do
-			if enemy:IsA("BasePart") then
-				local screenPos, onScreen = camera:WorldToViewportPoint(enemy.Position)
-				if onScreen and screenPos.Z > 0 then
-					local dist = (camera.CFrame.Position - enemy.Position).Magnitude
-					if dist <= MAX_DIST then
-						local frac = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude / vp.Y
-						if frac <= MAX_SCREEN_FRACTION and (not bestScore or frac < bestScore) then
-							best, bestScore = enemy, frac
-						end
+		for _, cand in ipairs(candidates(focus.category)) do
+			if (cand.anchor.Position - root.Position).Magnitude <= focus.reach then
+				local sp, onScreen = camera:WorldToViewportPoint(cand.anchor.Position)
+				if onScreen and sp.Z > 0 then
+					local frac = (Vector2.new(sp.X, sp.Y) - center).Magnitude / vp.Y
+					if not bestScore or frac < bestScore then
+						best, bestScore = cand, frac
 					end
 				end
 			end
 		end
 
+		if not best then
+			clear()
+			return
+		end
+
 		setTarget(best)
 
-		if current then
-			if not current.Parent then
-				setTarget(nil) -- died / despawned
-			else
-				local frac = hpFraction(current)
-				if frac then
-					barFill.Size = UDim2.new(frac, 0, 1, 0)
-				end
+		if not best.adornee.Parent then
+			clear()
+		elseif best.hasHp then
+			local frac = hpFraction(best.anchor)
+			if frac then
+				barFill.Size = UDim2.new(frac, 0, 1, 0)
 			end
 		end
 	end)

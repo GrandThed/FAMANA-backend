@@ -7,6 +7,14 @@
 return {
 	inventoryCapacity = 20,
 
+	-- Effective reach (studs) of tools/weapons. Used by the server to validate
+	-- combat/gather and by the client to decide what can be focused.
+	reach = {
+		weapon = 9, -- sword melee
+		axe = 12, -- tree gather
+		pickaxe = 12, -- rock gather
+	},
+
 	HP = {
 		max = 100,
 		regenAmount = 1, -- HP restored per tick

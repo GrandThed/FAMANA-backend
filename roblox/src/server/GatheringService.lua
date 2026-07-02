@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PlayerService = require(script.Parent.PlayerService)
 local ToolService = require(script.Parent.ToolService)
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
 local GatheringService = {}
 
@@ -115,7 +116,7 @@ local NODE_DEFS = {
 		yield = "wood",
 		capacity = 5,
 		respawn = 60,
-		range = 12,
+		range = Config.reach.axe,
 		build = buildTree,
 		spots = {
 			Vector3.new(20, 0, 12),
@@ -130,7 +131,7 @@ local NODE_DEFS = {
 		yield = "stone",
 		capacity = 5,
 		respawn = 60,
-		range = 12,
+		range = Config.reach.pickaxe,
 		build = buildRock,
 		spots = {
 			Vector3.new(22, 0, -12),

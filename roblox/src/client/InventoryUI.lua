@@ -9,6 +9,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared:WaitForChild("Items"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Config = require(Shared:WaitForChild("Config"))
+local ClientState = require(script.Parent.ClientState)
 
 local player = Players.LocalPlayer
 
@@ -124,6 +125,8 @@ function InventoryUI.start()
 
 	local function toggle()
 		panel.Visible = not panel.Visible
+		-- Free the cursor (via ShiftLockController) while the panel is open.
+		ClientState.inventoryOpen = panel.Visible
 	end
 
 	-- Always-visible button to open/close the inventory (works regardless of

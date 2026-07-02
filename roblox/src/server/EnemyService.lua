@@ -7,12 +7,15 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local HealthService = require(script.Parent.HealthService)
 local ToolService = require(script.Parent.ToolService)
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
 local EnemyService = {}
 
-local MELEE_RANGE = 9 -- how close a player must be for their weapon to connect
+local MELEE_RANGE = Config.reach.weapon -- how close a player must be for their weapon to connect
 
 -- Data-driven enemy types.
 local ENEMY_DEFS = {
