@@ -21,6 +21,15 @@ Thumbs.db
 # Claude Code personal overrides
 .claude/settings.local.json
 
+# Roblox / Rojo
+# The API key lives here — never commit it.
+roblox/src/server/Secret.lua
+# Rojo build output
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+
 # Build output
 dist/
 build/
