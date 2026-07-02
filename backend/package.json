@@ -1,0 +1,19 @@
+{
+  "name": "mmo-backend",
+  "version": "0.1.0",
+  "description": "Fastify + Postgres backend for the Roblox grid MMO",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "migrate": "node src/migrate.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "fastify": "^4.28.1",
+    "pg": "^8.12.0"
+  }
+}
