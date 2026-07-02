@@ -63,11 +63,13 @@
   .grow { flex: 1; }
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
   .invgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px,1fr)); gap: 12px; }
-  .slot { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+  .slot { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow: hidden; }
   .slot .name { font-weight: 600; }
-  .slot .meta { color: var(--muted); font-size: 12px; margin: 2px 0 8px; }
+  .slot .meta { color: var(--muted); font-size: 12px; margin: 2px 0 8px; word-break: break-all; }
+  .slot .qty { font-size: 20px; font-weight: 700; margin: 4px 0 8px; }
   .slot .ctrls { display: flex; gap: 6px; align-items: center; }
-  .slot .ctrls button { padding: 2px 9px; }
+  .slot .ctrls button { flex: 0 0 auto; width: 32px; padding: 4px 0; text-align: center; }
+  .slot .ctrls input { flex: 1 1 auto; width: 100%; min-width: 0; text-align: center; }
   .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 14px; align-items: center; }
   .kv label { color: var(--muted); }
   .danger-zone { border-color: var(--danger-d); }
@@ -326,30 +328,45 @@ async function viewPlayer(id) {
     } catch (e) { toast("Save failed: " + (e.data && e.data.field ? "bad " + e.data.field : e.message), "err"); }
   };
 
-  // --- inventory ---
-  const invSlots = p.inventory.length ? p.inventory.map((slot) => {
-    const qty = el("input", { type: "number", value: 1, min: 1, style: "width:56px" });
-    return el("div", { class: "slot" },
-      el("div", { class: "name" }, itemName(slot.itemId)),
-      el("div", { class: "meta" }, `slot ${slot.slotIndex} · ${slot.itemId}`),
-      el("div", { class: "ctrls" },
-        el("strong", { style: "min-width:34px;display:inline-block" }, "×" + slot.quantity),
-        qty,
-        el("button", { title: "Add", onclick: () => changeItem(id, slot.itemId, Number(qty.value), "add", refresh) }, "＋"),
-        el("button", { title: "Remove", onclick: () => changeItem(id, slot.itemId, Number(qty.value), "remove", refresh) }, "−"),
-      ));
-  }) : [el("p", { class: "muted" }, "Empty inventory.")];
-
-  // --- add-item picker ---
-  const picker = el("select", {}, ...(ITEMS || []).map((it) => el("option", { value: it.id }, `${it.name} (${it.id})`)));
-  const addQty = el("input", { type: "number", value: 1, min: 1, style: "width:70px" });
+  // --- inventory (re-renders in place so +/- doesn't reload the whole page) ---
+  const invPanel = el("div", { class: "panel" });
+  async function reloadInventory() {
+    try { const fresh = await api("GET", `/admin/players/${id}`); renderInventory(fresh.inventory); }
+    catch (e) { if (e.message !== "unauthorized") toast("Reload failed: " + e.message, "err"); }
+  }
+  function renderInventory(inv) {
+    const slots = inv.length ? inv.map((slot) => {
+      const qty = el("input", { type: "number", value: 1, min: 1 });
+      return el("div", { class: "slot" },
+        el("div", { class: "name" }, itemName(slot.itemId)),
+        el("div", { class: "meta" }, `slot ${slot.slotIndex} · ${slot.itemId}`),
+        el("div", { class: "qty" }, "×" + slot.quantity),
+        el("div", { class: "ctrls" },
+          el("button", { title: "Remove", onclick: () => changeItem(id, slot.itemId, Number(qty.value), "remove", reloadInventory) }, "−"),
+          qty,
+          el("button", { title: "Add", onclick: () => changeItem(id, slot.itemId, Number(qty.value), "add", reloadInventory) }, "＋"),
+        ));
+    }) : [el("p", { class: "muted" }, "Empty inventory.")];
+    const picker = el("select", { style: "min-width:200px" }, ...(ITEMS || []).map((it) => el("option", { value: it.id }, `${it.name} (${it.id})`)));
+    const addQty = el("input", { type: "number", value: 1, min: 1, style: "width:70px" });
+    invPanel.innerHTML = "";
+    invPanel.append(
+      el("h2", {}, "Inventory"),
+      el("div", { class: "invgrid" }, ...slots),
+      el("div", { class: "row", style: "margin-top:16px" },
+        picker, addQty,
+        el("button", { class: "primary", onclick: () => changeItem(id, picker.value, Number(addQty.value), "add", reloadInventory) }, "Add item"),
+      ),
+    );
+  }
+  renderInventory(p.inventory);
 
   // --- danger zone ---
   const dangerZone = el("div", { class: "panel danger-zone" },
     el("h2", {}, "Danger zone"),
     el("div", { class: "row" },
       el("button", { onclick: async () => {
-        try { await api("PATCH", `/admin/players/${id}`, { health: p.maxHealth }); toast("HP reset to max.", "ok"); refresh(); }
+        try { await api("PATCH", `/admin/players/${id}`, { health: Number(maxHp.value) }); hp.value = maxHp.value; toast("HP reset to max.", "ok"); }
         catch (e) { toast("Failed: " + e.message, "err"); }
       } }, "Reset HP to max"),
       el("button", { class: "danger", onclick: () => confirmDelete(id, p.username) }, "Delete player…"),
@@ -371,14 +388,7 @@ async function viewPlayer(id) {
       el("div", { style: "margin-top:14px" }, el("button", { class: "primary", onclick: saveStats }, "Save stats")),
     ),
 
-    el("div", { class: "panel" },
-      el("h2", {}, "Inventory"),
-      el("div", { class: "invgrid" }, ...invSlots),
-      el("div", { class: "row", style: "margin-top:16px" },
-        picker, addQty,
-        el("button", { class: "primary", onclick: () => changeItem(id, picker.value, Number(addQty.value), "add", refresh) }, "Add item"),
-      ),
-    ),
+    invPanel,
 
     dangerZone,
   );
