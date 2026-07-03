@@ -143,15 +143,15 @@ function InventoryUI.start()
 	-- The panel stays Visible and slides in/out instead of toggling Visible:
 	-- its ViewportFrames keep their last paint, so opening doesn't flash
 	-- while every thumbnail re-renders on the same frame.
-	-- Docked to the left edge so it stays clear of the chat.
-	local OPEN_POS = UDim2.new(0, 12, 0.5, 0)
-	local CLOSED_POS = UDim2.new(0, -(panelW + 40), 0.5, 0) -- parked off the left edge
+	-- Centered; the chat is moved to the bottom-left instead (ChatConfig).
+	local OPEN_POS = UDim2.new(0.5, 0, 0.5, 0)
+	local CLOSED_POS = UDim2.new(0.5, 0, 1.7, 0) -- parked below the screen
 	local SLIDE_TWEEN = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 	local panel = Instance.new("Frame")
 	panel.Size = UDim2.new(0, panelW, 0, panelH)
 	panel.Position = CLOSED_POS
-	panel.AnchorPoint = Vector2.new(0, 0.5)
+	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = COLORS.panel
 	panel.BorderSizePixel = 0
 	panel.Parent = gui
