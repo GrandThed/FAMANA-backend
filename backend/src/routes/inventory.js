@@ -1,5 +1,5 @@
 import { withTransaction } from "../db.js";
-import { getInventory, addItem, removeItem, moveItem, sortInventory } from "../inventory.js";
+import { getInventory, addItem, removeItem, removeAt, moveItem, sortInventory } from "../inventory.js";
 
 function parseId(request, reply) {
   const id = Number(request.params.id);
@@ -85,6 +85,30 @@ export default async function inventoryRoutes(fastify) {
         return { error: err.code };
       }
       if (err.code === "bad_move" || err.code === "bad_slot") {
+        reply.code(400);
+        return { error: err.code };
+      }
+      throw err;
+    }
+  });
+
+  // Remove the whole stack at a position (the game throws it on the ground):
+  // body { containerId, x, y } → { itemId, quantity, inventory }.
+  fastify.post("/player/:id/inventory/drop", async (request, reply) => {
+    const id = parseId(request, reply);
+    if (id === null) return;
+    const { containerId, x, y } = request.body || {};
+
+    try {
+      const result = await withTransaction((client) => removeAt(client, id, { containerId, x, y }));
+      const inventory = await withTransaction((client) => getInventory(client, id));
+      return { ...result, inventory };
+    } catch (err) {
+      if (err.code === "not_found") {
+        reply.code(409);
+        return { error: err.code };
+      }
+      if (err.code === "bad_move") {
         reply.code(400);
         return { error: err.code };
       }

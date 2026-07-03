@@ -126,6 +126,23 @@ function PlayerService.moveItem(player, from, to)
 	return false, errorCode
 end
 
+-- Removes the whole stack at `ref` so it can be thrown on the ground.
+-- The backend validates the position. Returns (ok, itemId, quantity) —
+-- the caller (DropService) is responsible for spawning the ground drop.
+function PlayerService.dropItem(player, ref)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary then
+		return false
+	end
+	local ok, inventory, itemId, quantity = BackendService.dropItem(player.UserId, ref)
+	if ok and itemId then
+		profile.inventory = inventory
+		PlayerService.pushInventory(player)
+		return true, itemId, quantity
+	end
+	return false
+end
+
 -- Repack the main grid (the Sort button).
 function PlayerService.sortInventory(player)
 	local profile = cache[player.UserId]

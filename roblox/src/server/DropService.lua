@@ -1,6 +1,9 @@
--- Ground drops. When a slime dies, rolls its loot table and spawns physical
--- item drops. Players pick them up by walking over them; the item is added to
--- the inventory via the backend. Drops despawn after a timeout.
+-- Ground drops. Enemy deaths roll loot tables into physical drops; players
+-- can also throw items out of their inventory (the DropItem remote). Drops
+-- are magnetic: they fly to the nearest eligible player within ~1 meter and
+-- are added to the inventory via the backend on contact. A freshly thrown
+-- drop ignores its owner for a few seconds so anyone else has pickup
+-- priority. Drops despawn after a timeout.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -10,6 +13,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
 local ArtKit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ArtKit"))
 local ItemModels = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemModels"))
+local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local PlayerService = require(script.Parent.PlayerService)
 local EnemyService = require(script.Parent.EnemyService)
 
@@ -17,6 +21,10 @@ local DropService = {}
 
 local DROP_LIFETIME = 120
 local RETRY_DELAY = 1 -- if inventory is full, wait before letting the same drop retry
+local MAGNET_RANGE = 3.5 -- studs (~1 meter): drops start flying to a player inside this
+local PICKUP_RANGE = 1.3 -- studs: close enough to be collected
+local MAGNET_SPEED = 14 -- studs/second while flying to a player
+local OWNER_PRIORITY_WINDOW = 3 -- seconds a thrown drop ignores its owner (others go first)
 
 -- Loot tables: [source] = { { itemId, chance, min, max }, ... }
 local LOOT = {
@@ -71,13 +79,27 @@ local function rollLoot(source)
 	return results
 end
 
-local function playerFromHit(hit)
-	local character = hit.Parent
-	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if humanoid and humanoid.Health > 0 then
-		return Players:GetPlayerFromCharacter(character)
+-- The nearest player who may collect this drop right now: alive, within
+-- magnet range, and not the excluded owner during the priority window.
+local function nearestEligiblePlayer(part, now)
+	local droppedBy = part:GetAttribute("droppedBy")
+	local ownerLockUntil = part:GetAttribute("ownerLockUntil") or 0
+	local best, bestRoot, bestDist
+	for _, candidate in ipairs(Players:GetPlayers()) do
+		if candidate.UserId == droppedBy and now < ownerLockUntil then
+			continue
+		end
+		local character = candidate.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if root and humanoid and humanoid.Health > 0 then
+			local dist = (root.Position - part.Position).Magnitude
+			if dist <= MAGNET_RANGE and (not bestDist or dist < bestDist) then
+				best, bestRoot, bestDist = candidate, root, dist
+			end
+		end
 	end
-	return nil
+	return best, bestRoot, bestDist
 end
 
 local function releaseClaimLater(part)
@@ -122,7 +144,7 @@ local function tryPickup(player, part)
 	end
 end
 
-local function spawnDrop(itemId, quantity, position)
+local function spawnDrop(itemId, quantity, position, opts)
 	local def = Items.get(itemId)
 	local spot = position + Vector3.new(math.random(-30, 30) / 10, 2, math.random(-30, 30) / 10)
 
@@ -138,6 +160,12 @@ local function spawnDrop(itemId, quantity, position)
 	part:SetAttribute("itemId", itemId)
 	part:SetAttribute("quantity", quantity)
 	part:SetAttribute("baseY", spot.Y)
+
+	-- Thrown by a player: they lose pickup priority for a few seconds.
+	if opts and opts.droppedBy then
+		part:SetAttribute("droppedBy", opts.droppedBy)
+		part:SetAttribute("ownerLockUntil", os.clock() + OWNER_PRIORITY_WINDOW)
+	end
 
 	local scale = visualScale(itemId)
 	if scale then
@@ -164,13 +192,6 @@ local function spawnDrop(itemId, quantity, position)
 	label.Text = (def and def.name or itemId) .. (quantity > 1 and (" x" .. quantity) or "")
 	label.Parent = billboard
 
-	part.Touched:Connect(function(hit)
-		local player = playerFromHit(hit)
-		if player then
-			tryPickup(player, part)
-		end
-	end)
-
 	part.Parent = dropFolder
 
 	task.delay(DROP_LIFETIME, function()
@@ -182,8 +203,9 @@ end
 
 -- Public: spawn a ground drop. Other systems (e.g. item stands) use this so
 -- everything a player can pick up flows through the same claim/persist path.
-function DropService.spawn(itemId, quantity, position)
-	spawnDrop(itemId, quantity, position)
+-- opts: { droppedBy = userId } marks a player throw (they lose priority).
+function DropService.spawn(itemId, quantity, position, opts)
+	spawnDrop(itemId, quantity, position, opts)
 end
 
 function DropService.start()
@@ -198,11 +220,60 @@ function DropService.start()
 		end
 	end)
 
-	-- Spin + bob the drops for visibility.
-	RunService.Heartbeat:Connect(function()
+	-- Drag-out-to-drop from the inventory UI: remove the stack (backend
+	-- validates the position) and throw it in front of the character.
+	local dropItem = Remotes.getFunction("DropItem")
+	dropItem.OnServerInvoke = function(player, ref)
+		if typeof(ref) ~= "table" then
+			return { ok = false }
+		end
+		local containerId = ref.containerId
+		local x, y = tonumber(ref.x), tonumber(ref.y)
+		if (containerId ~= "main" and containerId ~= "equipment") or not x or not y then
+			return { ok = false }
+		end
+		local ok, itemId, quantity = PlayerService.dropItem(player, {
+			containerId = containerId,
+			x = math.floor(x),
+			y = math.floor(y),
+		})
+		if not ok then
+			return { ok = false }
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		-- Thrown past the magnet radius so it doesn't boomerang straight back
+		-- once the owner-priority window ends.
+		local position = root and (root.Position + root.CFrame.LookVector * 5 - Vector3.new(0, 2, 0))
+			or Vector3.zero
+		spawnDrop(itemId, quantity, position, { droppedBy = player.UserId })
+		return { ok = true }
+	end
+
+	-- Spin + bob the drops; magnet them onto the nearest eligible player.
+	RunService.Heartbeat:Connect(function(dt)
 		local t = os.clock()
 		for _, part in ipairs(dropFolder:GetChildren()) do
-			if part:IsA("BasePart") then
+			if not part:IsA("BasePart") then
+				continue
+			end
+			local flying = false
+			if not part:GetAttribute("claimed") then
+				local target, root, dist = nearestEligiblePlayer(part, t)
+				if target and root then
+					if dist <= PICKUP_RANGE then
+						-- tryPickup yields on the backend call; never in Heartbeat.
+						task.spawn(tryPickup, target, part)
+					else
+						local direction = (root.Position - part.Position).Unit
+						local newPos = part.Position + direction * math.min(MAGNET_SPEED * dt, dist)
+						part:SetAttribute("baseY", newPos.Y)
+						part.CFrame = CFrame.new(newPos) * CFrame.Angles(0, t * 2, 0)
+						flying = true
+					end
+				end
+			end
+			if not flying then
 				local baseY = part:GetAttribute("baseY") or part.Position.Y
 				local y = baseY + math.sin(t * 3) * 0.3
 				part.CFrame = CFrame.new(part.Position.X, y, part.Position.Z) * CFrame.Angles(0, t * 2, 0)

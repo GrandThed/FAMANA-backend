@@ -217,6 +217,29 @@ export async function removeItem(client, playerId, itemId, quantity) {
   return { removed: quantity };
 }
 
+// Removes the entire stack at a specific position (drag-out-to-drop: the
+// game turns it into a ground drop). Returns { itemId, quantity }.
+// Throws { code: 'bad_move' | 'not_found' }.
+export async function removeAt(client, playerId, ref) {
+  if (
+    !ref ||
+    (ref.containerId !== "main" && ref.containerId !== "equipment") ||
+    !Number.isInteger(ref.x) ||
+    !Number.isInteger(ref.y)
+  ) {
+    throw err("bad position reference", "bad_move");
+  }
+  const rows = await loadRows(client, playerId);
+  const source = rows.find(
+    (r) => r.containerId === ref.containerId && r.x === ref.x && r.y === ref.y
+  );
+  if (!source) {
+    throw err("no item at position", "not_found");
+  }
+  await client.query(`DELETE FROM inventory_items WHERE id = $1`, [source.id]);
+  return { itemId: source.itemId, quantity: source.quantity };
+}
+
 // Moves the stack at `from` to `to` (the drag & drop verb). Handles main-grid
 // moves (with rotation), equip/unequip (slot compatibility validated), and
 // merging when dropped onto a same-item stack.

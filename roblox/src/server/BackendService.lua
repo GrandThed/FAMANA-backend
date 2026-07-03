@@ -121,6 +121,16 @@ function BackendService.moveItem(userId, from, to)
 	return false, nil, data and data.error or nil
 end
 
+-- Remove the whole stack at a position (thrown on the ground by the game).
+-- ref = { containerId, x, y }. Returns (ok, updatedInventory, itemId, quantity).
+function BackendService.dropItem(userId, ref)
+	local ok, data = request("POST", "/player/" .. tostring(userId) .. "/inventory/drop", ref)
+	if ok and data then
+		return true, data.inventory, data.itemId, data.quantity
+	end
+	return false, nil, nil, nil
+end
+
 -- Repack the main grid (the Sort button). Returns (ok, updatedInventory).
 function BackendService.sortInventory(userId)
 	-- Non-empty body so Fastify's JSON parser doesn't reject the POST.

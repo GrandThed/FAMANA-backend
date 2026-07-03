@@ -369,7 +369,7 @@ function InventoryUI.start()
 	local dragStepConn = nil
 	local serverGeneration = 0 -- bumps on every authoritative update (for reverts)
 
-	local moveItemRemote, sortRemote -- resolved async in the remotes block
+	local moveItemRemote, sortRemote, dropItemRemote -- resolved async in the remotes block
 
 	local render -- forward-declared: endDrag (optimistic apply) re-renders
 
@@ -564,6 +564,15 @@ function InventoryUI.start()
 		local thumb = makeViewport(ghost)
 		thumb.ZIndex = 51
 		ItemModels.preview(thumb, drag.itemId)
+
+		-- Shown when releasing would throw the item on the ground.
+		local caption = makeLabel(ghost, "Drop", 12, COLORS.bad)
+		caption.Size = UDim2.new(1, 0, 0, 14)
+		caption.Position = UDim2.new(0, 0, 1, 2)
+		caption.Visible = false
+		caption.ZIndex = 51
+		drag.ghostCaption = caption
+
 		drag.ghost = ghost
 	end
 
@@ -598,7 +607,7 @@ function InventoryUI.start()
 			if ok then
 				drag.dropTarget = { containerId = "main", x = gx, y = gy, rotated = drag.rotated }
 			end
-		else
+		elseif pointIn(panel, mouse.X, mouse.Y) then
 			local def = Items.get(drag.itemId)
 			for slotName, slot in pairs(equipSlots) do
 				if pointIn(slot.frame, mouse.X, mouse.Y) then
@@ -612,6 +621,12 @@ function InventoryUI.start()
 					break
 				end
 			end
+		else
+			-- Outside the panel entirely: releasing throws the item on the ground.
+			drag.dropTarget = { world = true }
+		end
+		if drag.ghostCaption then
+			drag.ghostCaption.Visible = drag.dropTarget ~= nil and drag.dropTarget.world == true
 		end
 	end
 
@@ -679,6 +694,22 @@ function InventoryUI.start()
 		return snapshot
 	end
 
+	-- Locally removes the stack at `from` (thrown on the ground). Returns a
+	-- snapshot for reverting, or nil if the source vanished.
+	local function applyOptimisticDrop(from)
+		local snapshot = {}
+		for i, entry in ipairs(currentInventory) do
+			snapshot[i] = table.clone(entry)
+		end
+		for i, entry in ipairs(currentInventory) do
+			if sameRef(entry, from) then
+				table.remove(currentInventory, i)
+				return snapshot
+			end
+		end
+		return nil
+	end
+
 	local function endDrag(commit)
 		if not drag then
 			return
@@ -700,10 +731,16 @@ function InventoryUI.start()
 			return
 		end
 
-		-- Optimistic: apply and show the move now, ask the server in the
+		-- Optimistic: apply and show the change now, ask the server in the
 		-- background, revert only on rejection (and only if no authoritative
 		-- update landed in the meantime).
-		local snapshot = applyOptimisticMove(from, target)
+		local isWorldDrop = target.world == true
+		local snapshot
+		if isWorldDrop then
+			snapshot = applyOptimisticDrop(from)
+		else
+			snapshot = applyOptimisticMove(from, target)
+		end
 		if not snapshot then
 			return
 		end
@@ -711,12 +748,16 @@ function InventoryUI.start()
 		local generationAtMove = serverGeneration
 
 		task.spawn(function()
-			if not moveItemRemote then
-				return
+			local remote = isWorldDrop and dropItemRemote or moveItemRemote
+			local ok, result = false, nil
+			if remote then
+				ok, result = pcall(function()
+					if isWorldDrop then
+						return remote:InvokeServer(from)
+					end
+					return remote:InvokeServer(from, target)
+				end)
 			end
-			local ok, result = pcall(function()
-				return moveItemRemote:InvokeServer(from, target)
-			end)
 			local accepted = ok and typeof(result) == "table" and result.ok == true
 			if not accepted and serverGeneration == generationAtMove then
 				currentInventory = snapshot
@@ -1123,6 +1164,7 @@ function InventoryUI.start()
 	task.spawn(function()
 		moveItemRemote = Remotes.getFunction("MoveItem")
 		sortRemote = Remotes.getFunction("SortInventory")
+		dropItemRemote = Remotes.getFunction("DropItem")
 
 		local inventoryUpdated = Remotes.get("InventoryUpdated")
 		inventoryUpdated.OnClientEvent:Connect(renderFromServer)

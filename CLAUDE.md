@@ -97,9 +97,12 @@ inflict `slow` on hit via `EnemyService.onPlayerHit`) ·
 `onPlayerHit` hooks; enemies face their movement, optional `movement = "hop"`
 locomotion with squash & stretch, and per-def `details` welded via
 `ArtKit.weld`) ·
-`DropService` (loot tables → ground drops + public `spawn(itemId, qty, pos)`;
-stackables pick up partially when the grid is nearly full, leftovers stay on
-the ground with no toast) ·
+`DropService` (loot tables → ground drops + public
+`spawn(itemId, qty, pos, opts?)` + the `DropItem` remote for
+drag-out-of-inventory throws; drops are magnetic — they fly to the nearest
+eligible player within ~3.5 studs — and a thrown drop ignores its owner for
+a few seconds so others have pickup priority; stackables pick up partially
+when the grid is nearly full, leftovers stay on the ground with no toast) ·
 `ItemStandService` (data-driven pedestals showing a spinning item copy;
 ProximityPrompt takes a copy as a normal ground drop) ·
 `BorderService` (grid teleport
