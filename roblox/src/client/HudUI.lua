@@ -21,6 +21,7 @@ local ItemModels = require(Shared:WaitForChild("ItemModels"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Config = require(Shared:WaitForChild("Config"))
 local HotbarBinds = require(script.Parent.HotbarBinds)
+local ClientState = require(script.Parent.ClientState)
 
 local player = Players.LocalPlayer
 
@@ -376,12 +377,13 @@ function HudUI.start()
 		renderHotbar(nil) -- re-render with the last known inventory
 	end)
 
-	-- Number keys 1..N equip/unequip the matching slot.
+	-- Number keys 1..9,0 equip/unequip the matching slot. While the inventory
+	-- panel is open the keys belong to it (3–0 assign quick binds there).
 	for i = 0, hotbarSize - 1 do
 		local keyCode = NUMBER_KEYS[i + 1]
 		if keyCode then
 			ContextActionService:BindAction("Hotbar" .. i, function(_, inputState)
-				if inputState == Enum.UserInputState.Begin then
+				if inputState == Enum.UserInputState.Begin and not ClientState.inventoryOpen then
 					activateSlot(i)
 				end
 				return Enum.ContextActionResult.Pass

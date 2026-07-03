@@ -1,13 +1,20 @@
 -- Grid inventory screen (toggled with B / the top-right button).
 -- Two columns:
---   left  — equipment paper doll (drag an item onto a slot to equip) and the
---           active effects panel (icons + countdowns from Effect_* attributes)
+--   left  — equipment paper doll drawn over a live viewport of the player's
+--           character (drag an item onto a slot to equip; while dragging,
+--           every slot the item could go to lights up) and the active
+--           effects panel (icons + countdowns from Effect_* attributes)
 --   right — utilities bar (Sort button, gold readout) over the scrollable
 --           10x30 item grid.
 -- Items span WxH cells (item def `size`); drag & drop moves them (R rotates
 -- while dragging, green/red highlight previews the drop). Hovering an item
--- and pressing 3–0 quick-binds tools/consumables to the hotbar (HotbarBinds).
--- Every move is validated server-side; this UI only previews and asks.
+-- and pressing 3–0 quick-binds tools/consumables to the hotbar (HotbarBinds);
+-- bound items show their key as a badge on the tile.
+--
+-- Rendering is a diff: tiles are reused (and just repositioned) across
+-- updates so item thumbnails aren't rebuilt on every move/sort. Moves apply
+-- optimistically — the tile snaps into place immediately and reverts only if
+-- the server rejects the placement.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -166,16 +173,61 @@ function InventoryUI.start()
 	local equipTitle = makeLabel(leftCol, "EQUIPMENT", 12, COLORS.textDim)
 	equipTitle.Size = UDim2.new(1, 0, 0, 22)
 
+	local equipAreaH = 6 * (EQUIP_SLOT + 8)
+
+	-- The player's character rendered behind the slots (refreshed on open).
+	local dollViewport = Instance.new("ViewportFrame")
+	dollViewport.Size = UDim2.new(1, -8, 0, equipAreaH)
+	dollViewport.Position = UDim2.new(0, 4, 0, 26)
+	dollViewport.BackgroundTransparency = 1
+	dollViewport.Ambient = Color3.fromRGB(160, 160, 170)
+	dollViewport.LightColor = Color3.new(1, 1, 1)
+	dollViewport.ZIndex = 1
+	dollViewport.Parent = leftCol
+
+	local function refreshDoll()
+		dollViewport:ClearAllChildren()
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not character or not root then
+			return
+		end
+		-- Characters aren't Archivable by default; flip it just to clone.
+		character.Archivable = true
+		local clone = character:Clone()
+		character.Archivable = false
+		for _, descendant in ipairs(clone:GetDescendants()) do
+			if descendant:IsA("BaseScript") or descendant:IsA("Sound") then
+				descendant:Destroy()
+			elseif descendant:IsA("BasePart") then
+				descendant.Anchored = true
+			end
+		end
+		clone:PivotTo(CFrame.new()) -- viewport-local origin
+		clone.Parent = dollViewport
+
+		local camera = Instance.new("Camera")
+		camera.FieldOfView = 30
+		camera.Parent = dollViewport
+		dollViewport.CurrentCamera = camera
+		local _, size = clone:GetBoundingBox()
+		local distance = size.Y * 2.1 + 1
+		-- The clone was pivoted to the origin facing -Z; stand in front of it.
+		camera.CFrame = CFrame.lookAt(Vector3.new(0, 0.2, -distance), Vector3.new(0, 0, 0))
+	end
+
 	local colX = { [0] = 30, [1] = leftW - EQUIP_SLOT - 30, [0.5] = (leftW - EQUIP_SLOT) / 2 }
 
-	-- equipSlots[slotName] = { frame, thumb, nameLabel, stroke, entry }
+	-- equipSlots[slotName] = { frame, thumb, nameLabel, stroke, entry, shownId }
 	local equipSlots = {}
 	for slotName, pos in pairs(SLOT_POS) do
 		local frame = Instance.new("Frame")
 		frame.Size = UDim2.new(0, EQUIP_SLOT, 0, EQUIP_SLOT)
 		frame.Position = UDim2.new(0, colX[pos[1]], 0, 26 + pos[2] * (EQUIP_SLOT + 8))
 		frame.BackgroundColor3 = COLORS.panel
+		frame.BackgroundTransparency = 0.25 -- the character shows through a bit
 		frame.BorderSizePixel = 0
+		frame.ZIndex = 3
 		frame.Parent = leftCol
 
 		local stroke = Instance.new("UIStroke")
@@ -186,13 +238,22 @@ function InventoryUI.start()
 		local nameLabel = makeLabel(frame, SLOT_LABEL[slotName], 10, COLORS.textDim)
 		nameLabel.Size = UDim2.new(1, 0, 1, 0)
 		nameLabel.TextWrapped = true
+		nameLabel.ZIndex = 4
 
 		local thumb = makeViewport(frame)
+		thumb.ZIndex = 4
 
-		equipSlots[slotName] = { frame = frame, thumb = thumb, nameLabel = nameLabel, stroke = stroke, entry = nil }
+		equipSlots[slotName] = {
+			frame = frame,
+			thumb = thumb,
+			nameLabel = nameLabel,
+			stroke = stroke,
+			entry = nil,
+			shownId = nil,
+		}
 	end
 
-	local effectsY = 26 + 6 * (EQUIP_SLOT + 8) + 10
+	local effectsY = 26 + equipAreaH + 10
 	local effectsTitle = makeLabel(leftCol, "EFFECTS", 12, COLORS.textDim)
 	effectsTitle.Size = UDim2.new(1, 0, 0, 22)
 	effectsTitle.Position = UDim2.new(0, 0, 0, effectsY)
@@ -287,17 +348,19 @@ function InventoryUI.start()
 	-- ---- state ---------------------------------------------------------------
 	local currentInventory = {}
 	local hovered = nil -- entry under the mouse (for tooltips/quick binds)
-	local drag = nil -- { itemId, from = {containerId,x,y}, rotated, sourceObj, ghost, thumb, dropTarget }
+	local drag = nil -- { itemId, from = {containerId,x,y}, rotated, sourceObj, ghost, dropTarget }
 	local dragStepConn = nil
+	local serverGeneration = 0 -- bumps on every authoritative update (for reverts)
 
 	local moveItemRemote, sortRemote -- resolved async in the remotes block
+
+	local render -- forward-declared: endDrag (optimistic apply) re-renders
 
 	local function sameRef(entry, ref)
 		return entry.containerId == ref.containerId and entry.x == ref.x and entry.y == ref.y
 	end
 
 	-- Client-side fit preview for the main grid (server still has final say).
-	-- Returns ok, plus whether the drop would merge into a same-item stack.
 	local function canPlace(gx, gy, w, h, itemId)
 		if gx < 0 or gy < 0 or gx + w > GRID_W or gy + h > GRID_H then
 			return false
@@ -316,7 +379,7 @@ function InventoryUI.start()
 		end
 		local def = Items.get(itemId)
 		if #overlaps == 1 and overlaps[1].itemId == itemId and def and def.stackable then
-			return overlaps[1].quantity < Items.maxStackFor(itemId), true
+			return overlaps[1].quantity < Items.maxStackFor(itemId)
 		end
 		return false
 	end
@@ -325,6 +388,21 @@ function InventoryUI.start()
 		for _, slot in pairs(equipSlots) do
 			slot.stroke.Color = COLORS.line
 			slot.stroke.Thickness = 1.5
+		end
+	end
+
+	-- While an item is held, every equipment slot it could go to lights up.
+	local function markCompatibleSlots()
+		if not drag then
+			return
+		end
+		local def = Items.get(drag.itemId)
+		for slotName, slot in pairs(equipSlots) do
+			local isSource = slot.entry ~= nil and sameRef(slot.entry, drag.from)
+			if Items.slotAccepts(slotName, def) and (slot.entry == nil or isSource) then
+				slot.stroke.Color = COLORS.good
+				slot.stroke.Thickness = 2
+			end
 		end
 	end
 
@@ -371,6 +449,7 @@ function InventoryUI.start()
 		drag.dropTarget = nil
 		highlight.Visible = false
 		resetEquipStrokes()
+		markCompatibleSlots()
 
 		if pointIn(gridScroll, mouse.X, mouse.Y) then
 			local origin = itemsLayer.AbsolutePosition
@@ -391,7 +470,7 @@ function InventoryUI.start()
 					local accepts = Items.slotAccepts(slotName, def)
 						and (slot.entry == nil or sameRef(slot.entry, drag.from))
 					slot.stroke.Color = accepts and COLORS.good or COLORS.bad
-					slot.stroke.Thickness = 2.5
+					slot.stroke.Thickness = 3
 					if accepts then
 						drag.dropTarget = { containerId = "equipment", x = SLOT_INDEX[slotName], y = 0 }
 					end
@@ -399,6 +478,70 @@ function InventoryUI.start()
 				end
 			end
 		end
+	end
+
+	-- Applies a move to currentInventory locally (position change, equip, or
+	-- stack merge — mirrors the backend's rules). Returns a deep snapshot of
+	-- the pre-move state for reverting, or nil if the source vanished.
+	local function applyOptimisticMove(from, target)
+		local snapshot = {}
+		for i, entry in ipairs(currentInventory) do
+			snapshot[i] = table.clone(entry)
+		end
+
+		local source
+		for _, entry in ipairs(currentInventory) do
+			if sameRef(entry, from) then
+				source = entry
+				break
+			end
+		end
+		if not source then
+			return nil
+		end
+
+		if target.containerId == "equipment" then
+			source.containerId = "equipment"
+			source.x = target.x
+			source.y = 0
+			source.rotated = false
+			return snapshot
+		end
+
+		local rotated = target.rotated == true
+		local w, h = Items.sizeFor(source.itemId, rotated)
+		local def = Items.get(source.itemId)
+
+		-- Dropped onto a same-item stack? Merge locally like the server does.
+		if def and def.stackable then
+			for index, entry in ipairs(currentInventory) do
+				if entry ~= source and entry.containerId == "main" and entry.itemId == source.itemId then
+					local ew, eh = Items.sizeFor(entry.itemId, entry.rotated)
+					if entry.x < target.x + w and target.x < entry.x + ew
+						and entry.y < target.y + h and target.y < entry.y + eh then
+						local space = Items.maxStackFor(source.itemId) - entry.quantity
+						local transfer = math.min(space, source.quantity)
+						entry.quantity += transfer
+						source.quantity -= transfer
+						if source.quantity <= 0 then
+							for i, e in ipairs(currentInventory) do
+								if e == source then
+									table.remove(currentInventory, i)
+									break
+								end
+							end
+						end
+						return snapshot
+					end
+				end
+			end
+		end
+
+		source.containerId = "main"
+		source.x = target.x
+		source.y = target.y
+		source.rotated = rotated
+		return snapshot
 	end
 
 	local function endDrag(commit)
@@ -418,18 +561,33 @@ function InventoryUI.start()
 		end
 		drag = nil
 
-		if target then
-			task.spawn(function()
-				if not moveItemRemote then
-					return
-				end
-				pcall(function()
-					-- On success the server pushes InventoryUpdated, re-rendering
-					-- everything; on failure nothing changed, so nothing to undo.
-					moveItemRemote:InvokeServer(from, target)
-				end)
-			end)
+		if not target then
+			return
 		end
+
+		-- Optimistic: apply and show the move now, ask the server in the
+		-- background, revert only on rejection (and only if no authoritative
+		-- update landed in the meantime).
+		local snapshot = applyOptimisticMove(from, target)
+		if not snapshot then
+			return
+		end
+		render(currentInventory)
+		local generationAtMove = serverGeneration
+
+		task.spawn(function()
+			if not moveItemRemote then
+				return
+			end
+			local ok, result = pcall(function()
+				return moveItemRemote:InvokeServer(from, target)
+			end)
+			local accepted = ok and typeof(result) == "table" and result.ok == true
+			if not accepted and serverGeneration == generationAtMove then
+				currentInventory = snapshot
+				render(snapshot)
+			end
+		end)
 	end
 
 	local function beginDrag(entry, fromRef, sourceObj)
@@ -449,21 +607,40 @@ function InventoryUI.start()
 		dragStepConn = RunService.RenderStepped:Connect(updateDrag)
 	end
 
-	-- ---- rendering -----------------------------------------------------------
-	local function createTile(entry)
-		local w, h = Items.sizeFor(entry.itemId, entry.rotated)
+	-- ---- grid tiles (diffed: reused across renders, thumbnails built once) ---
+	-- records: array of { frame, thumb, qty, badge, itemId, entry, used }
+	local tileRecords = {}
+
+	-- The quick-bind key label for an item, or nil (slot 9 renders as "0").
+	local function bindKeyLabelFor(itemId)
+		for slotIndex = 2, 9 do
+			if HotbarBinds.get(slotIndex) == itemId then
+				return tostring((slotIndex + 1) % 10)
+			end
+		end
+		return nil
+	end
+
+	local function refreshBindBadges()
+		for _, record in ipairs(tileRecords) do
+			local label = bindKeyLabelFor(record.itemId)
+			record.badge.Text = label or ""
+			record.badge.Visible = label ~= nil
+		end
+	end
+
+	local function createTileRecord(entry)
 		local def = Items.get(entry.itemId)
+		local record = { itemId = entry.itemId, entry = entry }
 
 		local tile = Instance.new("TextButton")
 		tile.Text = ""
 		tile.AutoButtonColor = false
-		tile:SetAttribute("itemTile", true)
-		tile.Size = UDim2.new(0, w * CELL - 2, 0, h * CELL - 2)
-		tile.Position = UDim2.new(0, entry.x * CELL + 1, 0, entry.y * CELL + 1)
 		tile.BackgroundColor3 = COLORS.tile
 		tile.BorderSizePixel = 0
 		tile.ZIndex = 3
 		tile.Parent = itemsLayer
+		record.frame = tile
 
 		local stroke = Instance.new("UIStroke")
 		stroke.Thickness = 1
@@ -472,6 +649,8 @@ function InventoryUI.start()
 
 		local thumb = makeViewport(tile)
 		thumb.ZIndex = 4
+		record.thumb = thumb
+		-- The thumbnail is built exactly once per record; renders only move it.
 		if not ItemModels.preview(thumb, entry.itemId) then
 			local fallback = makeLabel(tile, def and def.name or entry.itemId, 11)
 			fallback.Size = UDim2.new(1, -6, 1, -6)
@@ -480,32 +659,54 @@ function InventoryUI.start()
 			fallback.ZIndex = 4
 		end
 
-		if entry.quantity > 1 then
-			local qty = makeLabel(tile, tostring(entry.quantity), 13, COLORS.gold)
-			qty.Size = UDim2.new(1, -6, 0, 14)
-			qty.Position = UDim2.new(0, 3, 1, -16)
-			qty.TextXAlignment = Enum.TextXAlignment.Right
-			qty.ZIndex = 5
-		end
+		local qty = makeLabel(tile, "", 13, COLORS.gold)
+		qty.Size = UDim2.new(1, -6, 0, 14)
+		qty.Position = UDim2.new(0, 3, 1, -16)
+		qty.TextXAlignment = Enum.TextXAlignment.Right
+		qty.ZIndex = 5
+		record.qty = qty
+
+		-- Quick-bind badge, top-right corner ("4" = bound to key 4).
+		local badge = makeLabel(tile, "", 12, COLORS.gold)
+		badge.Size = UDim2.new(0, 16, 0, 14)
+		badge.Position = UDim2.new(1, -18, 0, 2)
+		badge.TextXAlignment = Enum.TextXAlignment.Right
+		badge.Visible = false
+		badge.ZIndex = 5
+		record.badge = badge
 
 		tile.MouseEnter:Connect(function()
-			hovered = entry
-			hoverLabel.Text = def and def.name or entry.itemId
+			hovered = record.entry
+			local currentDef = Items.get(record.itemId)
+			hoverLabel.Text = currentDef and currentDef.name or record.itemId
 		end)
 		tile.MouseLeave:Connect(function()
-			if hovered == entry then
+			if hovered == record.entry then
 				hovered = nil
 				hoverLabel.Text = ""
 			end
 		end)
 		tile.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
-				beginDrag(entry, { containerId = "main", x = entry.x, y = entry.y }, tile)
+				local entryNow = record.entry
+				beginDrag(entryNow, { containerId = "main", x = entryNow.x, y = entryNow.y }, tile)
 			end
 		end)
+
+		table.insert(tileRecords, record)
+		return record
 	end
 
-	local function render(inventory)
+	local function updateTileRecord(record, entry)
+		record.entry = entry
+		local w, h = Items.sizeFor(entry.itemId, entry.rotated)
+		record.frame.Size = UDim2.new(0, w * CELL - 2, 0, h * CELL - 2)
+		record.frame.Position = UDim2.new(0, entry.x * CELL + 1, 0, entry.y * CELL + 1)
+		record.qty.Text = entry.quantity > 1 and tostring(entry.quantity) or ""
+	end
+
+	-- ---- rendering (diff) -----------------------------------------------------
+	render = function(inventory)
 		if typeof(inventory) ~= "table" then
 			inventory = {}
 		end
@@ -518,30 +719,91 @@ function InventoryUI.start()
 			endDrag(false)
 		end
 
-		for _, child in ipairs(itemsLayer:GetChildren()) do
-			if child:GetAttribute("itemTile") then
-				child:Destroy()
-			end
-		end
-		for _, slot in pairs(equipSlots) do
-			slot.entry = nil
-			slot.thumb:ClearAllChildren()
-			slot.nameLabel.Visible = true
-		end
-
+		local mainEntries = {}
+		local equipEntries = {} -- [slotName] = entry
 		for _, entry in ipairs(inventory) do
 			if entry.containerId == "main" then
-				createTile(entry)
+				mainEntries[#mainEntries + 1] = entry
 			elseif entry.containerId == "equipment" then
 				local slotName = Items.EQUIPMENT_SLOTS[entry.x + 1]
-				local slot = slotName and equipSlots[slotName]
-				if slot then
-					slot.entry = entry
-					slot.nameLabel.Visible = false
-					ItemModels.preview(slot.thumb, entry.itemId)
+				if slotName then
+					equipEntries[slotName] = entry
 				end
 			end
 		end
+
+		-- Match entries to existing tiles: same item at the same spot first
+		-- (untouched tiles), then any leftover tile of the same item (moved
+		-- tiles keep their thumbnail), then create/destroy the rest.
+		for _, record in ipairs(tileRecords) do
+			record.used = false
+		end
+		local unmatched = {}
+		for _, entry in ipairs(mainEntries) do
+			local exact
+			for _, record in ipairs(tileRecords) do
+				if not record.used and record.itemId == entry.itemId
+					and record.entry.x == entry.x and record.entry.y == entry.y then
+					exact = record
+					break
+				end
+			end
+			if exact then
+				exact.used = true
+				updateTileRecord(exact, entry)
+			else
+				unmatched[#unmatched + 1] = entry
+			end
+		end
+		for _, entry in ipairs(unmatched) do
+			local match
+			for _, record in ipairs(tileRecords) do
+				if not record.used and record.itemId == entry.itemId then
+					match = record
+					break
+				end
+			end
+			if not match then
+				match = createTileRecord(entry)
+			end
+			match.used = true
+			updateTileRecord(match, entry)
+		end
+		for i = #tileRecords, 1, -1 do
+			local record = tileRecords[i]
+			if not record.used then
+				record.frame:Destroy()
+				table.remove(tileRecords, i)
+			end
+		end
+
+		-- Equipment slots: re-preview only when the item actually changed.
+		for slotName, slot in pairs(equipSlots) do
+			local entry = equipEntries[slotName]
+			slot.entry = entry
+			if entry then
+				if slot.shownId ~= entry.itemId then
+					slot.shownId = entry.itemId
+					ItemModels.preview(slot.thumb, entry.itemId)
+				end
+				slot.nameLabel.Visible = false
+			else
+				if slot.shownId then
+					slot.shownId = nil
+					slot.thumb:ClearAllChildren()
+				end
+				slot.nameLabel.Visible = true
+			end
+		end
+
+		refreshBindBadges()
+	end
+
+	-- Authoritative updates from the server bump the generation so pending
+	-- optimistic reverts know to stand down.
+	local function renderFromServer(inventory)
+		serverGeneration += 1
+		render(inventory)
 	end
 
 	-- Equipment slots: drag out to unequip (and hover shows the name).
@@ -628,6 +890,7 @@ function InventoryUI.start()
 			endDrag(false)
 		else
 			refreshEffects()
+			refreshDoll()
 		end
 	end
 
@@ -655,6 +918,13 @@ function InventoryUI.start()
 				end)
 			end
 		end)
+	end)
+
+	-- Refresh the doll if the character respawns while the panel is open.
+	player.CharacterAdded:Connect(function()
+		if panel.Visible then
+			task.defer(refreshDoll)
+		end
 	end)
 
 	-- Bound action (not raw InputBegan) so the key works without 3D-viewport
@@ -698,6 +968,8 @@ function InventoryUI.start()
 		end
 	end)
 
+	HotbarBinds.changed:Connect(refreshBindBadges)
+
 	-- Wire up the remotes in the background so a slow/missing server can never
 	-- block the keybind above.
 	task.spawn(function()
@@ -705,14 +977,14 @@ function InventoryUI.start()
 		sortRemote = Remotes.getFunction("SortInventory")
 
 		local inventoryUpdated = Remotes.get("InventoryUpdated")
-		inventoryUpdated.OnClientEvent:Connect(render)
+		inventoryUpdated.OnClientEvent:Connect(renderFromServer)
 
 		local requestInventory = Remotes.getFunction("RequestInventory")
 		local ok, inventory = pcall(function()
 			return requestInventory:InvokeServer()
 		end)
 		if ok then
-			render(inventory)
+			renderFromServer(inventory)
 		end
 	end)
 end
