@@ -21,6 +21,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ContextActionService = game:GetService("ContextActionService")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
@@ -42,6 +43,7 @@ local GRID_W = Config.inventoryGrid.width
 local GRID_H = Config.inventoryGrid.height
 local VISIBLE_ROWS = 11 -- grid rows shown before scrolling
 local EQUIP_SLOT = 54 -- px, paper-doll slot size
+local EQUIP_GAP = 12 -- px between slot rows (lets the character show through)
 local TOPBAR = 36
 
 local COLORS = {
@@ -134,18 +136,26 @@ function InventoryUI.start()
 	-- ---- panel shell -------------------------------------------------------
 	local gridPixW = GRID_W * CELL
 	local rightW = gridPixW + 14 -- room for the scrollbar
-	local leftW = 2 * EQUIP_SLOT + 3 * 16 + 60 -- two slot columns + gaps
+	local leftW = 2 * EQUIP_SLOT + 170 -- slot columns at the edges, character between
 	local panelW = leftW + rightW + 36
-	local panelH = TOPBAR + VISIBLE_ROWS * CELL + 58
+	local panelH = TOPBAR + VISIBLE_ROWS * CELL + 88
+
+	-- The panel stays Visible and slides in/out instead of toggling Visible:
+	-- its ViewportFrames keep their last paint, so opening doesn't flash
+	-- while every thumbnail re-renders on the same frame.
+	local OPEN_POS = UDim2.new(0.5, 0, 0.5, 0)
+	local CLOSED_POS = UDim2.new(0.5, 0, 1.7, 0) -- parked below the screen
+	local SLIDE_TWEEN = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 
 	local panel = Instance.new("Frame")
 	panel.Size = UDim2.new(0, panelW, 0, panelH)
-	panel.Position = UDim2.new(0.5, 0, 0.5, 0)
+	panel.Position = CLOSED_POS
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	panel.BackgroundColor3 = COLORS.panel
 	panel.BorderSizePixel = 0
-	panel.Visible = false
 	panel.Parent = gui
+
+	local isOpen = false
 
 	local title = makeLabel(panel, "Inventory", 16)
 	title.Size = UDim2.new(1, -34, 0, 30)
@@ -173,7 +183,7 @@ function InventoryUI.start()
 	local equipTitle = makeLabel(leftCol, "EQUIPMENT", 12, COLORS.textDim)
 	equipTitle.Size = UDim2.new(1, 0, 0, 22)
 
-	local equipAreaH = 6 * (EQUIP_SLOT + 8)
+	local equipAreaH = 6 * (EQUIP_SLOT + EQUIP_GAP)
 
 	-- The player's character rendered behind the slots (refreshed on open).
 	local dollViewport = Instance.new("ViewportFrame")
@@ -185,13 +195,19 @@ function InventoryUI.start()
 	dollViewport.ZIndex = 1
 	dollViewport.Parent = leftCol
 
+	local dollCharacter = nil -- the Character the current doll was cloned from
+
 	local function refreshDoll()
-		dollViewport:ClearAllChildren()
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		if not character or not root then
 			return
 		end
+		if character == dollCharacter then
+			return -- same character instance: the existing clone is still good
+		end
+		dollCharacter = character
+		dollViewport:ClearAllChildren()
 		-- Characters aren't Archivable by default; flip it just to clone.
 		character.Archivable = true
 		local clone = character:Clone()
@@ -216,14 +232,15 @@ function InventoryUI.start()
 		camera.CFrame = CFrame.lookAt(Vector3.new(0, 0.2, -distance), Vector3.new(0, 0, 0))
 	end
 
-	local colX = { [0] = 30, [1] = leftW - EQUIP_SLOT - 30, [0.5] = (leftW - EQUIP_SLOT) / 2 }
+	-- Slot columns hug the edges so the character reads between them.
+	local colX = { [0] = 12, [1] = leftW - EQUIP_SLOT - 12, [0.5] = (leftW - EQUIP_SLOT) / 2 }
 
 	-- equipSlots[slotName] = { frame, thumb, nameLabel, stroke, entry, shownId }
 	local equipSlots = {}
 	for slotName, pos in pairs(SLOT_POS) do
 		local frame = Instance.new("Frame")
 		frame.Size = UDim2.new(0, EQUIP_SLOT, 0, EQUIP_SLOT)
-		frame.Position = UDim2.new(0, colX[pos[1]], 0, 26 + pos[2] * (EQUIP_SLOT + 8))
+		frame.Position = UDim2.new(0, colX[pos[1]], 0, 26 + pos[2] * (EQUIP_SLOT + EQUIP_GAP))
 		frame.BackgroundColor3 = COLORS.panel
 		frame.BackgroundTransparency = 0.25 -- the character shows through a bit
 		frame.BorderSizePixel = 0
@@ -868,7 +885,7 @@ function InventoryUI.start()
 	task.spawn(function()
 		while true do
 			task.wait(0.5)
-			if panel.Visible then
+			if isOpen then
 				refreshEffects()
 			end
 		end
@@ -883,15 +900,16 @@ function InventoryUI.start()
 
 	-- ---- toggling ------------------------------------------------------------
 	local function toggle()
-		panel.Visible = not panel.Visible
+		isOpen = not isOpen
 		-- Free the cursor (via ShiftLockController) while the panel is open.
-		ClientState.inventoryOpen = panel.Visible
-		if not panel.Visible then
-			endDrag(false)
-		else
+		ClientState.inventoryOpen = isOpen
+		if isOpen then
 			refreshEffects()
 			refreshDoll()
+		else
+			endDrag(false)
 		end
+		TweenService:Create(panel, SLIDE_TWEEN, { Position = isOpen and OPEN_POS or CLOSED_POS }):Play()
 	end
 
 	local openBtn = Instance.new("TextButton")
@@ -920,12 +938,17 @@ function InventoryUI.start()
 		end)
 	end)
 
-	-- Refresh the doll if the character respawns while the panel is open.
-	player.CharacterAdded:Connect(function()
-		if panel.Visible then
-			task.defer(refreshDoll)
-		end
+	-- (Re)build the doll whenever the character spawns — pre-warming it so
+	-- the first open never pays the clone cost mid-toggle.
+	player.CharacterAdded:Connect(function(character)
+		task.spawn(function()
+			character:WaitForChild("HumanoidRootPart", 5)
+			refreshDoll()
+		end)
 	end)
+	if player.Character then
+		task.defer(refreshDoll)
+	end
 
 	-- Bound action (not raw InputBegan) so the key works without 3D-viewport
 	-- keyboard focus; it still won't fire while a TextBox is captured.
@@ -938,7 +961,7 @@ function InventoryUI.start()
 
 	-- ---- drag/bind keys ------------------------------------------------------
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if not panel.Visible then
+		if not isOpen then
 			return
 		end
 		if drag and input.KeyCode == Enum.KeyCode.R then
