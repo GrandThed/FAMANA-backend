@@ -373,6 +373,124 @@ function InventoryUI.start()
 
 	local render -- forward-declared: endDrag (optimistic apply) re-renders
 
+	-- ---- hover tooltip ---------------------------------------------------------
+	local TOOLTIP_DELAY = 0.35 -- rest the cursor on an item this long to inspect
+
+	local tooltip = Instance.new("Frame")
+	tooltip.BackgroundColor3 = COLORS.panel
+	tooltip.BorderSizePixel = 0
+	tooltip.AutomaticSize = Enum.AutomaticSize.Y
+	tooltip.Size = UDim2.new(0, 180, 0, 0)
+	tooltip.Visible = false
+	tooltip.ZIndex = 60
+	tooltip.Parent = gui
+
+	local tooltipStroke = Instance.new("UIStroke")
+	tooltipStroke.Thickness = 1.5
+	tooltipStroke.Color = COLORS.tileStroke
+	tooltipStroke.Parent = tooltip
+
+	local tooltipPad = Instance.new("UIPadding")
+	tooltipPad.PaddingTop = UDim.new(0, 8)
+	tooltipPad.PaddingBottom = UDim.new(0, 8)
+	tooltipPad.PaddingLeft = UDim.new(0, 10)
+	tooltipPad.PaddingRight = UDim.new(0, 10)
+	tooltipPad.Parent = tooltip
+
+	local tooltipLayout = Instance.new("UIListLayout")
+	tooltipLayout.Padding = UDim.new(0, 4)
+	tooltipLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	tooltipLayout.Parent = tooltip
+
+	local tooltipTitle = makeLabel(tooltip, "", 14, COLORS.gold)
+	tooltipTitle.Size = UDim2.new(1, 0, 0, 16)
+	tooltipTitle.TextXAlignment = Enum.TextXAlignment.Left
+	tooltipTitle.LayoutOrder = 1
+	tooltipTitle.ZIndex = 61
+
+	local tooltipBody = makeLabel(tooltip, "", 12, COLORS.text)
+	tooltipBody.Font = Enum.Font.Gotham
+	tooltipBody.Size = UDim2.new(1, 0, 0, 0)
+	tooltipBody.AutomaticSize = Enum.AutomaticSize.Y
+	tooltipBody.TextWrapped = true
+	tooltipBody.TextXAlignment = Enum.TextXAlignment.Left
+	tooltipBody.TextYAlignment = Enum.TextYAlignment.Top
+	tooltipBody.LayoutOrder = 2
+	tooltipBody.ZIndex = 61
+
+	local TYPE_NAMES = {
+		weapon = "Weapon",
+		tool = "Tool",
+		resource = "Resource",
+		armor = "Armor",
+		ring = "Ring",
+		consumable = "Consumable",
+		backpack = "Backpack",
+	}
+
+	-- Title + stat lines for an inventory entry.
+	local function describe(entry)
+		local def = Items.get(entry.itemId)
+		if not def then
+			return entry.itemId, ""
+		end
+		local kind = TYPE_NAMES[def.type] or def.type
+		if def.weaponType then
+			kind ..= " · " .. (def.weaponType == "ranged" and "Ranged" or "Melee")
+		end
+		if def.type == "armor" and def.slot then
+			kind ..= " · " .. (SLOT_LABEL[def.slot] or def.slot)
+		end
+
+		local lines = { kind }
+		if def.damage then
+			lines[#lines + 1] = "Damage: " .. def.damage
+		end
+		if def.reach then
+			lines[#lines + 1] = "Reach: " .. def.reach .. " studs"
+		end
+		if def.manaCost then
+			lines[#lines + 1] = "Mana cost: " .. def.manaCost
+		end
+		if def.gatherPower then
+			lines[#lines + 1] = "Gather power: " .. def.gatherPower
+		end
+		local w, h = Items.sizeFor(entry.itemId, false)
+		lines[#lines + 1] = ("Size: %d×%d"):format(w, h)
+		if def.stackable then
+			lines[#lines + 1] = ("Stack: %d / %d"):format(entry.quantity, def.maxStack)
+		end
+		return def.name, table.concat(lines, "\n")
+	end
+
+	local hoverToken = 0 -- invalidates pending tooltip timers
+
+	local function hideTooltip()
+		hoverToken += 1
+		tooltip.Visible = false
+	end
+
+	local function scheduleTooltip(entry)
+		hoverToken += 1
+		local token = hoverToken
+		task.delay(TOOLTIP_DELAY, function()
+			if token ~= hoverToken or drag or not isOpen then
+				return
+			end
+			local titleText, bodyText = describe(entry)
+			tooltipTitle.Text = titleText
+			tooltipBody.Text = bodyText
+			local guiSize = gui.AbsoluteSize
+			tooltip.Position = UDim2.new(
+				0,
+				math.min(mouse.X + 14, guiSize.X - 200),
+				0,
+				math.min(mouse.Y + 10, guiSize.Y - 160)
+			)
+			tooltip.Visible = true
+		end)
+	end
+
 	local function sameRef(entry, ref)
 		return entry.containerId == ref.containerId and entry.x == ref.x and entry.y == ref.y
 	end
@@ -611,6 +729,7 @@ function InventoryUI.start()
 		if drag then
 			return
 		end
+		hideTooltip()
 		drag = {
 			itemId = entry.itemId,
 			from = fromRef,
@@ -696,12 +815,14 @@ function InventoryUI.start()
 			hovered = record.entry
 			local currentDef = Items.get(record.itemId)
 			hoverLabel.Text = currentDef and currentDef.name or record.itemId
+			scheduleTooltip(record.entry)
 		end)
 		tile.MouseLeave:Connect(function()
 			if hovered == record.entry then
 				hovered = nil
 				hoverLabel.Text = ""
 			end
+			hideTooltip()
 		end)
 		tile.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -730,6 +851,7 @@ function InventoryUI.start()
 		currentInventory = inventory
 		hovered = nil
 		hoverLabel.Text = ""
+		hideTooltip()
 
 		-- A re-render mid-drag means the world changed under us; cancel cleanly.
 		if drag then
@@ -838,10 +960,12 @@ function InventoryUI.start()
 			if slot.entry then
 				local def = Items.get(slot.entry.itemId)
 				hoverLabel.Text = def and def.name or slot.entry.itemId
+				scheduleTooltip(slot.entry)
 			end
 		end)
 		slot.frame.MouseLeave:Connect(function()
 			hoverLabel.Text = ""
+			hideTooltip()
 		end)
 	end
 
@@ -908,6 +1032,7 @@ function InventoryUI.start()
 			refreshDoll()
 		else
 			endDrag(false)
+			hideTooltip()
 		end
 		TweenService:Create(panel, SLIDE_TWEEN, { Position = isOpen and OPEN_POS or CLOSED_POS }):Play()
 	end

@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS players (
     health       INT         NOT NULL DEFAULT 100,
     max_health   INT         NOT NULL DEFAULT 100,
     gold         BIGINT      NOT NULL DEFAULT 0,
+    hotbar_binds JSONB       NOT NULL DEFAULT '{}'::jsonb, -- ["3".."0" key slot] = itemId
     cell         TEXT        NOT NULL DEFAULT 'A',
     pos_x        REAL        NOT NULL DEFAULT 0,
     pos_y        REAL        NOT NULL DEFAULT 0,
@@ -17,6 +18,7 @@ CREATE TABLE IF NOT EXISTS players (
 -- Columns added after launch: CREATE TABLE IF NOT EXISTS won't touch an
 -- existing table, so each also needs an idempotent ALTER here.
 ALTER TABLE players ADD COLUMN IF NOT EXISTS gold BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS hotbar_binds JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper

@@ -339,6 +339,9 @@ function HudUI.start()
 		if typeof(inventory) == "table" then
 			lastInventory = inventory
 		end
+		-- Until the first real inventory arrives, never judge binds against
+		-- it — clearing here would wipe freshly-seeded persisted binds.
+		local hasInventory = lastInventory ~= nil
 		inventory = lastInventory or {}
 
 		-- Slots 1/2 mirror the paper doll's weapon/offhand; the rest are binds.
@@ -361,7 +364,7 @@ function HudUI.start()
 		for i = WEAPON_SLOTS, hotbarSize - 1 do
 			local itemId = HotbarBinds.get(i)
 			local entry = itemId and mainByItem[itemId]
-			if itemId and not entry then
+			if itemId and not entry and hasInventory then
 				-- The bound item left the grid; drop the bind (fires changed,
 				-- which re-renders — by then the bind is gone, so it settles).
 				HotbarBinds.clear(i)

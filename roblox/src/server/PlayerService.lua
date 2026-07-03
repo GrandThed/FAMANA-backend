@@ -3,11 +3,13 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
 
 local BackendService = require(script.Parent.BackendService)
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
+local Items = require(Shared:WaitForChild("Items"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local GridConfig = require(Shared:WaitForChild("GridConfig"))
 
@@ -68,6 +70,11 @@ local function loadProfile(player)
 	-- Profiles saved before the gold column existed come back without it.
 	data.gold = data.gold or 0
 	player:SetAttribute("Gold", data.gold)
+
+	-- Hotbar quick binds (keys 3–0) persist with the profile; the client
+	-- seeds its HotbarBinds registry from this attribute.
+	data.hotbarBinds = typeof(data.hotbarBinds) == "table" and data.hotbarBinds or {}
+	player:SetAttribute("HotbarBinds", HttpService:JSONEncode(data.hotbarBinds))
 
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
@@ -206,6 +213,7 @@ local function buildSaveFields(player)
 	return {
 		health = profile.health,
 		gold = profile.gold,
+		hotbarBinds = profile.hotbarBinds,
 		cell = profile.cell,
 		position = profile.position,
 	}
@@ -270,6 +278,32 @@ function PlayerService.start()
 	sortInventory.OnServerInvoke = function(player)
 		return { ok = PlayerService.sortInventory(player) }
 	end
+
+	-- The client pushes its full quick-bind map on every change; it's
+	-- sanitized here and persisted with the next save (autosave/leave).
+	local setHotbarBinds = Remotes.get("SetHotbarBinds")
+	setHotbarBinds.OnServerEvent:Connect(function(player, payload)
+		local profile = cache[player.UserId]
+		if not profile or typeof(payload) ~= "table" then
+			return
+		end
+		local clean = {}
+		local count = 0
+		for key, itemId in pairs(payload) do
+			local slot = tonumber(key)
+			if slot and slot >= 2 and slot <= 9 and slot == math.floor(slot) and typeof(itemId) == "string" then
+				local def = Items.get(itemId)
+				if def and (def.type == "tool" or def.type == "consumable") then
+					clean[tostring(slot)] = itemId
+					count += 1
+					if count >= 8 then
+						break
+					end
+				end
+			end
+		end
+		profile.hotbarBinds = clean
+	end)
 
 	-- Load data BEFORE the character spawns so HealthService can restore HP/pos.
 	Players.CharacterAutoLoads = false
