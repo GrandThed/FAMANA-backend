@@ -13,6 +13,10 @@ local ClientState = require(script.Parent.ClientState)
 
 local player = Players.LocalPlayer
 
+-- How quickly the character turns to face the camera while aiming (exponential
+-- smoothing rate; higher = snappier, lower = lazier). Framerate-independent.
+local AIM_TURN_SPEED = 8
+
 local ShiftLockController = {}
 
 function ShiftLockController.start()
@@ -59,7 +63,7 @@ function ShiftLockController.start()
 		end
 	end)
 
-	RunService.RenderStepped:Connect(function()
+	RunService.RenderStepped:Connect(function(dt)
 		-- Aim (face camera + crosshair + targeting) only while holding RMB and
 		-- not in the inventory. The mouse is never locked.
 		local aiming = ClientState.aiming and not ClientState.inventoryOpen
@@ -75,7 +79,10 @@ function ShiftLockController.start()
 				local flat = Vector3.new(look.X, 0, look.Z)
 				if flat.Magnitude > 1e-3 then
 					local pos = root.Position
-					root.CFrame = CFrame.lookAt(pos, pos + flat.Unit)
+					local target = CFrame.lookAt(pos, pos + flat.Unit)
+					-- Ease toward the camera direction instead of snapping.
+					local alpha = 1 - math.exp(-AIM_TURN_SPEED * dt)
+					root.CFrame = root.CFrame:Lerp(target, alpha)
 				end
 			end
 		elseif humanoid and not humanoid.AutoRotate then

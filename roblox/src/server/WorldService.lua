@@ -45,7 +45,8 @@ local function raiseSign(theme)
 end
 
 function WorldService.start()
-	local theme = GridConfig.theme(GridConfig.currentCell())
+	local cellId = GridConfig.currentCell()
+	local theme = GridConfig.theme(cellId)
 	tintGround(theme)
 	raiseSign(theme)
 end
