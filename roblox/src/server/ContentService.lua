@@ -10,6 +10,7 @@ local HttpService = game:GetService("HttpService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared:WaitForChild("Items"))
+local Stores = require(Shared:WaitForChild("Stores"))
 local Config = require(Shared:WaitForChild("Config"))
 
 local BackendService = require(script.Parent:WaitForChild("BackendService"))
@@ -33,6 +34,9 @@ function ContentService.start()
 				if not Items.apply(content) then
 					warn("[ContentService] malformed content payload; staying on the mirror")
 					return
+				end
+				if content.stores then
+					Stores.apply(content.stores)
 				end
 
 				-- Grid dims are structural (stored stack positions assume

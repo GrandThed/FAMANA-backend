@@ -15,6 +15,7 @@ local EnemyService = require(script:WaitForChild("EnemyService"))
 local EffectService = require(script:WaitForChild("EffectService"))
 local DropService = require(script:WaitForChild("DropService"))
 local ItemStandService = require(script:WaitForChild("ItemStandService"))
+local VendorService = require(script:WaitForChild("VendorService"))
 local BorderService = require(script:WaitForChild("BorderService"))
 local WorldService = require(script:WaitForChild("WorldService"))
 local AdminSyncService = require(script:WaitForChild("AdminSyncService"))
@@ -31,6 +32,7 @@ EnemyService.start()
 EffectService.start() -- after EnemyService: hooks onPlayerHit
 DropService.start()
 ItemStandService.start() -- after DropService: stands spawn drops
+VendorService.start()
 BorderService.start()
 AdminSyncService.start()
 

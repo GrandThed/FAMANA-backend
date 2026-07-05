@@ -9,12 +9,14 @@
 
 import crypto from "node:crypto";
 import { ITEMS, STARTER_ITEMS, GRID, EQUIPMENT_SLOTS } from "./items.js";
+import { STORES } from "./stores.js";
 
 const payload = {
   items: ITEMS,
   starterItems: STARTER_ITEMS,
   grid: GRID,
   equipmentSlots: EQUIPMENT_SLOTS,
+  stores: STORES,
 };
 
 const version = crypto

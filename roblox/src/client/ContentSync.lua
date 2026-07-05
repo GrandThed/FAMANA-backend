@@ -8,7 +8,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
 
-local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
+local Shared = ReplicatedStorage:WaitForChild("Shared")
+local Items = require(Shared:WaitForChild("Items"))
+local Stores = require(Shared:WaitForChild("Stores"))
 
 local ContentSync = {}
 
@@ -28,6 +30,9 @@ function ContentSync.start()
 			end)
 			if ok then
 				Items.apply(content)
+				if content.stores then
+					Stores.apply(content.stores)
+				end
 			end
 		end
 
