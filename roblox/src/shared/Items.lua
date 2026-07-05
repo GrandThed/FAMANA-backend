@@ -1,9 +1,21 @@
--- Static item definitions. MUST stay in sync with backend/src/items.js.
+-- Item definitions. The source of truth is backend/content/items.json —
+-- the server fetches GET /content at boot (ContentService) and overlays it
+-- here via Items.apply; clients get the same payload through the ContentData
+-- StringValue (ContentSync). The static table below is the fallback for
+-- Studio playtests without HTTP and for backend outages, so keep it roughly
+-- in sync — drift is warned about at overlay time, not fatal.
 --
 -- `size` is the grid footprint {width, height} in inventory cells.
 -- Armor/rings carry a `slot` matching an EQUIPMENT_SLOTS entry.
 
+-- `warn` is a Roblox global; the fallback keeps this module runnable under
+-- the headless Luau CLI (content overlay tests).
+local warn = warn or print
+
 local Items = {}
+
+-- Version hash of the applied backend content; nil while on the fallback.
+Items.contentVersion = nil
 
 Items.defs = {
 	sword_basic = {
@@ -198,6 +210,48 @@ function Items.sizeFor(itemId, rotated)
 		return size[2], size[1]
 	end
 	return size[1], size[2]
+end
+
+-- Overlay backend-served content onto the local defs. Fetched defs replace
+-- local ones wholesale; local-only defs survive (they keep Studio/offline
+-- working) but get flagged as mirror drift. Returns true if applied.
+function Items.apply(content)
+	if type(content) ~= "table" or type(content.items) ~= "table" then
+		return false
+	end
+
+	local fetched = {}
+	for id, def in pairs(content.items) do
+		Items.defs[id] = def
+		fetched[id] = true
+	end
+
+	local localOnly = {}
+	for id in pairs(Items.defs) do
+		if not fetched[id] then
+			table.insert(localOnly, id)
+		end
+	end
+	if #localOnly > 0 then
+		warn(
+			"[Items] defs only in the Luau mirror, missing from backend content: "
+				.. table.concat(localOnly, ", ")
+		)
+	end
+
+	-- Slot order is persisted data (x index in the equipment container), so it
+	-- is never overlaid — only verified against the backend's copy.
+	if type(content.equipmentSlots) == "table" then
+		for i, name in ipairs(Items.EQUIPMENT_SLOTS) do
+			if content.equipmentSlots[i] ~= name then
+				warn("[Items] EQUIPMENT_SLOTS mismatch at index " .. i .. " — fix the mirror!")
+				break
+			end
+		end
+	end
+
+	Items.contentVersion = content.version
+	return true
 end
 
 -- Whether an item def may sit in the given equipment slot.

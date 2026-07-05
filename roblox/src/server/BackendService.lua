@@ -163,6 +163,16 @@ function BackendService.getInventory(userId)
 	return nil
 end
 
+-- Fetch the game-content payload (items, starter kit, grid dims, equipment
+-- slots + a version hash). Returns the decoded table or nil.
+function BackendService.getContent()
+	local ok, data = request("GET", "/content")
+	if ok then
+		return data
+	end
+	return nil
+end
+
 -- Drain pending events for the given online user ids. Returns a list of
 -- { playerId, kind, message, payload } or nil on failure.
 function BackendService.pollEvents(userIds)

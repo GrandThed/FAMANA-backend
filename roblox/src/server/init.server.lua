@@ -4,6 +4,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GridConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GridConfig"))
 
+local ContentService = require(script:WaitForChild("ContentService"))
 local PlayerService = require(script:WaitForChild("PlayerService"))
 local HealthService = require(script:WaitForChild("HealthService"))
 local ManaService = require(script:WaitForChild("ManaService"))
@@ -18,6 +19,7 @@ local BorderService = require(script:WaitForChild("BorderService"))
 local WorldService = require(script:WaitForChild("WorldService"))
 local AdminSyncService = require(script:WaitForChild("AdminSyncService"))
 
+ContentService.start() -- first: overlays backend item defs onto the mirror
 WorldService.start()
 PlayerService.start()
 HealthService.start()

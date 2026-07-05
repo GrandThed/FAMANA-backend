@@ -52,10 +52,11 @@ Fastify + `pg` (raw SQL, ESM). Live at
   `src/items.js` loads + validates them at boot (fails the deploy on bad
   content) and keeps the structural constants (`GRID`, `EQUIPMENT_SLOTS` —
   slot order is persisted data). `src/content.js` assembles the versioned
-  payload served at `GET /content` for the Roblox server to fetch at boot;
-  the Luau mirror (`Items.lua`) is the fallback — keep in sync until the
-  fetch lands. `loadPlayer` reconciles the starter kit (tools/weapons) on
-  every load, so existing players pick up newly-added starter gear.
+  payload served at `GET /content`, fetched by the Roblox `ContentService`
+  at boot; the Luau mirror (`Items.lua`) is the fallback for Studio-without-
+  HTTP and backend outages — drift gets warned at overlay time. `loadPlayer`
+  reconciles the starter kit (tools/weapons) on every load, so existing
+  players pick up newly-added starter gear.
 - **Admin dashboard** (`/admin`): `src/adminService.js` (reads + audited
   mutations), `src/adminAuth.js` (signed-cookie sessions via Node `crypto`,
   separate from the game's `X-Api-Key`), `src/routes/admin.js`, static SPA in
@@ -88,6 +89,10 @@ Synced into Studio with **Rojo 7.7.0** (pinned in `rokit.toml`). Structure maps
 Run: `cd roblox && rojo serve`, connect via the Rojo Studio plugin.
 
 **Server services** (`src/server/`, started by `init.server.lua`):
+`ContentService` (fetches `GET /content` at boot with retries, overlays the
+defs via `Items.apply`, publishes the payload to clients through the
+`ContentData` StringValue in ReplicatedStorage; on failure the game runs on
+the Luau mirror) ·
 `WorldService` (per-cell theming) · `PlayerService` (load/save/cache +
 `onInventoryChanged` hook + `refreshInventory` + grid `moveItem`/
 `sortInventory` behind `MoveItem`/`SortInventory` remotes + live gold with a
@@ -117,7 +122,8 @@ ProximityPrompt takes a copy as a normal ground drop) ·
 handoff) · `AdminSyncService` (polls `/player/events` every 4s → refreshes
 inventory + fires `Notify` for live admin edits).
 
-**Client** (`src/client/`): `HudUI` (Diablo-style health + mana orbs and a
+**Client** (`src/client/`): `ContentSync` (applies the `ContentData` payload
+to the local `Items` mirror, live on change), `HudUI` (Diablo-style health + mana orbs and a
 10-slot hotbar: keys 1/2 mirror the paper doll's weapon/offhand, keys 3–0 are
 quick binds from `HotbarBinds`), `InventoryUI` (grid inventory screen, `B`
 key: equipment paper doll + effects panel on the left, Sort/gold utilities
@@ -131,8 +137,9 @@ reach — sword→enemies, axe→trees, pickaxe→rocks), `ClientState` (shared
 `aiming` / `inventoryOpen` flags).
 
 **Shared** (`src/shared/`): `Config` (HP/mana constants + `defaultReach`
-fallback + `inventoryGrid` dims — must match backend `GRID`) · `Items` (mirror
-of backend defs; per-item `size` footprint, `reach`, `manaCost`, armor/ring
+fallback + `inventoryGrid` dims — must match backend `GRID`) · `Items`
+(fallback mirror of backend defs, overlaid at boot by `Items.apply` from
+`GET /content`; per-item `size` footprint, `reach`, `manaCost`, armor/ring
 `slot`; plus `EQUIPMENT_SLOTS`, `sizeFor`, `slotAccepts`) · `Effects`
 (buff/debuff defs + the `Effect_<id>` attribute naming scheme) · `Remotes`
 (RemoteEvent/Function factory) · `GridConfig` (cells keyed by PlaceId, neighbors,
