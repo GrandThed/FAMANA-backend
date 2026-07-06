@@ -31,6 +31,19 @@ function ToolService.registerActivated(itemType, handler)
 	ToolService.activatedHandlers[itemType] = handler
 end
 
+-- Optional hook (e.g. Agile Hands trait synergy): function(player) -> multiplier,
+-- where the effective cooldown is SWING_COOLDOWN * multiplier. Lower = faster swings.
+local swingCooldownMultFn = nil
+
+function ToolService.registerSwingCooldownMult(fn)
+	swingCooldownMultFn = fn
+end
+
+local function swingCooldownFor(player)
+	local mult = swingCooldownMultFn and swingCooldownMultFn(player) or 1
+	return SWING_COOLDOWN * mult
+end
+
 -- Per-player swing debounce so the animation can't be spammed.
 local lastSwing = {}
 
@@ -65,7 +78,7 @@ end
 
 local function playSwing(player, def)
 	local now = os.clock()
-	if now - (lastSwing[player.UserId] or 0) < SWING_COOLDOWN then
+	if now - (lastSwing[player.UserId] or 0) < swingCooldownFor(player) then
 		return
 	end
 	lastSwing[player.UserId] = now
