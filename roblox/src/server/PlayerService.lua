@@ -13,6 +13,7 @@ local Items = require(Shared:WaitForChild("Items"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local GridConfig = require(Shared:WaitForChild("GridConfig"))
 local Classes = require(Shared:WaitForChild("Classes"))
+local Spells = require(Shared:WaitForChild("Spells"))
 
 local PlayerService = {}
 
@@ -113,10 +114,32 @@ local function loadProfile(player)
 	player:SetAttribute("Xp", data.xp)
 	player:SetAttribute("XpToNext", xpToNext(data.level))
 
-	-- Hotbar quick binds (keys 3–0) persist with the profile; the client
-	-- seeds its HotbarBinds registry from this attribute.
-	data.hotbarBinds = typeof(data.hotbarBinds) == "table" and data.hotbarBinds or {}
-	player:SetAttribute("HotbarBinds", HttpService:JSONEncode(data.hotbarBinds))
+	-- Hotbar quick binds (keys 3–0) persist with the profile as THREE
+	-- swappable pages ({ active, pages }); the client seeds its HotbarBinds
+	-- registry from this attribute. Legacy flat maps become page 1.
+	local binds = typeof(data.hotbarBinds) == "table" and data.hotbarBinds or {}
+	if typeof(binds.pages) ~= "table" then
+		binds = { active = 1, pages = { binds, {}, {} } }
+	end
+	for p = 1, 3 do
+		binds.pages[p] = typeof(binds.pages[p]) == "table" and binds.pages[p] or {}
+	end
+	local active = tonumber(binds.active)
+	binds.active = (active and active >= 1 and active <= 3) and math.floor(active) or 1
+	-- Fresh profiles (nothing ever bound anywhere) start with the gathering
+	-- tools on keys 3/4 of the first page.
+	local anyBind = false
+	for p = 1, 3 do
+		if next(binds.pages[p]) ~= nil then
+			anyBind = true
+			break
+		end
+	end
+	if not anyBind then
+		binds.pages[1] = { ["2"] = "axe_basic", ["3"] = "pickaxe_basic" }
+	end
+	data.hotbarBinds = binds
+	player:SetAttribute("HotbarBinds", HttpService:JSONEncode(binds))
 
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
@@ -442,28 +465,48 @@ function PlayerService.start()
 		return { ok = PlayerService.sortInventory(player) }
 	end
 
-	-- The client pushes its full quick-bind map on every change; it's
-	-- sanitized here and persisted with the next save (autosave/leave).
+	-- The client pushes its full quick-bind structure ({ active, pages }) on
+	-- every change; it's sanitized here and persisted with the next save
+	-- (autosave/leave). A bind is either a spell ("spell:<id>") or a
+	-- quick-bindable item (tools/consumables — weapons live on the 1/2 keys).
+	local function validBind(bindValue)
+		local spellId = Spells.fromBind(bindValue)
+		if spellId then
+			return Spells.get(spellId) ~= nil
+		end
+		local def = Items.get(bindValue)
+		return def ~= nil and (def.type == "tool" or def.type == "consumable")
+	end
+
 	local setHotbarBinds = Remotes.get("SetHotbarBinds")
 	setHotbarBinds.OnServerEvent:Connect(function(player, payload)
 		local profile = cache[player.UserId]
 		if not profile or typeof(payload) ~= "table" then
 			return
 		end
-		local clean = {}
-		local count = 0
-		for key, itemId in pairs(payload) do
-			local slot = tonumber(key)
-			if slot and slot >= 2 and slot <= 9 and slot == math.floor(slot) and typeof(itemId) == "string" then
-				local def = Items.get(itemId)
-				if def and (def.type == "tool" or def.type == "consumable") then
-					clean[tostring(slot)] = itemId
+		local clean = { active = 1, pages = {} }
+		local active = tonumber(payload.active)
+		if active and active >= 1 and active <= 3 then
+			clean.active = math.floor(active)
+		end
+		-- Legacy clients sent a flat one-page map; treat it as page 1.
+		local pagesIn = typeof(payload.pages) == "table" and payload.pages or { payload }
+		for p = 1, 3 do
+			local map = {}
+			local source = typeof(pagesIn[p]) == "table" and pagesIn[p] or {}
+			local count = 0
+			for key, bindValue in pairs(source) do
+				local slot = tonumber(key)
+				if slot and slot >= 2 and slot <= 9 and slot == math.floor(slot)
+					and typeof(bindValue) == "string" and validBind(bindValue) then
+					map[tostring(slot)] = bindValue
 					count += 1
 					if count >= 8 then
 						break
 					end
 				end
 			end
+			clean.pages[p] = map
 		end
 		profile.hotbarBinds = clean
 	end)

@@ -63,6 +63,14 @@ local COLORS = {
 	textDim = Color3.fromRGB(150, 150, 160),
 }
 
+-- Equip keys → equipment container x (weapon = 0, offhand = 1). Pressing 1/2
+-- while hovering a weapon/tool in the grid equips it there, swapping the
+-- current occupant back into the grid (needs a free spot).
+local EQUIP_KEYS = {
+	[Enum.KeyCode.One] = 0,
+	[Enum.KeyCode.Two] = 1,
+}
+
 -- Quick-bind keys → hotbar slot index (slots 0/1 are the reserved weapons).
 local BIND_KEYS = {
 	[Enum.KeyCode.Three] = 2,
@@ -562,6 +570,61 @@ function InventoryUI.start()
 			return overlaps[1].quantity < Items.maxStackFor(itemId)
 		end
 		return false
+	end
+
+	-- First main-grid position where `itemId` fits (unrotated, then rotated),
+	-- judged against the client's current view (the server still validates).
+	local function findFreeSpotFor(itemId)
+		local w, h = Items.sizeFor(itemId, false)
+		local orientations = (w == h) and { false } or { false, true }
+		for _, rotated in ipairs(orientations) do
+			local tw, th = Items.sizeFor(itemId, rotated)
+			for gy = 0, GRID_H - th do
+				for gx = 0, GRID_W - tw do
+					if canPlace(gx, gy, tw, th, itemId) then
+						return { containerId = "main", x = gx, y = gy, rotated = rotated }
+					end
+				end
+			end
+		end
+		return nil
+	end
+
+	-- The 1/2 equip shortcut: move the hovered grid item into an equipment
+	-- slot. If the slot is taken, the occupant is first unequipped into the
+	-- first free grid spot — no free spot, no swap. Two sequential moves; if
+	-- the second is rejected the old weapon just ends up unequipped, which is
+	-- harmless. Each accepted move already pushes a fresh inventory render.
+	local function equipFromGrid(entry, slotIndex)
+		if not moveItemRemote then
+			return
+		end
+		local from = { containerId = "main", x = entry.x, y = entry.y }
+		local equipRef = { containerId = "equipment", x = slotIndex, y = 0 }
+
+		local occupant
+		for _, e in ipairs(currentInventory) do
+			if e.containerId == "equipment" and e.x == slotIndex then
+				occupant = e
+				break
+			end
+		end
+		if occupant then
+			local spot = findFreeSpotFor(occupant.itemId)
+			if not spot then
+				hoverLabel.Text = "No room to unequip"
+				return
+			end
+			local ok, result = pcall(function()
+				return moveItemRemote:InvokeServer(equipRef, spot)
+			end)
+			if not (ok and typeof(result) == "table" and result.ok == true) then
+				return
+			end
+		end
+		pcall(function()
+			return moveItemRemote:InvokeServer(from, equipRef)
+		end)
 	end
 
 	local function resetEquipStrokes()
@@ -1307,6 +1370,19 @@ function InventoryUI.start()
 			return
 		end
 		if gameProcessed then
+			return
+		end
+		-- 1/2 over a grid item: equip it into weapon/offhand (swap included).
+		local equipSlotIndex = EQUIP_KEYS[input.KeyCode]
+		if equipSlotIndex and hovered and not drag then
+			local entry = hovered
+			if entry.containerId == "main" then
+				local def = Items.get(entry.itemId)
+				local slotName = Items.EQUIPMENT_SLOTS[equipSlotIndex + 1]
+				if def and Items.slotAccepts(slotName, def) then
+					task.spawn(equipFromGrid, entry, equipSlotIndex)
+				end
+			end
 			return
 		end
 		local bindSlot = BIND_KEYS[input.KeyCode]

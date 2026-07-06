@@ -4,4 +4,5 @@
 return {
 	aiming = false, -- right mouse button held → enemy targeting is active
 	inventoryOpen = false, -- inventory panel visible → free the cursor for clicks
+	spellHover = false, -- hovering a spell row in the tracker → number keys bind, not cast
 }

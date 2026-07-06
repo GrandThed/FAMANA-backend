@@ -142,6 +142,61 @@ function EnemyService.onPlayerHit(fn)
 	table.insert(EnemyService.playerHitHandlers, fn)
 end
 
+-- Damage-pipeline hooks, so buffs (EffectService) and subclass passives
+-- (SpellService) can scale combat without EnemyService knowing about them.
+-- registerDamageMult: fn(player, damageKind) -> mult on the player's outgoing
+-- damage. registerDamageTakenMult: fn(player) -> mult on damage they receive.
+local damageMultHooks = {}
+function EnemyService.registerDamageMult(fn)
+	table.insert(damageMultHooks, fn)
+end
+
+local damageTakenMultHooks = {}
+function EnemyService.registerDamageTakenMult(fn)
+	table.insert(damageTakenMultHooks, fn)
+end
+
+local function hookedDamageMult(player, damageKind)
+	local mult = 1
+	for _, fn in ipairs(damageMultHooks) do
+		local ok, value = pcall(fn, player, damageKind)
+		if ok and typeof(value) == "number" then
+			mult *= value
+		end
+	end
+	return mult
+end
+
+local function hookedDamageTakenMult(player)
+	local mult = 1
+	for _, fn in ipairs(damageTakenMultHooks) do
+		local ok, value = pcall(fn, player)
+		if ok and typeof(value) == "number" then
+			mult *= value
+		end
+	end
+	return mult
+end
+
+-- The full outgoing-damage roll for a player: class multiplier, hook
+-- multipliers (effects + passives), then the crit roll. Used by weapon swings
+-- here and by SpellService for spell damage. Returns (damage, isCrit).
+function EnemyService.computePlayerDamage(player, baseDamage, damageKind, opts)
+	local damage = baseDamage
+		* ClassService.getDamageMult(player, damageKind)
+		* hookedDamageMult(player, damageKind)
+
+	local isCrit = false
+	if not (opts and opts.noCrit) then
+		local critChance = CRIT_CHANCE + ClassService.getCritBonus(player)
+		isCrit = math.random() < critChance
+		if isCrit then
+			damage *= CRIT_MULTIPLIER
+		end
+	end
+	return math.max(1, math.floor(damage + 0.5)), isCrit
+end
+
 local function groundY(x, z)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
@@ -288,7 +343,8 @@ local HOP_SQUASH_TIME = 0.12 -- how long the landing squash holds
 
 -- Hop locomotion: parabolic jumps toward the player with squash & stretch.
 -- A hop in flight always finishes, even if the target left aggro range.
-local function updateHop(enemy, dt, root, def)
+-- `speedMult` < 1 (slow debuff) stretches the pause between hops.
+local function updateHop(enemy, dt, root, def, speedMult)
 	local hop = def.hop
 	local part = enemy.part
 	enemy.hopT = (enemy.hopT or 0) + dt
@@ -324,7 +380,7 @@ local function updateHop(enemy, dt, root, def)
 		if planarDist > 0.05 then
 			part.CFrame = CFrame.lookAt(from, flatTarget)
 		end
-		if planarDist > def.attackRange and enemy.hopT >= hop.pause then
+		if planarDist > def.attackRange and enemy.hopT >= hop.pause / (speedMult or 1) then
 			local to = from + toTarget.Unit * math.min(hop.distance, planarDist)
 			enemy.hopFrom = from
 			enemy.hopTo = Vector3.new(to.X, groundY(to.X, to.Z) + def.size.Y / 2, to.Z)
@@ -334,19 +390,137 @@ local function updateHop(enemy, dt, root, def)
 	end
 end
 
+-- Floating status marks over an enemy (stun stars, slow snail) so CC reads at
+-- a glance, each with a bar draining down the remaining duration.
+-- Server-side BillboardGuis, same as the name tag / health bar.
+local STATUS_MARKS = {
+	stun = { text = "💫", offsetX = -0.9, spin = true, barColor = Color3.fromRGB(255, 220, 120) },
+	slow = { text = "🐌", offsetX = 0.9, spin = false, barColor = Color3.fromRGB(120, 190, 255) },
+}
+
+local function setStatusMark(enemy, kind, active)
+	enemy.marks = enemy.marks or {}
+	local existing = enemy.marks[kind]
+	if active and not existing then
+		local look = STATUS_MARKS[kind]
+		local gui = Instance.new("BillboardGui")
+		gui.Name = "Mark_" .. kind
+		gui.Size = UDim2.new(0, 26, 0, 32)
+		gui.StudsOffsetWorldSpace = Vector3.new(look.offsetX, enemy.def.size.Y / 2 + 3, 0)
+		gui.AlwaysOnTop = true
+		gui.Parent = enemy.part
+
+		local label = Instance.new("TextLabel")
+		label.Size = UDim2.new(1, 0, 1, -6)
+		label.BackgroundTransparency = 1
+		label.Font = Enum.Font.GothamBold
+		label.TextSize = 20
+		label.Text = look.text
+		label.Parent = gui
+
+		local barBg = Instance.new("Frame")
+		barBg.Size = UDim2.new(1, -4, 0, 3)
+		barBg.Position = UDim2.new(0, 2, 1, -4)
+		barBg.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+		barBg.BorderSizePixel = 0
+		barBg.Parent = gui
+
+		local fill = Instance.new("Frame")
+		fill.Size = UDim2.new(1, 0, 1, 0)
+		fill.BackgroundColor3 = look.barColor
+		fill.BorderSizePixel = 0
+		fill.Parent = barBg
+
+		if look.spin then
+			local spin = TweenService:Create(
+				label,
+				TweenInfo.new(1.2, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, -1),
+				{ Rotation = 360 }
+			)
+			spin:Play()
+		end
+		enemy.marks[kind] = { gui = gui, fill = fill }
+	elseif not active and existing then
+		existing.gui:Destroy()
+		enemy.marks[kind] = nil
+	end
+end
+
+local function updateMarkBar(enemy, kind, remaining, total)
+	local mark = enemy.marks and enemy.marks[kind]
+	if mark and total and total > 0 then
+		mark.fill.Size = UDim2.new(math.clamp(remaining / total, 0, 1), 0, 1, 0)
+	end
+end
+
+-- Whether a player is a valid live chase target within `range` of `position`.
+local function playerInRange(player, position, range)
+	if not player or player.Parent == nil then
+		return false
+	end
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	return root ~= nil
+		and humanoid ~= nil
+		and humanoid.Health > 0
+		and (root.Position - position).Magnitude <= range
+end
+
 local function updateEnemy(enemy, dt)
 	if enemy.dead then
 		return
 	end
 	local def = enemy.def
-	local target = nearestPlayer(enemy.part.Position, def.aggroRange)
+	local now = os.clock()
+
+	-- A taunt (Provocar) forces the enemy onto the taunter — with a generous
+	-- leash so walking backwards doesn't instantly break it.
+	local target
+	if enemy.tauntedUntil and now < enemy.tauntedUntil then
+		if playerInRange(enemy.tauntedBy, enemy.part.Position, def.aggroRange * 2) then
+			target = enemy.tauntedBy
+		end
+	else
+		enemy.tauntedBy, enemy.tauntedUntil = nil, nil
+	end
+	target = target or nearestPlayer(enemy.part.Position, def.aggroRange)
+
 	local root
 	if target then
 		root = target.Character:FindFirstChild("HumanoidRootPart")
 	end
 
+	-- CC state: expire + surface both as floating marks with drain bars.
+	local stunned = enemy.stunnedUntil ~= nil and now < enemy.stunnedUntil
+	if not stunned then
+		enemy.stunnedUntil, enemy.stunTotal = nil, nil
+	end
+	local slowed = enemy.slowedUntil ~= nil and now < enemy.slowedUntil
+	if not slowed then
+		enemy.slowedUntil, enemy.slowMult, enemy.slowTotal = nil, nil, nil
+	end
+	setStatusMark(enemy, "stun", stunned)
+	setStatusMark(enemy, "slow", slowed)
+	if stunned then
+		updateMarkBar(enemy, "stun", enemy.stunnedUntil - now, enemy.stunTotal)
+	end
+	if slowed then
+		updateMarkBar(enemy, "slow", enemy.slowedUntil - now, enemy.slowTotal)
+	end
+	local speedMult = slowed and (enemy.slowMult or 0.5) or 1
+
+	-- Stunned: no chasing, no winding up new hops, no attacking. A hop already
+	-- in flight still lands (freezing mid-air reads as a bug, not a stun).
+	if stunned then
+		if def.movement == "hop" then
+			updateHop(enemy, dt, nil, def, speedMult)
+		end
+		return
+	end
+
 	if def.movement == "hop" then
-		updateHop(enemy, dt, root, def)
+		updateHop(enemy, dt, root, def, speedMult)
 	elseif root then
 		-- Walk toward the player along the ground plane, facing the way we move.
 		local from = enemy.part.Position
@@ -354,7 +528,7 @@ local function updateEnemy(enemy, dt)
 		local toTarget = flatTarget - from
 		local planarDist = toTarget.Magnitude
 		if planarDist > def.attackRange then
-			local pos = from + toTarget.Unit * math.min(def.walkSpeed * dt, planarDist)
+			local pos = from + toTarget.Unit * math.min(def.walkSpeed * speedMult * dt, planarDist)
 			enemy.part.CFrame = CFrame.lookAt(pos, Vector3.new(flatTarget.X, pos.Y, flatTarget.Z))
 		elseif planarDist > 0.05 then
 			enemy.part.CFrame = CFrame.lookAt(from, flatTarget)
@@ -363,12 +537,13 @@ local function updateEnemy(enemy, dt)
 
 	-- Attack if in range and off cooldown.
 	if root and (root.Position - enemy.part.Position).Magnitude <= def.attackRange then
-		local now = os.clock()
 		if now - enemy.lastAttack >= def.attackCooldown then
 			enemy.lastAttack = now
 			local humanoid = target.Character:FindFirstChildOfClass("Humanoid")
 			if humanoid and humanoid.Health > 0 then
-				humanoid:TakeDamage(enemy.damage * ClassService.getDamageTakenMult(target))
+				humanoid:TakeDamage(
+					enemy.damage * ClassService.getDamageTakenMult(target) * hookedDamageTakenMult(target)
+				)
 				HealthService.registerDamage(target) -- pause the player's regen
 				for _, fn in ipairs(EnemyService.playerHitHandlers) do
 					task.spawn(fn, def.lootSource, target)
@@ -452,6 +627,90 @@ local function dealDamage(entry, enemy, damage, killer, isCrit)
 	end
 end
 
+-- ---- public combat API (used by SpellService) -------------------------------
+-- Spell code sees enemies as opaque refs: { entry, enemy, part }. `part` is
+-- the enemy's body part (for missile flight / splash centers); everything
+-- else stays internal to this file.
+
+local function makeRef(entry)
+	if entry and entry.enemy and not entry.enemy.dead then
+		return { entry = entry, enemy = entry.enemy, part = entry.enemy.part }
+	end
+	return nil
+end
+
+-- The player's focused (RMB-locked) enemy if it's within `maxRange`, or nil.
+function EnemyService.focusedTarget(player, maxRange)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if not root then
+		return nil
+	end
+	local focused = entryForPart(TargetService.get(player))
+	if focused and (focused.enemy.part.Position - root.Position).Magnitude <= maxRange then
+		return makeRef(focused)
+	end
+	return nil
+end
+
+function EnemyService.nearestTarget(position, range)
+	local best, bestDist
+	for _, entry in ipairs(spawns) do
+		local enemy = entry.enemy
+		if enemy and not enemy.dead then
+			local dist = (enemy.part.Position - position).Magnitude
+			if dist <= range and (not bestDist or dist < bestDist) then
+				best, bestDist = entry, dist
+			end
+		end
+	end
+	return makeRef(best)
+end
+
+function EnemyService.enemiesNear(position, radius)
+	local refs = {}
+	for _, entry in ipairs(spawns) do
+		local enemy = entry.enemy
+		if enemy and not enemy.dead and (enemy.part.Position - position).Magnitude <= radius then
+			table.insert(refs, makeRef(entry))
+		end
+	end
+	return refs
+end
+
+-- Applies already-rolled damage (see computePlayerDamage) to a ref.
+function EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+	if ref and ref.enemy then
+		dealDamage(ref.entry, ref.enemy, damage, player, isCrit == true)
+	end
+end
+
+function EnemyService.stun(ref, duration)
+	if ref and ref.enemy and not ref.enemy.dead then
+		local enemy = ref.enemy
+		enemy.stunnedUntil = math.max(enemy.stunnedUntil or 0, os.clock() + duration)
+		enemy.stunTotal = enemy.stunnedUntil - os.clock() -- drain bar refills on refresh
+	end
+end
+
+-- Slows the enemy's movement to `mult` (default 0.5) for `duration` seconds.
+-- Reapplying refreshes the timer; the strongest (lowest) mult wins.
+function EnemyService.slow(ref, duration, mult)
+	if ref and ref.enemy and not ref.enemy.dead then
+		local enemy = ref.enemy
+		enemy.slowedUntil = math.max(enemy.slowedUntil or 0, os.clock() + duration)
+		enemy.slowMult = math.min(enemy.slowMult or 1, mult or 0.5)
+		enemy.slowTotal = enemy.slowedUntil - os.clock()
+	end
+end
+
+function EnemyService.taunt(ref, player, duration)
+	if ref and ref.enemy and not ref.enemy.dead then
+		ref.enemy.tauntedBy = player
+		ref.enemy.tauntedUntil = os.clock() + duration
+	end
+end
+
 -- Spawns a glowing magic missile that flies from `fromPos` to the target part,
 -- then runs `onArrive`. Anchored + non-colliding so it just replicates as a
 -- cosmetic projectile to every client.
@@ -529,15 +788,7 @@ local function onWeaponSwing(player, tool, def)
 	end
 
 	local damageKind = def.damageKind or (ranged and "physical" or "melee")
-
-	local damage = def.damage or 10
-	damage = math.floor(damage * ClassService.getDamageMult(player, damageKind) + 0.5)
-
-	local critChance = CRIT_CHANCE + ClassService.getCritBonus(player)
-	local isCrit = math.random() < critChance
-	if isCrit then
-		damage = math.floor(damage * CRIT_MULTIPLIER + 0.5)
-	end
+	local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage or 10, damageKind)
 
 	if ranged then
 		-- Ranged magic costs mana; block the cast (and warn) when too low. Only

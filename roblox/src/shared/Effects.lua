@@ -8,6 +8,11 @@ local Effects = {}
 
 Effects.attributePrefix = "Effect_"
 
+-- Gameplay fields an effect may carry (EffectService aggregates them across
+-- everything active — multipliers multiply together):
+--   walkSpeedMult    — movement speed multiplier
+--   damageMults      — { melee?, physical?, magic? } outgoing damage multipliers
+--   damageTakenMult  — incoming damage multiplier (< 1 = tankier)
 Effects.defs = {
 	slow = {
 		id = "slow",
@@ -16,6 +21,57 @@ Effects.defs = {
 		duration = 4, -- seconds; reapplying refreshes the timer
 		walkSpeedMult = 0.5,
 		color = Color3.fromRGB(80, 200, 120), -- slime green: reads as its source
+	},
+
+	-- ---- spell buffs (see shared/Spells.lua) --------------------------------
+	battle_cry = {
+		id = "battle_cry",
+		name = "Battle Cry",
+		kind = "buff",
+		duration = 10,
+		damageMults = { melee = 1.25, physical = 1.25 },
+		color = Color3.fromRGB(220, 80, 60),
+	},
+	frenzy = {
+		id = "frenzy",
+		name = "Frenzy",
+		kind = "buff",
+		duration = 8,
+		damageMults = { melee = 1.5, physical = 1.35 },
+		walkSpeedMult = 1.2,
+		color = Color3.fromRGB(170, 30, 30),
+	},
+	on_guard = {
+		id = "on_guard",
+		name = "On Guard",
+		kind = "buff",
+		duration = 6,
+		damageTakenMult = 0.85,
+		color = Color3.fromRGB(120, 150, 200),
+	},
+	steel_loyalty = {
+		id = "steel_loyalty",
+		name = "Steel Loyalty",
+		kind = "buff",
+		duration = 10,
+		damageTakenMult = 0.7,
+		color = Color3.fromRGB(150, 170, 210),
+	},
+	bulwark = {
+		id = "bulwark",
+		name = "Bulwark",
+		kind = "buff",
+		duration = 6,
+		damageTakenMult = 0.5,
+		color = Color3.fromRGB(90, 120, 190),
+	},
+	sprint = {
+		id = "sprint",
+		name = "Sprint",
+		kind = "buff",
+		duration = 6,
+		walkSpeedMult = 1.35,
+		color = Color3.fromRGB(90, 210, 230),
 	},
 }
 

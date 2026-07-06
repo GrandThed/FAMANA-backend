@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Effects = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Effects"))
 local EnemyService = require(script.Parent.EnemyService)
+local ClassService = require(script.Parent.ClassService)
 
 local EffectService = {}
 
@@ -39,8 +40,74 @@ local function applyWalkSpeed(player)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		humanoid.WalkSpeed = BASE_WALKSPEED * walkSpeedMult(player.UserId)
+		-- Effects multiply on top of the class's own walkspeed, not raw 16.
+		local classBase = BASE_WALKSPEED * ClassService.getDef(player).walkSpeedMult
+		humanoid.WalkSpeed = classBase * walkSpeedMult(player.UserId)
 	end
+end
+
+-- Outgoing damage multiplier from active effects for a damage kind
+-- ("melee" | "physical" | "magic"). Combat reads this through the
+-- EnemyService damage-mult hook registered in start().
+function EffectService.damageMult(player, kind)
+	local effects = active[player.UserId]
+	local mult = 1
+	if effects then
+		for effectId in pairs(effects) do
+			local def = Effects.get(effectId)
+			local mults = def and def.damageMults
+			if mults and mults[kind] then
+				mult *= mults[kind]
+			end
+		end
+	end
+	return mult
+end
+
+-- Incoming damage multiplier from active effects (< 1 = tankier).
+function EffectService.damageTakenMult(player)
+	local effects = active[player.UserId]
+	local mult = 1
+	if effects then
+		for effectId in pairs(effects) do
+			local def = Effects.get(effectId)
+			if def and def.damageTakenMult then
+				mult *= def.damageTakenMult
+			end
+		end
+	end
+	return mult
+end
+
+-- Diminishing returns on debuffs: reapplying the same debuff within the
+-- reset window shortens each new application (100% → 50% → 25% floor), so
+-- chain-CC (e.g. a slime pack) can't perma-lock a player. Buffs never
+-- diminish — they're the player's own casts.
+local DIMINISH_STEP = 0.5
+local DIMINISH_FLOOR = 0.25
+local DIMINISH_RESET = 8 -- seconds without a reapplication before it resets
+
+local diminish = {} -- [userId] = { [effectId] = { mult, lastApplied } }
+
+local function diminishedDuration(player, def)
+	if def.kind ~= "debuff" then
+		return def.duration
+	end
+	local userDim = diminish[player.UserId]
+	if not userDim then
+		userDim = {}
+		diminish[player.UserId] = userDim
+	end
+	local now = os.clock()
+	local entry = userDim[def.id]
+	if entry and now - entry.lastApplied <= DIMINISH_RESET then
+		entry.mult = math.max(DIMINISH_FLOOR, entry.mult * DIMINISH_STEP)
+	else
+		entry = { mult = 1 }
+		userDim[def.id] = entry
+	end
+	entry.lastApplied = now
+	return def.duration * entry.mult
 end
 
 -- Applies (or refreshes) an effect on the player.
@@ -55,7 +122,11 @@ function EffectService.apply(player, effectId)
 		effects = {}
 		active[player.UserId] = effects
 	end
-	local expiresAt = Workspace:GetServerTimeNow() + def.duration
+	local expiresAt = Workspace:GetServerTimeNow() + diminishedDuration(player, def)
+	-- A diminished reapplication must never CUT SHORT a longer active timer.
+	if effects[effectId] and effects[effectId] > expiresAt then
+		return
+	end
 	effects[effectId] = expiresAt
 	player:SetAttribute(Effects.attributeFor(effectId), expiresAt)
 	applyWalkSpeed(player)
@@ -91,18 +162,27 @@ function EffectService.start()
 		end
 	end)
 
+	-- Feed effect buffs/debuffs into the combat damage pipeline.
+	EnemyService.registerDamageMult(function(player, kind)
+		return EffectService.damageMult(player, kind)
+	end)
+	EnemyService.registerDamageTakenMult(function(player)
+		return EffectService.damageTakenMult(player)
+	end)
+
 	-- Respawning resets WalkSpeed; reapply active effects to the new character.
 	Players.PlayerAdded:Connect(function(player)
 		player.CharacterAdded:Connect(function(character)
 			local humanoid = character:WaitForChild("Humanoid", 5)
 			if humanoid then
-				humanoid.WalkSpeed = BASE_WALKSPEED * walkSpeedMult(player.UserId)
+				applyWalkSpeed(player)
 			end
 		end)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player)
 		active[player.UserId] = nil
+		diminish[player.UserId] = nil
 	end)
 
 	task.spawn(function()
