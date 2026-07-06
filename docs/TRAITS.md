@@ -148,7 +148,6 @@ Crear un servicio encargado de:
 * Sumar los puntos de rasgos activos basados en el nivel y rasgos de los items equipados.
 * Evaluar y calcular los multiplicadores de estadísticas resultantes.
 * Comunicar los multiplicadores a `HealthService`, `ManaService` y `ClassService`.
-* Sincronizar las sinergias activas al cliente para su visualización en la UI.
 
 #### [MODIFY] [HealthService.lua](file:///C:/Users/banan/Desktop/wachinadas/FAMANA/roblox/src/server/HealthService.lua)
 * Permitir recibir un multiplicador de sinergia de vida máxima (`MaxHealthMult`) y aplicarlo dinámicamente al recalcular la salud máxima del jugador.
