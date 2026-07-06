@@ -41,11 +41,22 @@ local function poll()
 			if event.kind == "inventory" then
 				PlayerService.refreshInventory(player)
 			elseif event.kind == "stats" then
-				local classChanged = PlayerService.applyStats(player, event.payload)
-				if classChanged then
-					-- Same full refresh as a player-initiated class switch:
-					-- new class's HP/mana caps + walk speed, refilled.
-					ClassService.respecLiveStats(player)
+				local applied, classChanged = PlayerService.applyStats(player, event.payload)
+				if applied then
+					if classChanged then
+						-- Same full refresh as a player-initiated class switch:
+						-- new class's HP/mana caps + walk speed, refilled.
+						ClassService.respecLiveStats(player)
+					end
+					print("[AdminSyncService] applied admin stats for " .. player.Name)
+				else
+					-- Loud on purpose: a silent skip here means the next
+					-- autosave overwrites the admin's edit in the DB.
+					warn(
+						"[AdminSyncService] could NOT apply admin stats for "
+							.. player.Name
+							.. " (profile not loaded / temporary, or bad payload)"
+					)
 				end
 			end
 			if event.message then

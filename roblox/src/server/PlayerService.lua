@@ -311,12 +311,12 @@ end
 -- the payload carries the final resolved gold/level/xp/currentClass/
 -- classLevels) to the live profile + attributes — without it, the next
 -- autosave would clobber the admin's edit with the stale cached values.
--- Returns whether the active class changed, so the caller (AdminSyncService)
--- can respec live stats through ClassService.
+-- Returns (applied, classChanged); on a class change the caller
+-- (AdminSyncService) respecs live stats through ClassService.
 function PlayerService.applyStats(player, stats)
 	local profile = cache[player.UserId]
 	if not profile or profile._temporary or typeof(stats) ~= "table" then
-		return false
+		return false, false
 	end
 
 	if typeof(stats.gold) == "number" then
@@ -347,7 +347,7 @@ function PlayerService.applyStats(player, stats)
 		player:SetAttribute("XpToNext", xpToNext(profile.level))
 	end
 
-	return classChanged
+	return true, classChanged
 end
 
 local function buildSaveFields(player)
