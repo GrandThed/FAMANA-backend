@@ -64,9 +64,11 @@ Fastify + `pg` (raw SQL, ESM). Live at
   separate from the game's `X-Api-Key`), `src/routes/admin.js`, static SPA in
   `admin-web/`. Enabled only if `ADMIN_PASSWORD` is set. See
   [`docs/ADMIN_DASHBOARD.md`](docs/ADMIN_DASHBOARD.md).
-- **Live admin→game push** (polling): `src/events.js` — admin item mutations
+- **Live admin→game push** (polling): `src/events.js` — admin mutations
   enqueue a `player_events` row (same transaction); the game drains them via
-  `POST /player/events`. See the Roblox `AdminSyncService` below.
+  `POST /player/events`. Kinds: `inventory` (refresh) and `stats`
+  (gold/level/xp/class from the panel's Progress editor, applied live via
+  `PlayerService.applyStats` + a class respec). See `AdminSyncService` below.
 - Tables auto-migrate on Railway deploy via `preDeployCommand: npm run migrate`
   (see `railway.json`). Railway env vars: `DATABASE_URL` (reference to the
   Postgres plugin) + `API_KEY`; optional `ADMIN_PASSWORD` / `ADMIN_SESSION_SECRET`.
@@ -135,8 +137,9 @@ validated server-side — store carries the item, price side exists, player
 near the vendor — then run through `PlayerService` gold + inventory so they
 persist; buy refunds on a full inventory) ·
 `BorderService` (grid teleport
-handoff) · `AdminSyncService` (polls `/player/events` every 4s → refreshes
-inventory + fires `Notify` for live admin edits).
+handoff) · `AdminSyncService` (polls `/player/events` every 4s → `inventory` events
+refresh the inventory, `stats` events apply admin gold/level/xp/class edits
+live + respec on class change; fires `Notify` either way).
 
 **Client** (`src/client/`): `ContentSync` (applies the `ContentData` payload
 to the local `Items` mirror, live on change), `HudUI` (Diablo-style health + mana orbs, an

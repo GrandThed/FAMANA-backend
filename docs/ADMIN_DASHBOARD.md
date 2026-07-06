@@ -70,6 +70,7 @@ Roblox servers). Separate auth:
 | GET | `/admin/players?query=&cell=&limit=&offset=&sort=` | Paginated player list |
 | GET | `/admin/players/:id` | Full player + inventory |
 | PATCH | `/admin/players/:id` | Update `health`, `maxHealth`, `cell`, `position` |
+| PATCH | `/admin/players/:id/progress` | Update `gold`, `level`, `xp`, `currentClass` (level/xp target the active class's track; pushed live via a `stats` event) |
 | POST | `/admin/players/:id/items` | Add item `{ itemId, quantity }` |
 | DELETE | `/admin/players/:id/items` | Remove item `{ itemId, quantity }` |
 | DELETE | `/admin/players/:id` | Delete a player (guarded, confirm) |
@@ -110,6 +111,8 @@ Add an index on `players.updated_at` if activity queries get heavy.
    (id, username, cell, HP, updated_at). Row → detail.
 4. **Player detail** (`/admin/players/:id`):
    - Header: username, id, cell, HP (editable), position.
+   - Progress panel: gold, class picker, level/xp for the selected class, plus
+     read-only chips showing every class's own level/xp track.
    - Inventory grid: each slot shows item + qty, with **−/＋** controls and an
      "add item" picker (dropdown of `/admin/items` + quantity).
    - Danger zone: reset HP, move cell, delete player (with confirm modal).
@@ -121,10 +124,16 @@ an in-memory cache of that player's profile — so an admin edit won't show in-g
 until they rejoin/reload. Options (increasing effort):
 
 1. **MVP:** edits apply on the player's next load (rejoin / cell change). Note
-   this in the UI ("applies on next login").
-2. **Push:** a backend→Roblox channel via Roblox **MessagingService** or an
-   Open Cloud messaging call, so live servers refresh a cached profile on edit.
-   (Bigger; revisit when needed.)
+   this in the UI ("applies on next login"). Still true for health/cell/position.
+2. **Polling (implemented):** mutations enqueue a `player_events` row in the
+   same transaction; the game's `AdminSyncService` drains them every 4s.
+   `inventory` events refresh the inventory; `stats` events apply
+   gold/level/xp/class to the live profile (`PlayerService.applyStats`) and
+   respec live stats on a class change — without this the next autosave would
+   clobber the admin edit.
+3. **Push:** a backend→Roblox channel via Roblox **MessagingService** or an
+   Open Cloud messaging call for instant delivery. (Bigger; revisit when
+   needed.)
 
 ## Safety & auditing
 
