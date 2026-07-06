@@ -1,5 +1,44 @@
 # Sistema de Niveles de Equipamiento y Sinergias (Estilo TFT)
 
+> [!IMPORTANT]
+> **Status 2026-07-06 — decisions + corrections** (full design context in
+> [`TRAITS_AND_SPELLS.md`](TRAITS_AND_SPELLS.md)):
+>
+> **Confirmed:**
+> - Point rule confirmed: **points = item level**, accumulated across every
+>   equipped piece (Brawler 20 is assembled from several items). Weapons
+>   count; the paper doll is the source of truth.
+> - Traits come ONLY from equipment. Class level does NOT feed traits — its
+>   only trait-side job is gating item level. Spell/school unlocks stay
+>   driven by class level (that system already shipped, see `SpellService`).
+> - Gating rule: an item above the active class's level stays equipped but
+>   goes **inert** (red square on the slot, contributes nothing) until the
+>   level allows it again — e.g. after switching to a lower-level class.
+>
+> **Corrections to this plan before implementing:**
+> - **Trait catalog/thresholds must come from the Rasgos board** (tables in
+>   `TRAITS_AND_SPELLS.md` Part 1), and names/ids in **English** (game
+>   language decision): Matón→Brawler (ladder 2/5/8/11/16/22, not 2/8), the
+>   crit trait is Lynx Eye (Ojo de Lince, ladder from 1), mana regen is a
+>   utility trait — and "Mago" can't be a trait name (collides with the
+>   class).
+> - **The backend plan is incomplete**: touching only
+>   `fetchRows`/`getInventory`/`addItem` loses data — `sortInventory`
+>   deletes and reinserts rows by item_id (would WIPE `item_level`/`traits`),
+>   and stack merging in `addItem`/`moveItem` would fuse items with
+>   different levels. Leveled items must be non-stacking, and every item
+>   path (sort, move-merge, drop pickup, vendor buy, admin grants) must be
+>   trait-aware.
+> - **SynergyService should not modify EnemyService/ClassService**: since
+>   this was written, `EnemyService` grew `registerDamageMult` /
+>   `registerDamageTakenMult` hooks + `computePlayerDamage` — register hooks
+>   instead (only a crit-chance hook still needs adding). Same for the UI:
+>   active synergies belong in the existing left-edge TFT tracker
+>   (`SpellTrackerUI.lua`), not a new inventory side panel; the item-tooltip
+>   part of the plan still applies.
+> - File links below use absolute paths from another machine — use
+>   repo-relative paths.
+
 Este documento detalla el plan técnico para implementar un sistema de progresión y personalización de estadísticas basado en el nivel y los rasgos (*traits*) de los objetos equipados.
 
 ## Resumen del Objetivo

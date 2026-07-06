@@ -79,6 +79,37 @@ function EffectService.damageTakenMult(player)
 	return mult
 end
 
+-- Diminishing returns on debuffs: reapplying the same debuff within the
+-- reset window shortens each new application (100% → 50% → 25% floor), so
+-- chain-CC (e.g. a slime pack) can't perma-lock a player. Buffs never
+-- diminish — they're the player's own casts.
+local DIMINISH_STEP = 0.5
+local DIMINISH_FLOOR = 0.25
+local DIMINISH_RESET = 8 -- seconds without a reapplication before it resets
+
+local diminish = {} -- [userId] = { [effectId] = { mult, lastApplied } }
+
+local function diminishedDuration(player, def)
+	if def.kind ~= "debuff" then
+		return def.duration
+	end
+	local userDim = diminish[player.UserId]
+	if not userDim then
+		userDim = {}
+		diminish[player.UserId] = userDim
+	end
+	local now = os.clock()
+	local entry = userDim[def.id]
+	if entry and now - entry.lastApplied <= DIMINISH_RESET then
+		entry.mult = math.max(DIMINISH_FLOOR, entry.mult * DIMINISH_STEP)
+	else
+		entry = { mult = 1 }
+		userDim[def.id] = entry
+	end
+	entry.lastApplied = now
+	return def.duration * entry.mult
+end
+
 -- Applies (or refreshes) an effect on the player.
 function EffectService.apply(player, effectId)
 	local def = Effects.get(effectId)
@@ -91,7 +122,11 @@ function EffectService.apply(player, effectId)
 		effects = {}
 		active[player.UserId] = effects
 	end
-	local expiresAt = Workspace:GetServerTimeNow() + def.duration
+	local expiresAt = Workspace:GetServerTimeNow() + diminishedDuration(player, def)
+	-- A diminished reapplication must never CUT SHORT a longer active timer.
+	if effects[effectId] and effects[effectId] > expiresAt then
+		return
+	end
 	effects[effectId] = expiresAt
 	player:SetAttribute(Effects.attributeFor(effectId), expiresAt)
 	applyWalkSpeed(player)
@@ -147,6 +182,7 @@ function EffectService.start()
 
 	Players.PlayerRemoving:Connect(function(player)
 		active[player.UserId] = nil
+		diminish[player.UserId] = nil
 	end)
 
 	task.spawn(function()

@@ -71,14 +71,15 @@ Two halves:
   but equipment will contribute trait/school **points** (see the next
   question).
 
-**Equipment → school points (new, from the "wielding gives points" decision)**
-- Equipment contributing points to schools means a school's effective level =
-  class level + item points? Or two separate ladders (class level unlocks
-  spells, item points only push trait thresholds)? This is THE bridge between
-  the trait system and the spell system — needs a formula before Phase B.
-- Does "wielding" mean equipped in the paper doll, or the Tool actually held
-  in hand right now? (Recommend: paper doll, so points don't flicker while
-  switching tools to gather.)
+**Equipment → trait points (decided 2026-07-06)**
+- Trait points come ONLY from equipment (weapons included). Each equipped
+  paper-doll piece contributes its points to its trait(s); totals accumulate
+  across the whole doll — Brawler 20 is meant to be assembled from several
+  pieces (e.g. Lvl 5 helmet + Lvl 3 shield with Brawler = 8 points, matching
+  the `docs/TRAITS.md` proposal).
+- Spell schools are untouched by items: class level alone drives spell
+  unlocks and school passives. Class level's only other job is gating which
+  item levels actually count (below).
 
 **Roll rules (needed before implementing the generator)**
 - How many traits can one item roll? Suggestion: 1–2 for levels 1–6, 2–3
@@ -93,13 +94,14 @@ Two halves:
 - Item level source: does a drop's item level come from the mob's level
   (±1–2)? From the zone/cell? Vendor items fixed level?
 
-**Player-level gating**
-- "Cannot equip above your level" — which level, given per-class tracks? The
-  **active class's** level is the obvious answer, but then: what happens when
-  you switch to a lower-level class while wearing high items? Options:
-  auto-unequip (brutal), traits deactivate but item stays (recommended), or
-  block the switch.
-- Does the gate apply only on equip, or continuously?
+**Player-level gating (decided 2026-07-06)**
+- The gate is continuous and non-destructive: an item above your ACTIVE
+  class's level (e.g. after switching to a lower-level class) stays equipped
+  but goes **inert** — a red square over its paper-doll slot, zero trait
+  points, zero stats — and wakes back up once your level allows it again.
+  Nothing is ever auto-unequipped.
+- Small leftover: can you slot an over-level item in the first place?
+  Recommend yes (it just starts inert), so there's exactly one rule.
 
 **Combat model gaps (traits reference stats that don't exist yet)**
 - **Armor / magic resistance** (Bastión, Centinela passive): no armor stat
@@ -276,31 +278,31 @@ already take the max, not the sum, so test mode isn't overpowered.
 - Game language is **English** (spell/school/effect names, toasts). Class
   names and the class picker UI are still Spanish — see open questions.
 - Ultimates are **separate spells**; they never replace the basic one.
-- No weapon requirement to cast; equipment will instead contribute
-  **points** to schools/traits (formula TBD, see Part 1).
+- No weapon requirement to cast. Traits come **only from equipment**
+  (weapons included); class level only gates item level; over-level
+  equipment goes inert with a red square (see Part 1).
 - Unknown-class spell binds stay on the hotbar, **grayed**.
-- **3 hotbar pages**, swapped from the right end of the bar, saved
-  server-side; all defaults land on page 1.
-- Enemy **stun and slow** are real primitives with on-enemy visuals; Snare
-  Trap ships as a visible slow zone (v1 of the Trapper's kit).
+- **3 hotbar pages**, swapped from the right end of the bar or with **`X`**;
+  **no** auto page switch on class change. Saved server-side; all defaults
+  land on page 1.
+- Enemy **stun and slow** are real primitives with on-enemy 💫/🐌 marks and
+  a **remaining-duration bar** under each mark; the player's HUD effects
+  strip rows drain a bar too. Snare Trap ships as a visible slow zone (v1 of
+  the Trapper's kit).
+- CC on **players** has diminishing returns: the same debuff reapplied
+  within 8s lands at 100% → 50% → 25% duration (floor 25%), and a shortened
+  reapply never cuts an already-running timer. Enemies have no diminishing
+  returns for now.
+- Mana costs stay as they are.
 
 ### Known gaps / open questions on the spell side
 
-- The tracker/picker need the cursor — fine (the mouse is never locked), but
-  binding mid-fight means mousing away from combat. Add a keyboard page-swap
-  shortcut (e.g. `X` or Shift+scroll) and maybe a "swap on class switch"
-  auto-page rule?
-- Should each hotbar page auto-associate with a class (switch class → its
-  page activates)?
 - Snare Trap is a **visible** slow zone; a real hidden, one-shot trigger trap
   is still future work. No knockback primitive exists for SuperNova.
-- Mana costs assume the class's mana pool (knight max is 60 — his kit is
-  priced cheap). Rebalance with real play.
 - Rest of the game is still Spanish (class names Caballero/Arquero/Mago/
   Invocador, class picker, some UI). Translate everything for consistency?
-- CC stacking rules: slow takes the strongest mult and refreshes duration;
-  no diminishing returns on stun/slow chains yet — fine for PvE testing,
-  revisit before PvP.
+- Do enemies eventually need diminishing returns too? (A stun-chain can
+  perma-lock a single mob — fun vs. degenerate once bosses exist.)
 
 ### Testing tips
 

@@ -112,7 +112,9 @@ active class and mirrors it to the `Level`/`Xp`/`XpToNext`/`Class`
 attributes, persisted via `/player/:id/save`) · `EffectService` (live buffs/debuffs; walkspeed multipliers
 (class-aware) + `damageMults`/`damageTakenMult` fields fed into EnemyService's
 damage hooks, replicated as `Effect_<id>` attributes holding server-clock
-expiry; slimes inflict `slow` on hit via `EnemyService.onPlayerHit`) ·
+expiry; debuffs have diminishing returns — reapplied within 8s: 100/50/25%
+duration, never cutting an active timer; slimes inflict `slow` on hit via
+`EnemyService.onPlayerHit`) ·
 `SpellService` (subclass spells from `shared/Spells`: validates casts behind
 the `CastSpell` remote — known → target → mana → cooldown, nothing charged on
 a whiff — with behaviors projectile/zone/strike/aoe/buff/taunt/summon
@@ -135,8 +137,8 @@ arrows instead of magic orbs; public combat API for spells —
 `computePlayerDamage`, `enemiesNear`/`focusedTarget`/`nearestTarget`,
 `dealSpellDamage`, `stun`, `slow`, `taunt` — plus `registerDamageMult`/
 `registerDamageTakenMult` hooks used by effects and subclass passives;
-stunned/slowed enemies show 💫/🐌 billboard marks, slows scale walk speed
-and hop cadence) ·
+stunned/slowed enemies show 💫/🐌 billboard marks with remaining-duration
+drain bars, slows scale walk speed and hop cadence) ·
 `DropService` (loot tables → ground drops + public
 `spawn(itemId, qty, pos, opts?)` + the `DropItem` remote for
 drag-out-of-inventory throws; drops are magnetic — they fly to the nearest
@@ -163,8 +165,8 @@ quick binds from `HotbarBinds` — item binds equip Tools, spell binds
 (`spell:<id>`) cast via `CastSpell` and render a school-colored icon with a
 cooldown veil from the `SpellCd_<id>` attributes (grayed when the active
 class doesn't know the spell); clicking an empty bind slot opens a pick-list
-of known spells, and the button at the bar's right end cycles the three
-bind pages), `SpellTrackerUI` (TFT-style subclass tracker on the left edge:
+of known spells, and the three bind pages cycle via the button at the bar's
+right end or the `X` key; HUD effect rows drain a remaining-duration bar), `SpellTrackerUI` (TFT-style subclass tracker on the left edge:
 one entry per school of the active class with level vs next threshold;
 hover → tooltip with the school's level timeline + spell rows — hover a row
 and press 3–0 to bind it; sets `ClientState.spellHover` so the keypress

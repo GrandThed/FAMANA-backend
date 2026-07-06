@@ -151,7 +151,7 @@ local function makeEffectsPanel(parent)
 	layout.Padding = UDim.new(0, 4)
 	layout.Parent = list
 
-	local rows = {} -- [effectId] = { frame, label }
+	local rows = {} -- [effectId] = { frame, label, fill }
 
 	local function refresh()
 		local now = Workspace:GetServerTimeNow()
@@ -176,7 +176,7 @@ local function makeEffectsPanel(parent)
 
 					local icon = Instance.new("Frame")
 					icon.Size = UDim2.new(0, 14, 0, 14)
-					icon.Position = UDim2.new(0, 5, 0.5, -7)
+					icon.Position = UDim2.new(0, 5, 0.5, -9)
 					icon.BackgroundColor3 = def.color or Color3.fromRGB(200, 200, 200)
 					icon.BorderSizePixel = 0
 					icon.Parent = frame
@@ -186,7 +186,7 @@ local function makeEffectsPanel(parent)
 					iconCorner.Parent = icon
 
 					local label = Instance.new("TextLabel")
-					label.Size = UDim2.new(1, -28, 1, 0)
+					label.Size = UDim2.new(1, -28, 1, -4)
 					label.Position = UDim2.new(0, 26, 0, 0)
 					label.BackgroundTransparency = 1
 					label.Font = Enum.Font.GothamMedium
@@ -195,10 +195,28 @@ local function makeEffectsPanel(parent)
 					label.TextXAlignment = Enum.TextXAlignment.Left
 					label.Parent = frame
 
-					row = { frame = frame, label = label }
+					-- Remaining-duration bar along the bottom of the row.
+					local barBg = Instance.new("Frame")
+					barBg.Size = UDim2.new(1, -8, 0, 2)
+					barBg.Position = UDim2.new(0, 4, 1, -4)
+					barBg.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+					barBg.BorderSizePixel = 0
+					barBg.Parent = frame
+
+					local fill = Instance.new("Frame")
+					fill.Size = UDim2.new(1, 0, 1, 0)
+					fill.BackgroundColor3 = def.color or Color3.fromRGB(200, 200, 200)
+					fill.BorderSizePixel = 0
+					fill.Parent = barBg
+
+					row = { frame = frame, label = label, fill = fill }
 					rows[effectId] = row
 				end
 				row.label.Text = string.format("%s  %.0fs", def.name, value - now)
+				-- Diminished applications start below 100% (shorter than the
+				-- def duration); that reads correctly — less bar, less CC.
+				local frac = math.clamp((value - now) / math.max(def.duration or 1, 0.1), 0, 1)
+				row.fill.Size = UDim2.new(frac, 0, 1, 0)
 			end
 		end
 		for effectId, row in pairs(rows) do
@@ -217,8 +235,8 @@ local function makeEffectsPanel(parent)
 
 	task.spawn(function()
 		while true do
-			task.wait(0.5)
-			refresh() -- also ticks the countdown text down even with no attribute change
+			task.wait(0.25)
+			refresh() -- also drains the bars/countdowns with no attribute change
 		end
 	end)
 end
@@ -842,6 +860,14 @@ function HudUI.start()
 			end, false, keyCode)
 		end
 	end
+
+	-- X is the fast page swap (same as clicking the switcher button).
+	ContextActionService:BindAction("HotbarPage", function(_, inputState)
+		if inputState == Enum.UserInputState.Begin then
+			HotbarBinds.cyclePage()
+		end
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.KeyCode.X)
 
 	-- ---- health binding ----
 	local function bindCharacter(character)

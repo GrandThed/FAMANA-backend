@@ -391,10 +391,11 @@ local function updateHop(enemy, dt, root, def, speedMult)
 end
 
 -- Floating status marks over an enemy (stun stars, slow snail) so CC reads at
--- a glance. Server-side BillboardGuis, same as the name tag / health bar.
+-- a glance, each with a bar draining down the remaining duration.
+-- Server-side BillboardGuis, same as the name tag / health bar.
 local STATUS_MARKS = {
-	stun = { text = "💫", offsetX = -0.9, spin = true },
-	slow = { text = "🐌", offsetX = 0.9, spin = false },
+	stun = { text = "💫", offsetX = -0.9, spin = true, barColor = Color3.fromRGB(255, 220, 120) },
+	slow = { text = "🐌", offsetX = 0.9, spin = false, barColor = Color3.fromRGB(120, 190, 255) },
 }
 
 local function setStatusMark(enemy, kind, active)
@@ -404,18 +405,31 @@ local function setStatusMark(enemy, kind, active)
 		local look = STATUS_MARKS[kind]
 		local gui = Instance.new("BillboardGui")
 		gui.Name = "Mark_" .. kind
-		gui.Size = UDim2.new(0, 26, 0, 26)
+		gui.Size = UDim2.new(0, 26, 0, 32)
 		gui.StudsOffsetWorldSpace = Vector3.new(look.offsetX, enemy.def.size.Y / 2 + 3, 0)
 		gui.AlwaysOnTop = true
 		gui.Parent = enemy.part
 
 		local label = Instance.new("TextLabel")
-		label.Size = UDim2.new(1, 0, 1, 0)
+		label.Size = UDim2.new(1, 0, 1, -6)
 		label.BackgroundTransparency = 1
 		label.Font = Enum.Font.GothamBold
 		label.TextSize = 20
 		label.Text = look.text
 		label.Parent = gui
+
+		local barBg = Instance.new("Frame")
+		barBg.Size = UDim2.new(1, -4, 0, 3)
+		barBg.Position = UDim2.new(0, 2, 1, -4)
+		barBg.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+		barBg.BorderSizePixel = 0
+		barBg.Parent = gui
+
+		local fill = Instance.new("Frame")
+		fill.Size = UDim2.new(1, 0, 1, 0)
+		fill.BackgroundColor3 = look.barColor
+		fill.BorderSizePixel = 0
+		fill.Parent = barBg
 
 		if look.spin then
 			local spin = TweenService:Create(
@@ -425,10 +439,17 @@ local function setStatusMark(enemy, kind, active)
 			)
 			spin:Play()
 		end
-		enemy.marks[kind] = gui
+		enemy.marks[kind] = { gui = gui, fill = fill }
 	elseif not active and existing then
-		existing:Destroy()
+		existing.gui:Destroy()
 		enemy.marks[kind] = nil
+	end
+end
+
+local function updateMarkBar(enemy, kind, remaining, total)
+	local mark = enemy.marks and enemy.marks[kind]
+	if mark and total and total > 0 then
+		mark.fill.Size = UDim2.new(math.clamp(remaining / total, 0, 1), 0, 1, 0)
 	end
 end
 
@@ -470,17 +491,23 @@ local function updateEnemy(enemy, dt)
 		root = target.Character:FindFirstChild("HumanoidRootPart")
 	end
 
-	-- CC state: expire + surface both as floating marks.
+	-- CC state: expire + surface both as floating marks with drain bars.
 	local stunned = enemy.stunnedUntil ~= nil and now < enemy.stunnedUntil
 	if not stunned then
-		enemy.stunnedUntil = nil
+		enemy.stunnedUntil, enemy.stunTotal = nil, nil
 	end
 	local slowed = enemy.slowedUntil ~= nil and now < enemy.slowedUntil
 	if not slowed then
-		enemy.slowedUntil, enemy.slowMult = nil, nil
+		enemy.slowedUntil, enemy.slowMult, enemy.slowTotal = nil, nil, nil
 	end
 	setStatusMark(enemy, "stun", stunned)
 	setStatusMark(enemy, "slow", slowed)
+	if stunned then
+		updateMarkBar(enemy, "stun", enemy.stunnedUntil - now, enemy.stunTotal)
+	end
+	if slowed then
+		updateMarkBar(enemy, "slow", enemy.slowedUntil - now, enemy.slowTotal)
+	end
 	local speedMult = slowed and (enemy.slowMult or 0.5) or 1
 
 	-- Stunned: no chasing, no winding up new hops, no attacking. A hop already
@@ -660,7 +687,9 @@ end
 
 function EnemyService.stun(ref, duration)
 	if ref and ref.enemy and not ref.enemy.dead then
-		ref.enemy.stunnedUntil = math.max(ref.enemy.stunnedUntil or 0, os.clock() + duration)
+		local enemy = ref.enemy
+		enemy.stunnedUntil = math.max(enemy.stunnedUntil or 0, os.clock() + duration)
+		enemy.stunTotal = enemy.stunnedUntil - os.clock() -- drain bar refills on refresh
 	end
 end
 
@@ -671,6 +700,7 @@ function EnemyService.slow(ref, duration, mult)
 		local enemy = ref.enemy
 		enemy.slowedUntil = math.max(enemy.slowedUntil or 0, os.clock() + duration)
 		enemy.slowMult = math.min(enemy.slowMult or 1, mult or 0.5)
+		enemy.slowTotal = enemy.slowedUntil - os.clock()
 	end
 end
 
