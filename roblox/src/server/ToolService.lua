@@ -17,7 +17,7 @@ local ToolService = {}
 local EQUIPPABLE = { weapon = true, tool = true }
 
 -- Roblox's built-in "tool slash" animation — usable by any game.
-local SLASH_ANIM = "rbxassetid://522635514"
+local SLASH_ANIM = "rbxassetid://98430243867979"
 local SWING_COOLDOWN = 0.4
 
 -- [itemType] = function(player, tool, def)  registered by later systems.
