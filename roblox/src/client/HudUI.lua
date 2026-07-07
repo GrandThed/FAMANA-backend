@@ -31,6 +31,8 @@ local Spells = require(Shared:WaitForChild("Spells"))
 local HotbarBinds = require(script.Parent.HotbarBinds)
 local SpellsClient = require(script.Parent.SpellsClient)
 local ClientState = require(script.Parent.ClientState)
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 
@@ -62,11 +64,12 @@ for index, name in ipairs(Items.EQUIPMENT_SLOTS) do
 	SLOT_INDEX[name] = index - 1
 end
 
--- Builds a circular "liquid" orb. Returns a setter: update(current, max).
-local function makeOrb(parent, anchorCorner, fillColor, rimColor)
+-- Builds a circular "liquid" orb (docs/UI.md §6.7 — the only round chrome).
+-- Returns a setter: update(current, max).
+local function makeOrb(parent, anchorCorner, topColor, bottomColor, ringColor)
 	local container = Instance.new("Frame")
 	container.Size = UDim2.new(0, ORB_SIZE, 0, ORB_SIZE)
-	container.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
+	container.BackgroundColor3 = Theme.Color.Ink900
 	container.BorderSizePixel = 0
 	container.ClipsDescendants = true -- clips the fill to the rounded (circular) shape
 	if anchorCorner == "left" then
@@ -77,6 +80,7 @@ local function makeOrb(parent, anchorCorner, fillColor, rimColor)
 		container.Position = UDim2.new(1, -ORB_MARGIN, 1, -ORB_MARGIN)
 	end
 	container.Parent = parent
+	UIKit.autoScale(container) -- corner-anchored: scales in place (§9)
 
 	local round = Instance.new("UICorner")
 	round.CornerRadius = UDim.new(0.5, 0) -- half the size → a circle
@@ -88,33 +92,30 @@ local function makeOrb(parent, anchorCorner, fillColor, rimColor)
 	fill.AnchorPoint = Vector2.new(0.5, 1)
 	fill.Position = UDim2.new(0.5, 0, 1, 0)
 	fill.Size = UDim2.new(1, 0, 0, 0)
-	fill.BackgroundColor3 = fillColor
+	fill.BackgroundColor3 = topColor
 	fill.BorderSizePixel = 0
 	fill.Parent = container
 
-	-- Vertical sheen so the liquid reads as glassy, not flat.
+	-- The §6.7 top-lit ramp: bright at the surface, deep at the bottom.
 	local gradient = Instance.new("UIGradient")
 	gradient.Rotation = 90
-	gradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, fillColor:Lerp(Color3.new(1, 1, 1), 0.35)),
-		ColorSequenceKeypoint.new(1, fillColor:Lerp(Color3.new(0, 0, 0), 0.35)),
-	})
+	gradient.Color = ColorSequence.new(topColor, bottomColor)
 	gradient.Parent = fill
 
 	-- Rim ring around the orb (drawn on top, follows the circle).
 	local rim = Instance.new("UIStroke")
 	rim.Thickness = 3
-	rim.Color = rimColor
-	rim.Transparency = 0.1
+	rim.Color = ringColor
+	rim.Transparency = 0.05
 	rim.Parent = container
 
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 0, 22)
 	label.Position = UDim2.new(0, 0, 0.5, -11)
 	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
+	label.FontFace = Theme.Font.BodyBold
 	label.TextSize = 17
-	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextColor3 = Theme.Semantic.TextStrong
 	label.Text = ""
 	label.Parent = container
 
@@ -141,9 +142,20 @@ local function makeEffectsPanel(parent)
 	local list = Instance.new("Frame")
 	list.Size = UDim2.new(0, 200, 0, 120)
 	list.AnchorPoint = Vector2.new(0, 1)
-	list.Position = UDim2.new(0, ORB_MARGIN, 1, -(ORB_MARGIN + ORB_SIZE + 14))
 	list.BackgroundTransparency = 1
 	list.Parent = parent
+	UIKit.autoScale(list)
+
+	-- Sits above the health orb, whose rendered height scales with the HUD.
+	local function positionList()
+		local s = UIKit.scaleFactor()
+		list.Position = UDim2.new(0, ORB_MARGIN, 1, -(ORB_MARGIN + ORB_SIZE * s + 14))
+	end
+	local camera = Workspace.CurrentCamera
+	if camera then
+		camera:GetPropertyChangedSignal("ViewportSize"):Connect(positionList)
+	end
+	positionList()
 
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -165,8 +177,8 @@ local function makeEffectsPanel(parent)
 				if not row then
 					local frame = Instance.new("Frame")
 					frame.Size = UDim2.new(1, 0, 0, EFFECT_ROW)
-					frame.BackgroundColor3 = Color3.fromRGB(14, 14, 18)
-					frame.BackgroundTransparency = 0.25
+					frame.BackgroundColor3 = Theme.Color.Ink800
+					frame.BackgroundTransparency = 0.2
 					frame.BorderSizePixel = 0
 					frame.Parent = list
 
@@ -189,9 +201,9 @@ local function makeEffectsPanel(parent)
 					label.Size = UDim2.new(1, -28, 1, -4)
 					label.Position = UDim2.new(0, 26, 0, 0)
 					label.BackgroundTransparency = 1
-					label.Font = Enum.Font.GothamMedium
+					label.FontFace = Theme.Font.Body
 					label.TextSize = 13
-					label.TextColor3 = Color3.new(1, 1, 1)
+					label.TextColor3 = Theme.Semantic.TextBody
 					label.TextXAlignment = Enum.TextXAlignment.Left
 					label.Parent = frame
 
@@ -199,7 +211,7 @@ local function makeEffectsPanel(parent)
 					local barBg = Instance.new("Frame")
 					barBg.Size = UDim2.new(1, -8, 0, 2)
 					barBg.Position = UDim2.new(0, 4, 1, -4)
-					barBg.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+					barBg.BackgroundColor3 = Theme.Color.Ink650
 					barBg.BorderSizePixel = 0
 					barBg.Parent = frame
 
@@ -249,20 +261,16 @@ local function makeSlot(parent, order, reserved, onActivated)
 	slot.LayoutOrder = order
 	slot.AutoButtonColor = false
 	slot.Text = ""
-	slot.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+	slot.BackgroundColor3 = Theme.Color.Ink900 -- slot well, sharp corners (§6.2/§6.8)
 	slot.BackgroundTransparency = 0.4
 	slot.BorderSizePixel = 0
 	slot.Parent = parent
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 6)
-	corner.Parent = slot
-
-	local baseStroke = reserved and Color3.fromRGB(110, 95, 60) or Color3.fromRGB(70, 70, 85)
+	local baseStroke = reserved and Theme.Color.Ember600 or Theme.Semantic.BorderSlot
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 1.5
 	stroke.Color = baseStroke
-	stroke.Transparency = 0.2
+	stroke.Transparency = 0.1
 	stroke.Parent = slot
 
 	-- Hotkey number, top-left.
@@ -270,8 +278,8 @@ local function makeSlot(parent, order, reserved, onActivated)
 	key.Size = UDim2.new(0, 14, 0, 12)
 	key.Position = UDim2.new(0, 3, 0, 2)
 	key.BackgroundTransparency = 1
-	key.TextColor3 = reserved and Color3.fromRGB(230, 205, 140) or Color3.fromRGB(180, 180, 195)
-	key.Font = Enum.Font.GothamBold
+	key.TextColor3 = reserved and Theme.Color.Gold400 or Theme.Semantic.TextSecondary
+	key.FontFace = Theme.Font.BodyBold
 	key.TextXAlignment = Enum.TextXAlignment.Left
 	key.TextSize = 11
 	key.Text = keyLabelFor(order)
@@ -291,8 +299,8 @@ local function makeSlot(parent, order, reserved, onActivated)
 	name.Size = UDim2.new(1, -8, 1, -26)
 	name.Position = UDim2.new(0, 4, 0, 14)
 	name.BackgroundTransparency = 1
-	name.TextColor3 = Color3.new(1, 1, 1)
-	name.Font = Enum.Font.GothamMedium
+	name.TextColor3 = Theme.Semantic.TextBody
+	name.FontFace = Theme.Font.Body
 	name.TextSize = 11
 	name.TextWrapped = true
 	name.Text = ""
@@ -302,8 +310,8 @@ local function makeSlot(parent, order, reserved, onActivated)
 	qty.Size = UDim2.new(1, -6, 0, 13)
 	qty.Position = UDim2.new(0, 3, 1, -14)
 	qty.BackgroundTransparency = 1
-	qty.TextColor3 = Color3.fromRGB(255, 220, 120)
-	qty.Font = Enum.Font.GothamBold
+	qty.TextColor3 = Theme.Semantic.Currency
+	qty.FontFace = Theme.Font.BodyBold
 	qty.TextXAlignment = Enum.TextXAlignment.Right
 	qty.TextSize = 13
 	qty.Text = ""
@@ -314,9 +322,9 @@ local function makeSlot(parent, order, reserved, onActivated)
 	spellIcon.Size = UDim2.new(1, 0, 1, -8)
 	spellIcon.Position = UDim2.new(0, 0, 0, 4)
 	spellIcon.BackgroundTransparency = 1
-	spellIcon.Font = Enum.Font.GothamBold
+	spellIcon.FontFace = Theme.Font.BodyBold
 	spellIcon.TextSize = 26
-	spellIcon.TextColor3 = Color3.new(1, 1, 1)
+	spellIcon.TextColor3 = Theme.Semantic.TextStrong
 	spellIcon.Text = ""
 	spellIcon.Visible = false
 	spellIcon.ZIndex = 2
@@ -325,23 +333,19 @@ local function makeSlot(parent, order, reserved, onActivated)
 	-- Cooldown veil: a dark curtain that drains downward as the spell recharges.
 	local cdVeil = Instance.new("Frame")
 	cdVeil.Size = UDim2.new(1, 0, 0, 0)
-	cdVeil.BackgroundColor3 = Color3.fromRGB(8, 8, 12)
-	cdVeil.BackgroundTransparency = 0.3
+	cdVeil.BackgroundColor3 = Theme.Color.Ink900
+	cdVeil.BackgroundTransparency = 0.25
 	cdVeil.BorderSizePixel = 0
 	cdVeil.Visible = false
 	cdVeil.ZIndex = 5
 	cdVeil.Parent = slot
 
-	local cdVeilCorner = Instance.new("UICorner")
-	cdVeilCorner.CornerRadius = UDim.new(0, 6)
-	cdVeilCorner.Parent = cdVeil
-
 	local cdText = Instance.new("TextLabel")
 	cdText.Size = UDim2.new(1, 0, 1, 0)
 	cdText.BackgroundTransparency = 1
-	cdText.Font = Enum.Font.GothamBold
-	cdText.TextSize = 16
-	cdText.TextColor3 = Color3.new(1, 1, 1)
+	cdText.FontFace = Theme.Font.DisplayBold
+	cdText.TextSize = 18
+	cdText.TextColor3 = Theme.Semantic.TextStrong
 	cdText.Text = ""
 	cdText.Visible = false
 	cdText.ZIndex = 6
@@ -403,7 +407,7 @@ local function makeSlot(parent, order, reserved, onActivated)
 		-- Unknown spells (bound while playing another class) read as gray.
 		local school = Spells.getSchool(def.school)
 		local schoolColor = school and school.color or Color3.fromRGB(150, 90, 255)
-		stroke.Color = spellDimmed and Color3.fromRGB(105, 105, 115) or schoolColor
+		stroke.Color = spellDimmed and Theme.Color.Steel600 or schoolColor
 		stroke.Thickness = 1.5
 	end
 
@@ -432,10 +436,10 @@ local function makeSlot(parent, order, reserved, onActivated)
 			return -- spell slots keep their school-colored stroke
 		end
 		if equipped then
-			stroke.Color = Color3.fromRGB(255, 220, 120)
+			stroke.Color = Theme.Color.Gold400
 			stroke.Thickness = 2.5
 		else
-			stroke.Color = hasItem and Color3.fromRGB(120, 120, 145) or baseStroke
+			stroke.Color = hasItem and Theme.Semantic.BorderDivider or baseStroke
 			stroke.Thickness = 1.5
 		end
 	end
@@ -474,29 +478,26 @@ local function makeXpBar(parent, width, position, anchorPoint)
 	barBg.Size = UDim2.new(0, width, 0, 8)
 	barBg.Position = position
 	barBg.AnchorPoint = anchorPoint
-	barBg.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+	barBg.BackgroundColor3 = Theme.Color.Ink900
 	barBg.BorderSizePixel = 0
 	barBg.Parent = parent
 
-	local barCorner = Instance.new("UICorner")
-	barCorner.CornerRadius = UDim.new(0.5, 0)
-	barCorner.Parent = barBg
-
 	local stroke = Instance.new("UIStroke")
 	stroke.Thickness = 1
-	stroke.Color = Color3.fromRGB(70, 70, 85)
-	stroke.Transparency = 0.3
+	stroke.Color = Theme.Semantic.BorderMuted
+	stroke.Transparency = 0.2
 	stroke.Parent = barBg
 
+	-- Gold ramp fill (§6.8): dark gold → bright gold along the bar.
 	local barFill = Instance.new("Frame")
 	barFill.Size = UDim2.new(0, 0, 1, 0)
-	barFill.BackgroundColor3 = Color3.fromRGB(255, 221, 51)
+	barFill.BackgroundColor3 = Color3.new(1, 1, 1)
 	barFill.BorderSizePixel = 0
 	barFill.Parent = barBg
 
-	local barFillCorner = Instance.new("UICorner")
-	barFillCorner.CornerRadius = UDim.new(0.5, 0)
-	barFillCorner.Parent = barFill
+	local fillGradient = Instance.new("UIGradient")
+	fillGradient.Color = ColorSequence.new(Color3.fromRGB(138, 106, 30), Theme.Color.Gold400)
+	fillGradient.Parent = barFill
 
 	local function refresh()
 		local xp = player:GetAttribute("Xp") or 0
@@ -508,6 +509,7 @@ local function makeXpBar(parent, width, position, anchorPoint)
 	player:GetAttributeChangedSignal("Xp"):Connect(refresh)
 	player:GetAttributeChangedSignal("XpToNext"):Connect(refresh)
 	refresh()
+	return barBg
 end
 
 function HudUI.start()
@@ -523,8 +525,8 @@ function HudUI.start()
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	-- ---- orbs ----
-	local setHealth = makeOrb(gui, "left", Color3.fromRGB(190, 45, 45), Color3.fromRGB(120, 20, 20))
-	local setMana = makeOrb(gui, "right", Color3.fromRGB(50, 110, 220), Color3.fromRGB(25, 55, 130))
+	local setHealth = makeOrb(gui, "left", Theme.Orb.HpTop, Theme.Orb.HpBottom, Theme.Orb.HpRing)
+	local setMana = makeOrb(gui, "right", Theme.Orb.ManaTop, Theme.Orb.ManaBottom, Theme.Orb.ManaRing)
 
 	-- ---- active effects (buffs/debuffs) ----
 	makeEffectsPanel(gui)
@@ -546,9 +548,20 @@ function HudUI.start()
 	layout.Padding = UDim.new(0, SLOT_PAD)
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
 	layout.Parent = bar
+	UIKit.autoScale(bar) -- bottom-center anchored: scales in place
 
-	-- XP bar: centered, same width as the hotbar, sitting just above it.
-	makeXpBar(gui, barWidth, UDim2.new(0.5, 0, 1, -(16 + SLOT + 8)), Vector2.new(0.5, 1))
+	-- XP bar: centered, same width as the hotbar, sitting just above it
+	-- (whose rendered height scales with the HUD).
+	local xpBar = makeXpBar(gui, barWidth, UDim2.new(0.5, 0, 1, -(16 + SLOT + 8)), Vector2.new(0.5, 1))
+	UIKit.autoScale(xpBar)
+	local function positionXpBar()
+		xpBar.Position = UDim2.new(0.5, 0, 1, -(16 + SLOT * UIKit.scaleFactor() + 8))
+	end
+	local hudCamera = Workspace.CurrentCamera
+	if hudCamera then
+		hudCamera:GetPropertyChangedSignal("ViewportSize"):Connect(positionXpBar)
+	end
+	positionXpBar()
 
 	local slotItem = {} -- [i] = itemId or "spell:<id>" currently shown in slot i (or nil)
 
@@ -600,23 +613,19 @@ function HudUI.start()
 	local pageBtn = Instance.new("TextButton")
 	pageBtn.Size = UDim2.new(0, PAGE_BTN_W, 0, SLOT)
 	pageBtn.LayoutOrder = hotbarSize
-	pageBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+	pageBtn.BackgroundColor3 = Theme.Color.Ink900
 	pageBtn.BackgroundTransparency = 0.25
 	pageBtn.BorderSizePixel = 0
-	pageBtn.Font = Enum.Font.GothamBold
+	pageBtn.FontFace = Theme.Font.DisplayBold
 	pageBtn.TextSize = 18
-	pageBtn.TextColor3 = Color3.fromRGB(255, 220, 120)
+	pageBtn.TextColor3 = Theme.Semantic.Currency
 	pageBtn.Text = "1"
 	pageBtn.Parent = bar
 
-	local pageBtnCorner = Instance.new("UICorner")
-	pageBtnCorner.CornerRadius = UDim.new(0, 6)
-	pageBtnCorner.Parent = pageBtn
-
 	local pageBtnStroke = Instance.new("UIStroke")
 	pageBtnStroke.Thickness = 1.5
-	pageBtnStroke.Color = Color3.fromRGB(70, 70, 85)
-	pageBtnStroke.Transparency = 0.2
+	pageBtnStroke.Color = Theme.Semantic.BorderSlot
+	pageBtnStroke.Transparency = 0.1
 	pageBtnStroke.Parent = pageBtn
 
 	local pageDots = {}
@@ -637,7 +646,7 @@ function HudUI.start()
 		local page = HotbarBinds.activePage()
 		pageBtn.Text = tostring(page)
 		for p, dot in ipairs(pageDots) do
-			dot.BackgroundColor3 = p == page and Color3.fromRGB(255, 220, 120) or Color3.fromRGB(90, 90, 105)
+			dot.BackgroundColor3 = p == page and Theme.Color.Gold400 or Theme.Semantic.BorderSlot
 		end
 	end
 
@@ -675,27 +684,28 @@ function HudUI.start()
 		frame.AnchorPoint = Vector2.new(0, 1)
 		frame.Position = UDim2.new(0, anchor.AbsolutePosition.X, 0, anchor.AbsolutePosition.Y - 8)
 		frame.Size = UDim2.new(0, PICKER_W, 0, #ids * PICKER_ROW + 26)
-		frame.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-		frame.BackgroundTransparency = 0.06
+		frame.BackgroundColor3 = Theme.Semantic.PanelTop
 		frame.BorderSizePixel = 0
 		frame.Parent = gui
+		UIKit.autoScale(frame) -- position is screen-space; content scales
 
-		local frameCorner = Instance.new("UICorner")
-		frameCorner.CornerRadius = UDim.new(0, 6)
-		frameCorner.Parent = frame
+		local frameGradient = Instance.new("UIGradient")
+		frameGradient.Rotation = 90
+		frameGradient.Color = ColorSequence.new(Theme.Semantic.PanelTop, Theme.Semantic.PanelBot)
+		frameGradient.Parent = frame
 
 		local frameStroke = Instance.new("UIStroke")
-		frameStroke.Thickness = 1.5
-		frameStroke.Color = Color3.fromRGB(90, 90, 105)
+		frameStroke.Thickness = 1
+		frameStroke.Color = Theme.Semantic.BorderPanel
 		frameStroke.Parent = frame
 
 		local header = Instance.new("TextLabel")
 		header.Size = UDim2.new(1, -12, 0, 22)
 		header.Position = UDim2.new(0, 8, 0, 2)
 		header.BackgroundTransparency = 1
-		header.Font = Enum.Font.GothamBold
+		header.FontFace = Theme.Font.BodyBold
 		header.TextSize = 11
-		header.TextColor3 = Color3.fromRGB(150, 150, 160)
+		header.TextColor3 = Theme.Semantic.TextLabel
 		header.TextXAlignment = Enum.TextXAlignment.Left
 		header.Text = "BIND TO KEY " .. keyLabelFor(i)
 		header.Parent = frame
@@ -707,12 +717,12 @@ function HudUI.start()
 			local row = Instance.new("TextButton")
 			row.Size = UDim2.new(1, -8, 0, PICKER_ROW - 4)
 			row.Position = UDim2.new(0, 4, 0, 24 + (index - 1) * PICKER_ROW)
-			row.BackgroundColor3 = Color3.fromRGB(35, 35, 44)
+			row.BackgroundColor3 = Theme.Color.Ink650
 			row.AutoButtonColor = true
 			row.BorderSizePixel = 0
-			row.Font = Enum.Font.GothamMedium
+			row.FontFace = Theme.Font.Body
 			row.TextSize = 13
-			row.TextColor3 = Color3.new(1, 1, 1)
+			row.TextColor3 = Theme.Semantic.TextBody
 			row.TextXAlignment = Enum.TextXAlignment.Left
 			row.Text = ("    %s  %s"):format(def.icon or "✦", def.name)
 			row.Parent = frame

@@ -13,22 +13,26 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared:WaitForChild("Items"))
 local Stores = require(Shared:WaitForChild("Stores"))
 local ItemModels = require(Shared:WaitForChild("ItemModels"))
+local Rarity = require(Shared:WaitForChild("Rarity"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 
 local StoreUI = {}
 
+-- Aethelgard palette (client/Theme.lua).
 local COLORS = {
-	panel = Color3.fromRGB(25, 25, 28),
-	section = Color3.fromRGB(33, 33, 38),
-	line = Color3.fromRGB(48, 48, 55),
-	tile = Color3.fromRGB(52, 52, 62),
-	accent = Color3.fromRGB(60, 90, 160),
-	bad = Color3.fromRGB(200, 70, 60),
-	gold = Color3.fromRGB(255, 220, 120),
-	text = Color3.fromRGB(235, 235, 240),
-	textDim = Color3.fromRGB(150, 150, 160),
+	panel = Theme.Semantic.PanelTop,
+	section = Theme.Semantic.SurfaceWell,
+	line = Theme.Semantic.BorderHair,
+	tile = Theme.Color.Ink900,
+	accent = Theme.Color.Ember500,
+	bad = Theme.Semantic.Danger,
+	gold = Theme.Semantic.Currency,
+	text = Theme.Semantic.TextBody,
+	textDim = Theme.Semantic.TextMuted,
 }
 
 local ERROR_TEXT = {
@@ -40,15 +44,16 @@ local ERROR_TEXT = {
 	bad_request = "Something went wrong",
 }
 
-local PANEL_W = 380
+local PANEL_W = 620 -- two columns: trade list left, detail pane right (§8)
 local PANEL_H = 470
+local LIST_W = 296
 local ROW_H = 46
 local SHIFT_QUANTITY = 5
 
-local function makeLabel(parent, text, size, color)
+local function makeLabel(parent, text, size, color, font)
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
+	label.FontFace = font or Theme.Font.BodyBold
 	label.TextSize = size
 	label.TextColor3 = color or COLORS.text
 	label.Text = text
@@ -67,40 +72,29 @@ function StoreUI.start()
 	panel.Size = UDim2.new(0, PANEL_W, 0, PANEL_H)
 	panel.Position = UDim2.new(0.72, 0, 0.5, 0)
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.BackgroundColor3 = COLORS.panel
-	panel.BorderSizePixel = 0
 	panel.Visible = false
 	panel.Parent = gui
+	UIKit.stylePanel(panel)
+	UIKit.addShadow(panel)
+	UIKit.autoScale(panel)
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
-
-	local title = makeLabel(panel, "", 16)
+	local title = makeLabel(panel, "", Theme.Text.Title, Theme.Semantic.TextTitle, Theme.Font.DisplayBold)
 	title.Size = UDim2.new(1, -80, 0, 30)
 	title.Position = UDim2.new(0, 12, 0, 4)
 	title.TextXAlignment = Enum.TextXAlignment.Left
 
-	local vendorLabel = makeLabel(panel, "", 12, COLORS.textDim)
+	local vendorLabel = makeLabel(panel, "", 12, COLORS.textDim, Theme.Font.Body)
 	vendorLabel.Size = UDim2.new(1, -80, 0, 16)
 	vendorLabel.Position = UDim2.new(0, 12, 0, 30)
 	vendorLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size = UDim2.new(0, 30, 0, 30)
+	local closeBtn = UIKit.closeButton(panel)
 	closeBtn.Position = UDim2.new(1, -6, 0, 6)
 	closeBtn.AnchorPoint = Vector2.new(1, 0)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-	closeBtn.BorderSizePixel = 0
-	closeBtn.Font = Enum.Font.GothamBold
-	closeBtn.TextSize = 16
-	closeBtn.TextColor3 = Color3.new(1, 1, 1)
-	closeBtn.Text = "X"
-	closeBtn.Parent = panel
 
-	-- ---- tabs ----------------------------------------------------------------
+	-- ---- tabs (over the list column) --------------------------------------------
 	local tabs = Instance.new("Frame")
-	tabs.Size = UDim2.new(1, -24, 0, 30)
+	tabs.Size = UDim2.new(0, LIST_W, 0, 30)
 	tabs.Position = UDim2.new(0, 12, 0, 52)
 	tabs.BackgroundTransparency = 1
 	tabs.Parent = panel
@@ -111,23 +105,25 @@ function StoreUI.start()
 		btn.Position = UDim2.new(x, x == 0 and 0 or 4, 0, 0)
 		btn.BackgroundColor3 = COLORS.section
 		btn.BorderSizePixel = 0
-		btn.Font = Enum.Font.GothamBold
-		btn.TextSize = 14
+		btn.AutoButtonColor = false
+		btn.FontFace = Theme.Font.DisplayBold
+		btn.TextSize = Theme.Text.Lg
 		btn.TextColor3 = COLORS.text
 		btn.Text = text
 		btn.Parent = tabs
-		local btnCorner = Instance.new("UICorner")
-		btnCorner.CornerRadius = UDim.new(0, 6)
-		btnCorner.Parent = btn
+		local btnStroke = Instance.new("UIStroke")
+		btnStroke.Thickness = 1
+		btnStroke.Color = Theme.Semantic.BorderMuted
+		btnStroke.Parent = btn
 		return btn
 	end
 
 	local buyTab = makeTab("Buy", 0)
 	local sellTab = makeTab("Sell", 0.5)
 
-	-- ---- rows ------------------------------------------------------------------
+	-- ---- rows (left column) -------------------------------------------------------
 	local list = Instance.new("ScrollingFrame")
-	list.Size = UDim2.new(1, -24, 1, -(52 + 38 + 66))
+	list.Size = UDim2.new(0, LIST_W, 1, -(52 + 38 + 66))
 	list.Position = UDim2.new(0, 12, 0, 90)
 	list.BackgroundColor3 = COLORS.section
 	list.BorderSizePixel = 0
@@ -136,9 +132,23 @@ function StoreUI.start()
 	list.CanvasSize = UDim2.new(0, 0, 0, 0)
 	list.Parent = panel
 
-	local listCorner = Instance.new("UICorner")
-	listCorner.CornerRadius = UDim.new(0, 8)
-	listCorner.Parent = list
+	local listStroke = Instance.new("UIStroke")
+	listStroke.Thickness = 1
+	listStroke.Color = Theme.Semantic.BorderHair
+	listStroke.Parent = list
+
+	-- ---- detail pane (right column: big preview + price + the action) -------------
+	local detail = Instance.new("Frame")
+	detail.Position = UDim2.new(0, LIST_W + 24, 0, 52)
+	detail.Size = UDim2.new(1, -(LIST_W + 36), 1, -(52 + 66))
+	detail.BackgroundColor3 = COLORS.section
+	detail.BorderSizePixel = 0
+	detail.Parent = panel
+
+	local detailStroke = Instance.new("UIStroke")
+	detailStroke.Thickness = 1
+	detailStroke.Color = Theme.Semantic.BorderHair
+	detailStroke.Parent = detail
 
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -153,7 +163,7 @@ function StoreUI.start()
 	listPadding.Parent = list
 
 	-- ---- footer: gold, status, hint -------------------------------------------
-	local goldLabel = makeLabel(panel, "Gold: 0", 14, COLORS.gold)
+	local goldLabel = makeLabel(panel, "◈ 0 Gold", 14, COLORS.gold)
 	goldLabel.Size = UDim2.new(0.5, -12, 0, 20)
 	goldLabel.Position = UDim2.new(0, 12, 1, -56)
 	goldLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -173,6 +183,7 @@ function StoreUI.start()
 	local tab = "buy"
 	local busy = false
 	local inventory = {}
+	local selected -- itemId focused in the detail pane
 
 	local storeTrade = Remotes.getFunction("StoreTrade")
 
@@ -187,7 +198,7 @@ function StoreUI.start()
 	end
 
 	local function updateGold()
-		goldLabel.Text = "Gold: " .. tostring(player:GetAttribute("Gold") or 0)
+		goldLabel.Text = ("◈ %d Gold"):format(player:GetAttribute("Gold") or 0)
 	end
 	player:GetAttributeChangedSignal("Gold"):Connect(updateGold)
 	updateGold()
@@ -220,30 +231,145 @@ function StoreUI.start()
 		-- and the Gold attribute, which re-render the rows and footer.
 	end
 
-	local function makeRow(order, trade, price, action)
+	-- ---- detail pane rendering -----------------------------------------------
+	local function detailText(text, size, color, font)
+		local label = makeLabel(detail, text, size, color, font)
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		return label
+	end
+
+	-- Rebuilds the right column for the focused trade: big rarity-framed
+	-- preview, name, owned count (sell), price and the one action button.
+	local function renderDetail()
+		for _, child in ipairs(detail:GetChildren()) do
+			if child:IsA("GuiObject") then
+				child:Destroy()
+			end
+		end
+		local store = current and Stores.get(current.storeId)
+		local trade
+		if store and selected then
+			for _, candidate in ipairs(store.trades) do
+				if candidate.itemId == selected then
+					trade = candidate
+					break
+				end
+			end
+		end
+		local price = trade and (tab == "buy" and trade.buyPrice or trade.sellPrice)
+		if not trade or not price then
+			local hint = detailText("Select an item", Theme.Text.Body, COLORS.textDim, Theme.Font.Body)
+			hint.Size = UDim2.new(1, -24, 0, 40)
+			hint.Position = UDim2.new(0, 12, 0, 8)
+			return
+		end
+
+		local def = Items.get(trade.itemId)
+		local rarity = Rarity.forDef(def)
+
+		local thumbHolder = Instance.new("Frame")
+		thumbHolder.Size = UDim2.new(0, 110, 0, 110)
+		thumbHolder.Position = UDim2.new(0.5, -55, 0, 12)
+		thumbHolder.BackgroundColor3 = Theme.Color.Ink900
+		thumbHolder.BorderSizePixel = 0
+		thumbHolder.Parent = detail
+		local thumbStroke = Instance.new("UIStroke")
+		thumbStroke.Thickness = 1
+		thumbStroke.Color = rarity.color
+		thumbStroke.Parent = thumbHolder
+		if rarity.hasGlow then
+			UIKit.addGlow(thumbHolder, rarity.glowColor, 0.7)
+		end
+		local thumb = Instance.new("ViewportFrame")
+		thumb.Size = UDim2.new(1, -8, 1, -8)
+		thumb.Position = UDim2.new(0, 4, 0, 4)
+		thumb.BackgroundTransparency = 1
+		thumb.Ambient = Color3.fromRGB(180, 180, 190)
+		thumb.LightColor = Color3.new(1, 1, 1)
+		thumb.ZIndex = 2
+		thumb.Parent = thumbHolder
+		ItemModels.preview(thumb, trade.itemId)
+
+		local name =
+			detailText(def and def.name or trade.itemId, Theme.Text.Item, rarity.textColor, Theme.Font.DisplayBold)
+		name.Size = UDim2.new(1, -24, 0, 22)
+		name.Position = UDim2.new(0, 12, 0, 128)
+		name.TextTruncate = Enum.TextTruncate.AtEnd
+
+		local rarityLabel = detailText(rarity.name, Theme.Text.Xs, rarity.textColor, Theme.Font.Body)
+		rarityLabel.TextTransparency = 0.25
+		rarityLabel.Size = UDim2.new(1, -24, 0, 14)
+		rarityLabel.Position = UDim2.new(0, 12, 0, 150)
+
+		local infoY = 172
+		local owned = countOwned(trade.itemId)
+		if tab == "sell" then
+			local ownedLabel = detailText("You have " .. owned, Theme.Text.Sm, COLORS.textDim, Theme.Font.Body)
+			ownedLabel.Size = UDim2.new(1, -24, 0, 16)
+			ownedLabel.Position = UDim2.new(0, 12, 0, infoY)
+			infoY += 20
+		end
+
+		local priceLabel = detailText("◈ " .. price, Theme.Text.Lg, COLORS.gold)
+		priceLabel.Size = UDim2.new(1, -24, 0, 20)
+		priceLabel.Position = UDim2.new(0, 12, 0, infoY)
+
+		local canTrade = tab == "buy" or owned > 0
+		local actionBtn
+		if canTrade then
+			actionBtn = UIKit.primaryButton(detail, tab == "buy" and "Buy" or "Sell")
+			actionBtn.MouseButton1Click:Connect(function()
+				doTrade(tab, trade.itemId)
+			end)
+		else
+			actionBtn = UIKit.ghostButton(detail, "Nothing to sell")
+			actionBtn.TextColor3 = Theme.Semantic.TextDim
+		end
+		actionBtn.Size = UDim2.new(1, -24, 0, 32)
+		actionBtn.Position = UDim2.new(0, 12, 1, -12)
+		actionBtn.AnchorPoint = Vector2.new(0, 1)
+	end
+
+	-- ---- trade rows -------------------------------------------------------------
+	local rowWidgets = {} -- [itemId] = { row, stroke } for selection styling
+
+	local function styleRowSelection()
+		for itemId, widgets in pairs(rowWidgets) do
+			local isSelected = itemId == selected
+			widgets.row.BackgroundTransparency = isSelected and 0.05 or 0.35
+			widgets.stroke.Thickness = isSelected and 2 or 1
+		end
+	end
+
+	local function makeRow(order, trade, price)
 		local def = Items.get(trade.itemId)
 		local name = def and def.name or trade.itemId
+		local rarity = Rarity.forDef(def) -- store rows are plain defs, never rolled
 
-		local row = Instance.new("Frame")
+		local row = Instance.new("TextButton")
+		row.Text = ""
+		row.AutoButtonColor = false
 		row.Size = UDim2.new(1, 0, 0, ROW_H)
 		row.BackgroundColor3 = COLORS.tile
+		row.BackgroundTransparency = 0.35
 		row.BorderSizePixel = 0
 		row.LayoutOrder = order
 		row.Parent = list
 
-		local rowCorner = Instance.new("UICorner")
-		rowCorner.CornerRadius = UDim.new(0, 6)
-		rowCorner.Parent = row
+		local rowStroke = Instance.new("UIStroke")
+		rowStroke.Thickness = 1
+		rowStroke.Color = rarity.color
+		rowStroke.Parent = row
+		if rarity.hasGlow then
+			UIKit.addGlow(row, rarity.glowColor, 0.85)
+		end
 
 		local thumbHolder = Instance.new("Frame")
 		thumbHolder.Size = UDim2.new(0, ROW_H - 6, 0, ROW_H - 6)
 		thumbHolder.Position = UDim2.new(0, 3, 0, 3)
-		thumbHolder.BackgroundColor3 = COLORS.section
+		thumbHolder.BackgroundColor3 = Theme.Color.Ink850
 		thumbHolder.BorderSizePixel = 0
 		thumbHolder.Parent = row
-		local thumbCorner = Instance.new("UICorner")
-		thumbCorner.CornerRadius = UDim.new(0, 6)
-		thumbCorner.Parent = thumbHolder
 
 		local thumb = Instance.new("ViewportFrame")
 		thumb.Size = UDim2.new(1, -4, 1, -4)
@@ -254,56 +380,34 @@ function StoreUI.start()
 		thumb.Parent = thumbHolder
 		ItemModels.preview(thumb, trade.itemId)
 
-		local nameLabel = makeLabel(row, name, 13)
-		nameLabel.Size = UDim2.new(1, -(ROW_H + 150), 0, 18)
-		nameLabel.Position = UDim2.new(0, ROW_H + 4, 0, action == "sell" and 5 or 14)
+		local nameLabel = makeLabel(row, name, 13, rarity.textColor)
+		nameLabel.Size = UDim2.new(1, -(ROW_H + 76), 1, 0)
+		nameLabel.Position = UDim2.new(0, ROW_H + 4, 0, 0)
 		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 
-		local owned = 0
-		if action == "sell" then
-			owned = countOwned(trade.itemId)
-			local ownedLabel = makeLabel(row, "You have " .. owned, 11, COLORS.textDim)
-			ownedLabel.Size = UDim2.new(1, -(ROW_H + 150), 0, 14)
-			ownedLabel.Position = UDim2.new(0, ROW_H + 4, 0, 24)
-			ownedLabel.TextXAlignment = Enum.TextXAlignment.Left
-		end
-
-		local priceLabel = makeLabel(row, price .. "g", 13, COLORS.gold)
+		local priceLabel = makeLabel(row, "◈ " .. price, 13, COLORS.gold)
 		priceLabel.Size = UDim2.new(0, 60, 1, 0)
-		priceLabel.Position = UDim2.new(1, -140, 0, 0)
+		priceLabel.Position = UDim2.new(1, -66, 0, 0)
 		priceLabel.TextXAlignment = Enum.TextXAlignment.Right
 
-		local actionBtn = Instance.new("TextButton")
-		actionBtn.Size = UDim2.new(0, 64, 0, 28)
-		actionBtn.Position = UDim2.new(1, -8, 0.5, 0)
-		actionBtn.AnchorPoint = Vector2.new(1, 0.5)
-		actionBtn.BorderSizePixel = 0
-		actionBtn.Font = Enum.Font.GothamBold
-		actionBtn.TextSize = 13
-		actionBtn.TextColor3 = COLORS.text
-		actionBtn.Text = action == "buy" and "Buy" or "Sell"
-		actionBtn.Parent = row
-		local actionCorner = Instance.new("UICorner")
-		actionCorner.CornerRadius = UDim.new(0, 6)
-		actionCorner.Parent = actionBtn
+		row.MouseButton1Click:Connect(function()
+			selected = trade.itemId
+			statusLabel.Text = ""
+			styleRowSelection()
+			renderDetail()
+		end)
 
-		local enabled = action == "buy" or owned > 0
-		actionBtn.BackgroundColor3 = enabled and COLORS.accent or COLORS.line
-		actionBtn.AutoButtonColor = enabled
-		if enabled then
-			actionBtn.MouseButton1Click:Connect(function()
-				doTrade(action, trade.itemId)
-			end)
-		end
+		rowWidgets[trade.itemId] = { row = row, stroke = rowStroke }
 	end
 
 	refresh = function()
 		for _, child in ipairs(list:GetChildren()) do
-			if child:IsA("Frame") then
+			if child:IsA("GuiObject") then
 				child:Destroy()
 			end
 		end
+		rowWidgets = {}
 		if not current then
 			return
 		end
@@ -315,13 +419,25 @@ function StoreUI.start()
 		buyTab.BackgroundColor3 = tab == "buy" and COLORS.accent or COLORS.section
 		sellTab.BackgroundColor3 = tab == "sell" and COLORS.accent or COLORS.section
 		local order = 0
+		local selectionListed = false
 		for _, trade in ipairs(store.trades) do
 			local price = tab == "buy" and trade.buyPrice or trade.sellPrice
 			if price then
 				order += 1
-				makeRow(order, trade, price, tab)
+				makeRow(order, trade, price)
+				if not selected then
+					selected = trade.itemId -- focus the first trade by default
+				end
+				if trade.itemId == selected then
+					selectionListed = true
+				end
 			end
 		end
+		if not selectionListed then
+			selected = nil
+		end
+		styleRowSelection()
+		renderDetail()
 	end
 
 	local function setTab(name)
@@ -348,6 +464,7 @@ function StoreUI.start()
 		end
 		current = info
 		tab = "buy"
+		selected = nil -- refresh() focuses the first trade
 		title.Text = info.storeName or "Store"
 		vendorLabel.Text = info.vendorName or ""
 		statusLabel.Text = ""

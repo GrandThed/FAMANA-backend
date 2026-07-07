@@ -20,6 +20,14 @@
 > went with one nullable `meta JSONB` column ({ itemLevel, traits }) instead
 > of two columns, and every path listed below was made instance-safe.
 >
+> **Update 2026-07-07 — rarity:** rolls now carry a weighted rarity tier
+> (`shared/Rarity.lua`, from the `docs/UI.md` design system: common 50% /
+> uncommon 28% / rare 14% / epic 6% / legendary 2%). Rarity grants BONUS
+> trait points on top of the item level (+0/+1/+2/+3/+5) and sets the line
+> count (1 / 1–2 / 2 / 2–3 / 3), so "points = item level" now only holds
+> for common; the inert gate is still the plain item level. Stored as
+> `meta.rarity`; fixed defs may carry a `rarity` field (absent = common).
+>
 > **Corrections to this plan before implementing:**
 > - **Trait catalog/thresholds must come from the Rasgos board** (tables in
 >   `TRAITS_AND_SPELLS.md` Part 1), and names/ids in **English** (game

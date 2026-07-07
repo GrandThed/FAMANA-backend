@@ -41,6 +41,7 @@ function rowToPlayer(row, inventory) {
     currentClass,
     classLevels,
     hotbarBinds: row.hotbar_binds || {},
+    settings: row.settings || {},
 
     cell: row.cell,
     position: { x: row.pos_x, y: row.pos_y, z: row.pos_z },
@@ -86,7 +87,7 @@ export async function createPlayer(playerId, username) {
 
 // Saves the coarse mutable fields. Only provided fields are updated.
 // Returns false if the player doesn't exist.
-export async function savePlayer(playerId, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, cell, position }) {
+export async function savePlayer(playerId, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, cell, position }) {
   const sets = [];
   const params = [];
   let i = 1;
@@ -110,6 +111,11 @@ export async function savePlayer(playerId, { health, gold, level, xp, currentCla
     // would otherwise send arrays in Postgres array syntax, not JSON.
     sets.push(`hotbar_binds = $${i++}::jsonb`);
     params.push(JSON.stringify(hotbarBinds ?? {}));
+  }
+  if (settings !== undefined) {
+    // Same JSONB-stringify caveat as hotbarBinds.
+    sets.push(`settings = $${i++}::jsonb`);
+    params.push(JSON.stringify(settings ?? {}));
   }
   if (cell !== undefined) { sets.push(`cell = $${i++}`); params.push(cell); }
   if (position !== undefined) {

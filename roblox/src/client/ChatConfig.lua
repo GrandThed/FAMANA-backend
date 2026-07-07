@@ -11,15 +11,13 @@ local ChatConfig = {}
 function ChatConfig.start()
 	task.spawn(function()
 		local ok, err = pcall(function()
+			-- Only ChatWindowConfiguration carries the alignment properties;
+			-- ChatInputBarConfiguration has no HorizontalAlignment/VerticalAlignment
+			-- (assigning them throws), and the input bar auto-follows the window.
 			local window = TextChatService:WaitForChild("ChatWindowConfiguration", 10)
 			if window then
 				window.HorizontalAlignment = Enum.HorizontalAlignment.Left
 				window.VerticalAlignment = Enum.VerticalAlignment.Bottom
-			end
-			local inputBar = TextChatService:WaitForChild("ChatInputBarConfiguration", 10)
-			if inputBar then
-				inputBar.HorizontalAlignment = Enum.HorizontalAlignment.Left
-				inputBar.VerticalAlignment = Enum.VerticalAlignment.Bottom
 			end
 		end)
 		if not ok then

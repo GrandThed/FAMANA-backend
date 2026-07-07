@@ -9,7 +9,7 @@
 // Legacy pre-grid rows (x IS NULL) are repacked into grid positions the
 // first time any operation touches the inventory.
 //
-// Rolled (unique) items carry `meta` ({ itemLevel, traits }) per row. Meta
+// Rolled (unique) items carry `meta` ({ itemLevel, rarity?, traits }) per row. Meta
 // rows are item INSTANCES: they never merge/top-up, generic removeItem skips
 // them, and sortInventory re-places them as their own stacks.
 
@@ -37,6 +37,10 @@ async function fetchRows(client, playerId) {
   return rows;
 }
 
+// Rarity tiers a rolled instance may carry (mirrors Roblox shared/Rarity.lua
+// and the def-level validation in items.js).
+export const RARITIES = new Set(["common", "uncommon", "rare", "epic", "legendary"]);
+
 // Shape-validates client-provided instance meta (trait-id VALIDITY lives in
 // the Roblox shared Traits module; unknown ids simply aggregate to nothing).
 // Returns a clean object or null.
@@ -45,6 +49,9 @@ export function sanitizeMeta(meta) {
   const out = {};
   if (Number.isInteger(meta.itemLevel) && meta.itemLevel >= 1 && meta.itemLevel <= 99) {
     out.itemLevel = meta.itemLevel;
+  }
+  if (RARITIES.has(meta.rarity)) {
+    out.rarity = meta.rarity;
   }
   if (meta.traits && typeof meta.traits === "object" && !Array.isArray(meta.traits)) {
     const traits = {};

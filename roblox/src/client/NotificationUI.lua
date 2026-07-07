@@ -11,6 +11,8 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local ClientState = require(script.Parent.ClientState)
 local InventoryUI = require(script.Parent.InventoryUI)
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 
@@ -43,14 +45,18 @@ function NotificationUI.start()
 	layout.Padding = UDim.new(0, 4)
 	layout.Parent = list
 
+	UIKit.autoScale(list)
+
 	local NORMAL_POS = list.Position
 	-- Right edge of the inventory panel (it's screen-centered) plus a gap,
 	-- then this list's own width, since AnchorPoint.X = 1 positions by its
 	-- right edge. Falls back to a sane width if InventoryUI hasn't set
-	-- panelWidth yet for some reason.
+	-- panelWidth yet for some reason. Panel and list both render scaled
+	-- (UIKit.autoScale), so the design-px spans multiply by the factor.
 	local function dodgedPos()
-		local halfPanel = (InventoryUI.panelWidth or 728) / 2
-		return UDim2.new(0.5, halfPanel + DODGE_GAP + LIST_WIDTH, 0.5, 0)
+		local s = UIKit.scaleFactor()
+		local halfPanel = ((InventoryUI.panelWidth or 728) / 2) * s
+		return UDim2.new(0.5, halfPanel + DODGE_GAP + LIST_WIDTH * s, 0.5, 0)
 	end
 
 	-- ClientState is a plain table (no change signal), so poll it like the
@@ -75,9 +81,9 @@ function NotificationUI.start()
 		label.Size = UDim2.new(1, 0, 0, 24) -- Retains a fixed height to avoid text wrapping changes
 		label.Position = UDim2.new(0, 10, 0, 8) -- Starts a bit low, slides up into place
 		label.BackgroundTransparency = 1
-		label.Font = Enum.Font.GothamBold
+		label.FontFace = Theme.Font.BodyBold
 		label.TextSize = 16
-		label.TextColor3 = Color3.new(1, 1, 1)
+		label.TextColor3 = Theme.Semantic.TextStrong
 		label.TextTransparency = 1
 		label.TextStrokeTransparency = 0.1 -- no background now, so lean on the stroke for legibility
 		label.TextWrapped = true

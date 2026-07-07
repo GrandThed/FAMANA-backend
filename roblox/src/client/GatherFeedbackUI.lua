@@ -7,6 +7,7 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared:WaitForChild("Items"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local Theme = require(script.Parent.Theme)
 
 local GatherFeedbackUI = {}
 
@@ -75,9 +76,9 @@ local function floatingText(text, position)
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 1, 0)
 	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
+	label.FontFace = Theme.Font.BodyBold
 	label.TextSize = 20
-	label.TextColor3 = Color3.fromRGB(255, 230, 150)
+	label.TextColor3 = Theme.Color.Gold300
 	label.TextStrokeTransparency = 0.2
 	label.Text = text
 	label.Parent = billboard

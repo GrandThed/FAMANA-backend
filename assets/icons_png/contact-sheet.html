@@ -1,0 +1,25 @@
+<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>
+body{margin:0;background:#0c0808;font-family:Merriweather,serif;padding:24px}
+h2{color:#e8ceac;font-family:'Grenze Gotisch',serif;font-weight:600;font-size:20px;margin:6px 0 14px;letter-spacing:1px}
+.grid{display:flex;flex-wrap:wrap;gap:14px;margin-bottom:28px}
+.cell{width:104px;text-align:center}
+.tile{width:104px;height:104px;background:#1a1210;border:1px solid #3a2620;display:grid;place-items:center}
+.tile img{width:60px;height:60px}
+.nm{margin-top:6px;font-size:11px;color:#b89878}
+</style></head><body>
+<h2>Trait icons (white — tint via ImageColor3 in Roblox)</h2>
+<div class="grid" id="traits"></div>
+<h2>Item icons</h2>
+<div class="grid" id="items"></div>
+<h2>Shape &amp; effect helpers</h2>
+<div class="grid" id="shapes"></div>
+<script>
+const traits=['Bastion','Warden','Brawler','Berserker','Blademaster','Scout','Ranger','Sniper','Lynx','Pyromancer','Mystic','Trapper'];
+const items=['Chest','Sword','Shield','Boots','Helm','Potion','Ring','Gem','Scroll','Staff','Ration','Coin'];
+const cell=n=>`<div class="cell"><div class="tile"><img src="${n}.png"></div><div class="nm">${n}</div></div>`;
+document.getElementById('traits').innerHTML=traits.map(cell).join('');
+document.getElementById('items').innerHTML=items.map(cell).join('');
+document.getElementById('shapes').innerHTML=['Hexagon','RadialGlow','Shadow9Slice'].map(cell).join('');
+</script>
+</body></html>

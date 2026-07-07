@@ -27,6 +27,8 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared:WaitForChild("Items"))
 local Traits = require(Shared:WaitForChild("Traits"))
+local Rarity = require(Shared:WaitForChild("Rarity"))
+local Icons = require(Shared:WaitForChild("Icons"))
 local Spells = require(Shared:WaitForChild("Spells"))
 local ItemModels = require(Shared:WaitForChild("ItemModels"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
@@ -35,13 +37,15 @@ local Effects = require(Shared:WaitForChild("Effects"))
 local Classes = require(Shared:WaitForChild("Classes"))
 local ClientState = require(script.Parent.ClientState)
 local HotbarBinds = require(script.Parent.HotbarBinds)
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
 
 local InventoryUI = {}
 
-local CELL = 40 -- px per grid cell
+local CELL = Theme.Size.Cell -- px per grid cell (the design system's 42px module)
 local GRID_W = Config.inventoryGrid.width
 local GRID_H = Config.inventoryGrid.height
 local VISIBLE_ROWS = 11 -- grid rows shown before scrolling
@@ -52,17 +56,18 @@ local CLASS_SWITCH_H = 20 -- height reserved for the "Cambiar clase" button belo
 local HEADER_H = CLASS_LABEL_H + CLASS_SWITCH_H
 local TOPBAR = 36
 
+-- Aethelgard palette (client/Theme.lua).
 local COLORS = {
-	panel = Color3.fromRGB(25, 25, 28),
-	section = Color3.fromRGB(33, 33, 38),
-	line = Color3.fromRGB(48, 48, 55),
-	tile = Color3.fromRGB(52, 52, 62),
-	tileStroke = Color3.fromRGB(90, 90, 105),
-	good = Color3.fromRGB(80, 180, 90),
-	bad = Color3.fromRGB(200, 70, 60),
-	gold = Color3.fromRGB(255, 220, 120),
-	text = Color3.fromRGB(235, 235, 240),
-	textDim = Color3.fromRGB(150, 150, 160),
+	panel = Theme.Semantic.PanelTop,
+	section = Theme.Semantic.SurfaceWell,
+	line = Theme.Semantic.BorderMuted, -- grid/slot lines need to read on Ink850
+	tile = Theme.Color.Ink750, -- item wells sit ABOVE the background, not below it
+	tileStroke = Theme.Semantic.BorderSlot,
+	good = Theme.Semantic.Good,
+	bad = Theme.Semantic.Bad,
+	gold = Theme.Semantic.Currency,
+	text = Theme.Semantic.TextBody,
+	textDim = Theme.Semantic.TextMuted,
 }
 
 -- Equip keys → equipment container x (weapon = 0, offhand = 1). Pressing 1/2
@@ -99,17 +104,18 @@ local SLOT_POS = {
 	back = { 0.5, 5 },
 }
 
+-- All-caps like the mock's empty slots (HANDS, LEGS, …).
 local SLOT_LABEL = {
-	head = "Helmet",
-	chest = "Chest",
-	hands = "Gloves",
-	legs = "Legs",
-	feet = "Boots",
-	weapon = "Weapon",
-	offhand = "Offhand",
-	back = "Back",
-	ring1 = "Ring",
-	ring2 = "Ring",
+	head = "HELMET",
+	chest = "CHEST",
+	hands = "GLOVES",
+	legs = "LEGS",
+	feet = "BOOTS",
+	weapon = "WEAPON",
+	offhand = "OFFHAND",
+	back = "BACK",
+	ring1 = "RING",
+	ring2 = "RING",
 }
 
 -- slotName → equipment container x (0-based), from the shared canonical order.
@@ -118,10 +124,10 @@ for i, name in ipairs(Items.EQUIPMENT_SLOTS) do
 	SLOT_INDEX[name] = i - 1
 end
 
-local function makeLabel(parent, text, size, color)
+local function makeLabel(parent, text, size, color, font)
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Font = Enum.Font.GothamBold
+	label.FontFace = font or Theme.Font.BodyBold
 	label.TextSize = size
 	label.TextColor3 = color or COLORS.text
 	label.Text = text
@@ -167,26 +173,18 @@ function InventoryUI.start()
 	panel.Size = UDim2.new(0, panelW, 0, panelH)
 	panel.Position = CLOSED_POS
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
-	panel.BackgroundColor3 = COLORS.panel
-	panel.BorderSizePixel = 0
 	panel.Parent = gui
+	UIKit.stylePanel(panel) -- gradient + stone border + forge light (§6.1)
+	UIKit.addShadow(panel, 24)
+	UIKit.autoScale(panel) -- grows in place around its centered anchor (§9)
 
 	local isOpen = false
 
-	local title = makeLabel(panel, "Inventory", 16)
-	title.Size = UDim2.new(1, -34, 0, 30)
+	UIKit.titleBar(panel, "Inventory", TOPBAR)
 
-	local closeBtn = Instance.new("TextButton")
-	closeBtn.Size = UDim2.new(0, 30, 0, 30)
-	closeBtn.Position = UDim2.new(1, -2, 0, 2)
+	local closeBtn = UIKit.closeButton(panel)
+	closeBtn.Position = UDim2.new(1, -5, 0, 5)
 	closeBtn.AnchorPoint = Vector2.new(1, 0)
-	closeBtn.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-	closeBtn.BorderSizePixel = 0
-	closeBtn.Font = Enum.Font.GothamBold
-	closeBtn.TextSize = 16
-	closeBtn.TextColor3 = Color3.new(1, 1, 1)
-	closeBtn.Text = "X"
-	closeBtn.Parent = panel
 
 	-- ---- left column: paper doll + effects ---------------------------------
 	local leftCol = Instance.new("Frame")
@@ -196,13 +194,14 @@ function InventoryUI.start()
 	leftCol.BorderSizePixel = 0
 	leftCol.Parent = panel
 
-	local equipTitle = makeLabel(leftCol, "EQUIPMENT", 12, COLORS.textDim)
+	local equipTitle = makeLabel(leftCol, "EQUIPMENT", Theme.Text.Label, Theme.Semantic.TextLabel)
 	equipTitle.Size = UDim2.new(1, 0, 0, 22)
 	equipTitle.Position = UDim2.new(0, 0, 0, HEADER_H)
 
 	-- "<Class> Lvl. <N>" above the character, e.g. "Caballero Lvl. 5", read
 	-- from the server-set "Class"/"Level" attributes.
-	local classLabel = makeLabel(leftCol, "", 15, Color3.fromRGB(255, 221, 51))
+	local classLabel =
+		makeLabel(leftCol, "", Theme.Text.Hero, Theme.Semantic.TextHero, Theme.Font.DisplayBold)
 	classLabel.Size = UDim2.new(1, 0, 0, CLASS_LABEL_H)
 	classLabel.TextXAlignment = Enum.TextXAlignment.Center
 
@@ -223,20 +222,10 @@ function InventoryUI.start()
 
 	-- "Cambiar clase" opens the picker modal (defined further below, once
 	-- the top-level `gui` it lives in and the switch remote are in scope).
-	local switchClassBtn = Instance.new("TextButton")
+	local switchClassBtn = UIKit.ghostButton(leftCol, "Cambiar clase")
 	switchClassBtn.Size = UDim2.new(1, -16, 0, CLASS_SWITCH_H - 4)
 	switchClassBtn.Position = UDim2.new(0, 8, 0, CLASS_LABEL_H)
-	switchClassBtn.BackgroundColor3 = COLORS.tile
-	switchClassBtn.BorderSizePixel = 0
-	switchClassBtn.Font = Enum.Font.GothamBold
-	switchClassBtn.TextSize = 12
-	switchClassBtn.TextColor3 = COLORS.textDim
-	switchClassBtn.Text = "Cambiar clase"
-	switchClassBtn.Parent = leftCol
-
-	local switchClassBtnCorner = Instance.new("UICorner")
-	switchClassBtnCorner.CornerRadius = UDim.new(0, 4)
-	switchClassBtnCorner.Parent = switchClassBtn
+	switchClassBtn.TextSize = 11
 
 	local equipAreaH = 6 * (EQUIP_SLOT + EQUIP_GAP)
 
@@ -296,8 +285,8 @@ function InventoryUI.start()
 		local frame = Instance.new("Frame")
 		frame.Size = UDim2.new(0, EQUIP_SLOT, 0, EQUIP_SLOT)
 		frame.Position = UDim2.new(0, colX[pos[1]], 0, 26 + HEADER_H + pos[2] * (EQUIP_SLOT + EQUIP_GAP))
-		frame.BackgroundColor3 = COLORS.panel
-		frame.BackgroundTransparency = 0.25 -- the character shows through a bit
+		frame.BackgroundColor3 = Theme.Color.Ink900 -- slot well (§6.2)
+		frame.BackgroundTransparency = 0.3 -- the character shows through a bit
 		frame.BorderSizePixel = 0
 		frame.ZIndex = 3
 		frame.Parent = leftCol
@@ -307,7 +296,8 @@ function InventoryUI.start()
 		stroke.Color = COLORS.line
 		stroke.Parent = frame
 
-		local nameLabel = makeLabel(frame, SLOT_LABEL[slotName], 10, COLORS.textDim)
+		local nameLabel =
+			makeLabel(frame, SLOT_LABEL[slotName], Theme.Text.Label, Theme.Semantic.TextFaint)
 		nameLabel.Size = UDim2.new(1, 0, 1, 0)
 		nameLabel.TextWrapped = true
 		nameLabel.ZIndex = 4
@@ -320,24 +310,47 @@ function InventoryUI.start()
 		-- but contributing nothing until the level allows it again.
 		local inertOverlay = Instance.new("Frame")
 		inertOverlay.Size = UDim2.new(1, 0, 1, 0)
-		inertOverlay.BackgroundColor3 = Color3.fromRGB(200, 60, 50)
-		inertOverlay.BackgroundTransparency = 0.65
+		inertOverlay.BackgroundColor3 = Theme.Color.Blood500
+		inertOverlay.BackgroundTransparency = 0.55
 		inertOverlay.BorderSizePixel = 0
 		inertOverlay.Visible = false
 		inertOverlay.ZIndex = 6
 		inertOverlay.Parent = frame
 
-		local inertLabel = makeLabel(frame, "", 10, Color3.fromRGB(255, 210, 205))
+		local inertLabel = makeLabel(frame, "", 10, Theme.Color.Blood400)
 		inertLabel.Size = UDim2.new(1, 0, 0, 12)
 		inertLabel.Position = UDim2.new(0, 0, 1, -13)
 		inertLabel.Visible = false
 		inertLabel.ZIndex = 7
+
+		-- Rarity inner glow (uncommon+), retinted per occupant in render.
+		local glow = UIKit.addGlow(frame, Color3.new(1, 1, 1), 0.78)
+		if glow then
+			glow.Visible = false
+			glow.ZIndex = 3
+		end
+
+		-- Tiny hexes along the bottom edge — one per trait/school the
+		-- equipped piece grants (numbers live in the tooltip, not here).
+		local badgeRow = Instance.new("Frame")
+		badgeRow.Size = UDim2.new(1, -4, 0, 10)
+		badgeRow.Position = UDim2.new(0, 2, 1, -12)
+		badgeRow.BackgroundTransparency = 1
+		badgeRow.ZIndex = 5
+		badgeRow.Parent = frame
+
+		local badgeLayout = Instance.new("UIListLayout")
+		badgeLayout.FillDirection = Enum.FillDirection.Horizontal
+		badgeLayout.Padding = UDim.new(0, 2)
+		badgeLayout.Parent = badgeRow
 
 		equipSlots[slotName] = {
 			frame = frame,
 			thumb = thumb,
 			nameLabel = nameLabel,
 			stroke = stroke,
+			glow = glow,
+			badgeRow = badgeRow,
 			inertOverlay = inertOverlay,
 			inertLabel = inertLabel,
 			entry = nil,
@@ -346,7 +359,7 @@ function InventoryUI.start()
 	end
 
 	local effectsY = 26 + HEADER_H + equipAreaH + 10
-	local effectsTitle = makeLabel(leftCol, "EFFECTS", 12, COLORS.textDim)
+	local effectsTitle = makeLabel(leftCol, "EFFECTS", Theme.Text.Label, Theme.Semantic.TextLabel)
 	effectsTitle.Size = UDim2.new(1, 0, 0, 22)
 	effectsTitle.Position = UDim2.new(0, 0, 0, effectsY)
 
@@ -370,16 +383,10 @@ function InventoryUI.start()
 	utilBar.BorderSizePixel = 0
 	utilBar.Parent = panel
 
-	local sortBtn = Instance.new("TextButton")
+	local sortBtn = UIKit.primaryButton(utilBar, "Sort")
 	sortBtn.Size = UDim2.new(0, 70, 0, 24)
 	sortBtn.Position = UDim2.new(0, 4, 0, 3)
-	sortBtn.BackgroundColor3 = Color3.fromRGB(60, 90, 160)
-	sortBtn.BorderSizePixel = 0
-	sortBtn.Font = Enum.Font.GothamBold
-	sortBtn.TextSize = 13
-	sortBtn.TextColor3 = Color3.new(1, 1, 1)
-	sortBtn.Text = "Sort"
-	sortBtn.Parent = utilBar
+	sortBtn.TextSize = Theme.Text.Body
 
 	-- Shows the hovered item's name (poor man's inspect tooltip).
 	local hoverLabel = makeLabel(utilBar, "", 13, COLORS.text)
@@ -387,7 +394,7 @@ function InventoryUI.start()
 	hoverLabel.Position = UDim2.new(0, 84, 0, 0)
 	hoverLabel.TextXAlignment = Enum.TextXAlignment.Left
 
-	local goldLabel = makeLabel(utilBar, "Gold: 0", 14, COLORS.gold)
+	local goldLabel = makeLabel(utilBar, "◈ 0 Gold", 14, COLORS.gold)
 	goldLabel.Size = UDim2.new(0, 110, 1, 0)
 	goldLabel.Position = UDim2.new(1, -114, 0, 0)
 	goldLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -448,20 +455,28 @@ function InventoryUI.start()
 
 	local render -- forward-declared: endDrag (optimistic apply) re-renders
 
-	-- ---- hover tooltip ---------------------------------------------------------
+	-- ---- hover tooltip (docs/UI.md §6.5 layout) ----------------------------------
 	local TOOLTIP_DELAY = 0.35 -- rest the cursor on an item this long to inspect
+	local TOOLTIP_W = 214
 
 	local tooltip = Instance.new("Frame")
 	tooltip.BackgroundColor3 = COLORS.panel
 	tooltip.BorderSizePixel = 0
 	tooltip.AutomaticSize = Enum.AutomaticSize.Y
-	tooltip.Size = UDim2.new(0, 180, 0, 0)
+	tooltip.Size = UDim2.new(0, TOOLTIP_W, 0, 0)
 	tooltip.Visible = false
 	tooltip.ZIndex = 60
 	tooltip.Parent = gui
+	UIKit.autoScale(tooltip) -- content scales; its Position stays screen-space
 
+	local tooltipGradient = Instance.new("UIGradient")
+	tooltipGradient.Rotation = 90
+	tooltipGradient.Color = ColorSequence.new(Theme.Semantic.PanelTop, Theme.Semantic.PanelBot)
+	tooltipGradient.Parent = tooltip
+
+	-- Retinted to the hovered item's rarity when the tooltip shows (§6.5).
 	local tooltipStroke = Instance.new("UIStroke")
-	tooltipStroke.Thickness = 1.5
+	tooltipStroke.Thickness = 1
 	tooltipStroke.Color = COLORS.tileStroke
 	tooltipStroke.Parent = tooltip
 
@@ -477,101 +492,223 @@ function InventoryUI.start()
 	tooltipLayout.SortOrder = Enum.SortOrder.LayoutOrder
 	tooltipLayout.Parent = tooltip
 
-	local tooltipTitle = makeLabel(tooltip, "", 14, COLORS.gold)
-	tooltipTitle.Size = UDim2.new(1, 0, 0, 16)
-	tooltipTitle.TextXAlignment = Enum.TextXAlignment.Left
-	tooltipTitle.LayoutOrder = 1
-	tooltipTitle.ZIndex = 61
+	-- Rows are rebuilt per hover; UI components (gradient/stroke/padding/
+	-- layout) are not GuiObjects, so the clear below leaves them alone.
+	local tooltipOrder = 0
+	local function tooltipRow(height)
+		tooltipOrder += 1
+		local row = Instance.new("Frame")
+		row.Size = UDim2.new(1, 0, 0, height)
+		row.BackgroundTransparency = 1
+		row.LayoutOrder = tooltipOrder
+		row.ZIndex = 61
+		row.Parent = tooltip
+		return row
+	end
 
-	local tooltipBody = makeLabel(tooltip, "", 12, COLORS.text)
-	tooltipBody.Font = Enum.Font.Gotham
-	tooltipBody.Size = UDim2.new(1, 0, 0, 0)
-	tooltipBody.AutomaticSize = Enum.AutomaticSize.Y
-	tooltipBody.TextWrapped = true
-	tooltipBody.TextXAlignment = Enum.TextXAlignment.Left
-	tooltipBody.TextYAlignment = Enum.TextYAlignment.Top
-	tooltipBody.LayoutOrder = 2
-	tooltipBody.ZIndex = 61
+	local function tooltipText(parent, text, size, color, font)
+		local label = makeLabel(parent, text, size, color, font)
+		label.ZIndex = 61
+		label.TextXAlignment = Enum.TextXAlignment.Left
+		return label
+	end
 
 	local TYPE_NAMES = {
-		weapon = "Weapon",
 		tool = "Tool",
 		resource = "Resource",
-		armor = "Armor",
 		ring = "Ring",
 		consumable = "Consumable",
 		backpack = "Backpack",
 	}
+	local PRETTY_SLOT = { head = "Head", chest = "Chest", hands = "Hands", legs = "Legs", feet = "Feet" }
 
-	-- Title + stat lines for an inventory entry. Rolled items get their
-	-- instance level in the title ("Basic Sword [Lv 4]").
-	local function describe(entry)
-		local def = Items.get(entry.itemId)
-		if not def then
-			return entry.itemId, ""
+	-- "Chest Armor" / "Melee Weapon" / "Ring" — the §6.5 kind line.
+	local function kindFor(def)
+		if def.type == "armor" then
+			return (PRETTY_SLOT[def.slot] or "") .. " Armor"
 		end
-		local titleText = def.name
-		if typeof(entry.meta) == "table" and entry.meta.itemLevel then
-			titleText = ("%s [Lv %d]"):format(def.name, entry.meta.itemLevel)
+		if def.type == "weapon" then
+			return (def.weaponType == "ranged" and "Ranged" or "Melee") .. " Weapon"
 		end
-		local kind = TYPE_NAMES[def.type] or def.type
-		if def.weaponType then
-			kind ..= " · " .. (def.weaponType == "ranged" and "Ranged" or "Melee")
-		end
-		if def.type == "armor" and def.slot then
-			kind ..= " · " .. (SLOT_LABEL[def.slot] or def.slot)
-		end
+		return TYPE_NAMES[def.type] or def.type
+	end
 
-		local lines = { kind }
-		if def.damage then
-			lines[#lines + 1] = "Damage: " .. def.damage
+	-- Tiny solid hexagon + dark glyph for a trait-grant row (falls back to
+	-- the def's emoji while the hex/glyph assets aren't uploaded).
+	local function miniHex(parent, id, color, emoji)
+		local hexImage = Icons.image("Hexagon")
+		local glyphImage = Icons.forTrait(id)
+		if hexImage and glyphImage then
+			local badge = Instance.new("Frame")
+			badge.Size = UDim2.new(0, 16, 0, 16)
+			badge.BackgroundTransparency = 1
+			badge.ZIndex = 61
+			badge.Parent = parent
+
+			local hex = Instance.new("ImageLabel")
+			hex.Size = UDim2.new(1, 0, 1, 0)
+			hex.BackgroundTransparency = 1
+			hex.Image = hexImage
+			hex.ScaleType = Enum.ScaleType.Fit
+			hex.ImageColor3 = color
+			hex.ZIndex = 61
+			hex.Parent = badge
+
+			local glyph = Instance.new("ImageLabel")
+			glyph.Size = UDim2.new(0.6, 0, 0.6, 0)
+			glyph.Position = UDim2.new(0.2, 0, 0.2, 0)
+			glyph.BackgroundTransparency = 1
+			glyph.Image = glyphImage
+			glyph.ScaleType = Enum.ScaleType.Fit
+			glyph.ImageColor3 = Theme.Color.Ink800
+			glyph.ZIndex = 62
+			glyph.Parent = badge
+			return badge
 		end
-		if def.reach then
-			lines[#lines + 1] = "Reach: " .. def.reach .. " studs"
-		end
-		if def.manaCost then
-			lines[#lines + 1] = "Mana cost: " .. def.manaCost
-		end
-		if def.gatherPower then
-			lines[#lines + 1] = "Gather power: " .. def.gatherPower
-		end
-		-- Item level + traits: a rolled instance's meta overrides the def.
-		local itemLevel, itemTraits = Traits.entryInfo(entry, def)
-		if itemLevel > 0 then
-			local playerLevel = player:GetAttribute("Level") or 1
-			if itemLevel > playerLevel then
-				lines[#lines + 1] = ("Item level: %d — INERT until Lv %d"):format(itemLevel, itemLevel)
-			else
-				lines[#lines + 1] = "Item level: " .. itemLevel
+		local label = makeLabel(parent, emoji or "✦", 12, color)
+		label.Size = UDim2.new(0, 16, 0, 16)
+		label.ZIndex = 61
+		return label
+	end
+
+	-- Rebuilds the tooltip rows for an entry (§6.5: name + Lv, rarity·kind +
+	-- size, divider, stat line, trait grants with mini hexes, flavor).
+	local function buildTooltip(entry)
+		for _, child in ipairs(tooltip:GetChildren()) do
+			if child:IsA("GuiObject") then
+				child:Destroy()
 			end
 		end
+		tooltipOrder = 0
+
+		local def = Items.get(entry.itemId)
+		local rarity = Rarity.forEntry(entry, def)
+		tooltipStroke.Color = rarity.color -- frame tints with the tier
+		if not def then
+			local row = tooltipRow(20)
+			local name = tooltipText(row, entry.itemId, Theme.Text.Item, rarity.textColor, Theme.Font.DisplayBold)
+			name.Size = UDim2.new(1, 0, 1, 0)
+			return
+		end
+
+		local itemLevel, itemTraits = Traits.entryInfo(entry, def)
+
+		local header = tooltipRow(20)
+		local name = tooltipText(header, def.name, Theme.Text.Item, rarity.textColor, Theme.Font.DisplayBold)
+		name.Size = UDim2.new(1, -36, 1, 0)
+		name.TextTruncate = Enum.TextTruncate.AtEnd
+		if itemLevel > 0 then
+			local lv = tooltipText(header, ("Lv %d"):format(itemLevel), Theme.Text.Sm, Theme.Semantic.TextSecondary)
+			lv.Size = UDim2.new(0, 34, 1, 0)
+			lv.Position = UDim2.new(1, -34, 0, 0)
+			lv.TextXAlignment = Enum.TextXAlignment.Right
+		end
+
+		local sub = tooltipRow(14)
+		local kind =
+			tooltipText(sub, rarity.name .. " · " .. kindFor(def), Theme.Text.Xs, rarity.textColor, Theme.Font.Body)
+		kind.Size = UDim2.new(1, -54, 1, 0)
+		kind.TextTransparency = 0.25
+		local w, h = Items.sizeFor(entry.itemId, false)
+		local sizeLabel =
+			tooltipText(sub, ("Size %d×%d"):format(w, h), Theme.Text.Xs, Theme.Semantic.TextMuted, Theme.Font.Body)
+		sizeLabel.Size = UDim2.new(0, 52, 1, 0)
+		sizeLabel.Position = UDim2.new(1, -52, 0, 0)
+		sizeLabel.TextXAlignment = Enum.TextXAlignment.Right
+
+		local dividerRow = tooltipRow(5)
+		local divider = Instance.new("Frame")
+		divider.Size = UDim2.new(1, 0, 0, 1)
+		divider.Position = UDim2.new(0, 0, 0.5, 0)
+		divider.BackgroundColor3 = Theme.Semantic.BorderDivider
+		divider.BorderSizePixel = 0
+		divider.ZIndex = 61
+		divider.Parent = dividerRow
+
+		-- One strong stat line, mock-style: "Damage +10 · Reach 10".
+		local parts = {}
+		if def.damage then
+			parts[#parts + 1] = ("Damage +%d"):format(def.damage)
+		end
+		if def.reach then
+			parts[#parts + 1] = ("Reach %d"):format(def.reach)
+		end
+		if def.manaCost then
+			parts[#parts + 1] = ("Mana %d"):format(def.manaCost)
+		end
+		if def.gatherPower then
+			parts[#parts + 1] = ("Gather +%d"):format(def.gatherPower)
+		end
+		if def.stackable then
+			parts[#parts + 1] = ("Stack %d/%d"):format(entry.quantity, def.maxStack)
+		end
+		if #parts > 0 then
+			local statRow = tooltipRow(16)
+			local stats = tooltipText(statRow, table.concat(parts, "  ·  "), Theme.Text.Sm, Theme.Semantic.TextStrong)
+			stats.Size = UDim2.new(1, 0, 1, 0)
+		end
+
+		local playerLevel = player:GetAttribute("Level") or 1
+		if itemLevel > playerLevel then
+			local inertRow = tooltipRow(14)
+			local inert = tooltipText(
+				inertRow,
+				("INERT — needs class Lv %d"):format(itemLevel),
+				Theme.Text.Xs,
+				Theme.Color.Blood400
+			)
+			inert.Size = UDim2.new(1, 0, 1, 0)
+		end
+
+		-- Trait grants, one row each with a mini hex (schools first — they
+		-- gate spells).
 		if itemTraits then
-			-- School points first (they gate spells), then stat traits.
+			local function grantRow(id, displayName, color, emoji, points)
+				local row = tooltipRow(18)
+				local badge = miniHex(row, id, color, emoji)
+				badge.Position = UDim2.new(0, 0, 0.5, -8)
+				local label =
+					tooltipText(row, ("%s +%d"):format(displayName, points), Theme.Text.Sm, Theme.Semantic.TextStrong)
+				label.Size = UDim2.new(1, -22, 1, 0)
+				label.Position = UDim2.new(0, 22, 0, 0)
+			end
 			for _, schoolId in ipairs(Spells.schoolOrder) do
 				local points = itemTraits[schoolId]
 				if points then
 					local school = Spells.schools[schoolId]
-					lines[#lines + 1] = ("%s %s +%d"):format(school.icon or "✦", school.name, points)
+					grantRow(schoolId, school.name, school.color, school.icon, points)
 				end
 			end
 			for _, traitId in ipairs(Traits.order) do
 				local points = itemTraits[traitId]
 				if points then
 					local traitDef = Traits.get(traitId)
-					lines[#lines + 1] = ("%s %s +%d"):format(
-						traitDef and traitDef.icon or "✦",
+					grantRow(
+						traitId,
 						traitDef and traitDef.name or traitId,
+						traitDef and traitDef.color or Theme.Semantic.TextBody,
+						traitDef and traitDef.icon,
 						points
 					)
 				end
 			end
 		end
-		local w, h = Items.sizeFor(entry.itemId, false)
-		lines[#lines + 1] = ("Size: %d×%d"):format(w, h)
-		if def.stackable then
-			lines[#lines + 1] = ("Stack: %d / %d"):format(entry.quantity, def.maxStack)
+
+		-- Flavor, italic and quoted (only when the def carries one).
+		if typeof(def.flavor) == "string" and def.flavor ~= "" then
+			local flavorRow = tooltipRow(0)
+			flavorRow.AutomaticSize = Enum.AutomaticSize.Y
+			local flavor = tooltipText(
+				flavorRow,
+				"“" .. def.flavor .. "”",
+				Theme.Text.Xs,
+				Theme.Semantic.TextMuted,
+				Theme.Font.BodyItalic
+			)
+			flavor.Size = UDim2.new(1, 0, 0, 0)
+			flavor.AutomaticSize = Enum.AutomaticSize.Y
+			flavor.TextWrapped = true
 		end
-		return titleText, table.concat(lines, "\n")
 	end
 
 	local hoverToken = 0 -- invalidates pending tooltip timers
@@ -588,15 +725,14 @@ function InventoryUI.start()
 			if token ~= hoverToken or drag or not isOpen then
 				return
 			end
-			local titleText, bodyText = describe(entry)
-			tooltipTitle.Text = titleText
-			tooltipBody.Text = bodyText
+			buildTooltip(entry)
+			local s = UIKit.scaleFactor() -- rendered tooltip size is design px × scale
 			local guiSize = gui.AbsoluteSize
 			tooltip.Position = UDim2.new(
 				0,
-				math.min(mouse.X + 14, guiSize.X - 200),
+				math.min(mouse.X + 14, guiSize.X - (TOOLTIP_W + 16) * s),
 				0,
-				math.min(mouse.Y + 10, guiSize.Y - 160)
+				math.min(mouse.Y + 10, guiSize.Y - 220 * s)
 			)
 			tooltip.Visible = true
 		end)
@@ -685,9 +821,15 @@ function InventoryUI.start()
 		end)
 	end
 
+	-- Occupied slots rest at their item's rarity color, empty ones at the
+	-- neutral line (drag flows recolor them green/red on top of this).
 	local function resetEquipStrokes()
 		for _, slot in pairs(equipSlots) do
-			slot.stroke.Color = COLORS.line
+			if slot.entry then
+				slot.stroke.Color = Rarity.forEntry(slot.entry, Items.get(slot.entry.itemId)).color
+			else
+				slot.stroke.Color = COLORS.line
+			end
 			slot.stroke.Thickness = 1.5
 		end
 	end
@@ -716,8 +858,11 @@ function InventoryUI.start()
 	local function buildGhost()
 		destroyGhost()
 		local w, h = Items.sizeFor(drag.itemId, drag.rotated)
+		-- The ghost floats at the unscaled gui level while the panel renders
+		-- scaled, so it is sized in screen pixels.
+		local s = UIKit.scaleFactor()
 		local ghost = Instance.new("Frame")
-		ghost.Size = UDim2.new(0, w * CELL, 0, h * CELL)
+		ghost.Size = UDim2.new(0, w * CELL * s, 0, h * CELL * s)
 		ghost.BackgroundColor3 = COLORS.tile
 		ghost.BackgroundTransparency = 0.35
 		ghost.BorderSizePixel = 0
@@ -752,8 +897,13 @@ function InventoryUI.start()
 			return
 		end
 		local w, h = Items.sizeFor(drag.itemId, drag.rotated)
-		local px = mouse.X - (w * CELL) / 2
-		local py = mouse.Y - (h * CELL) / 2
+		-- Screen-space math: the grid renders scaled (autoScale), so one cell
+		-- is CELL * scale pixels on screen; the ghost lives unscaled at gui
+		-- level. Grid-local coordinates (gx/gy, highlight) stay design px.
+		local s = UIKit.scaleFactor()
+		local cellPx = CELL * s
+		local px = mouse.X - (w * cellPx) / 2
+		local py = mouse.Y - (h * cellPx) / 2
 		drag.ghost.Position = UDim2.new(0, px, 0, py)
 
 		drag.dropTarget = nil
@@ -763,8 +913,8 @@ function InventoryUI.start()
 
 		if pointIn(gridScroll, mouse.X, mouse.Y) then
 			local origin = itemsLayer.AbsolutePosition
-			local gx = math.floor((px - origin.X) / CELL + 0.5)
-			local gy = math.floor((py - origin.Y) / CELL + 0.5)
+			local gx = math.floor((px - origin.X) / cellPx + 0.5)
+			local gy = math.floor((py - origin.Y) / cellPx + 0.5)
 			local ok = canPlace(gx, gy, w, h, drag.itemId)
 			highlight.Visible = true
 			highlight.Position = UDim2.new(0, math.clamp(gx, 0, GRID_W - 1) * CELL, 0, math.clamp(gy, 0, GRID_H - 1) * CELL)
@@ -980,6 +1130,8 @@ function InventoryUI.start()
 		tile.Text = ""
 		tile.AutoButtonColor = false
 		tile.BackgroundColor3 = COLORS.tile
+		tile.BackgroundTransparency = 0.15 -- a solid raised well (big items kept
+		-- vanishing into the background and reading as holes in the grid)
 		tile.BorderSizePixel = 0
 		tile.ZIndex = 3
 		tile.Parent = itemsLayer
@@ -989,6 +1141,14 @@ function InventoryUI.start()
 		stroke.Thickness = 1
 		stroke.Color = COLORS.tileStroke
 		stroke.Parent = tile
+		record.stroke = stroke
+
+		-- Rarity inner glow (uncommon+), retinted per entry in updateTileRecord.
+		record.glow = UIKit.addGlow(tile, Color3.new(1, 1, 1), 0.78)
+		if record.glow then
+			record.glow.Visible = false
+			record.glow.ZIndex = 3
+		end
 
 		local thumb = makeViewport(tile)
 		thumb.ZIndex = 4
@@ -1048,6 +1208,15 @@ function InventoryUI.start()
 		record.frame.Size = UDim2.new(0, w * CELL - 2, 0, h * CELL - 2)
 		record.frame.Position = UDim2.new(0, entry.x * CELL + 1, 0, entry.y * CELL + 1)
 		record.qty.Text = entry.quantity > 1 and tostring(entry.quantity) or ""
+		-- Border + glow tint with the tier. Set per update (not per record):
+		-- reused tiles match by itemId, and two instances of the same item
+		-- can carry different rolled rarities.
+		local rarity = Rarity.forEntry(entry, Items.get(entry.itemId))
+		record.stroke.Color = rarity.color
+		if record.glow then
+			record.glow.Visible = rarity.hasGlow
+			record.glow.ImageColor3 = rarity.glowColor
+		end
 	end
 
 	-- ---- rendering (diff) -----------------------------------------------------
@@ -1135,7 +1304,49 @@ function InventoryUI.start()
 				end
 				slot.nameLabel.Visible = false
 				local def = Items.get(entry.itemId)
-				local entryLevel = Traits.entryInfo(entry, def)
+				if slot.glow then
+					local rarity = Rarity.forEntry(entry, def)
+					slot.glow.Visible = rarity.hasGlow
+					slot.glow.ImageColor3 = rarity.glowColor
+				end
+				-- Mini trait hexes: rebuilt per render (the roll rides the
+				-- entry, not the item id). The UIListLayout survives — it's
+				-- a UI component, not a GuiObject.
+				for _, child in ipairs(slot.badgeRow:GetChildren()) do
+					if child:IsA("GuiObject") then
+						child:Destroy()
+					end
+				end
+				local hexImage = Icons.image("Hexagon")
+				local entryLevel, entryTraits = Traits.entryInfo(entry, def)
+				if hexImage and typeof(entryTraits) == "table" then
+					local shown = 0
+					local function addBadge(color)
+						if shown >= 4 then
+							return
+						end
+						shown += 1
+						local hex = Instance.new("ImageLabel")
+						hex.Size = UDim2.new(0, 9, 0, 10)
+						hex.BackgroundTransparency = 1
+						hex.Image = hexImage
+						hex.ScaleType = Enum.ScaleType.Fit
+						hex.ImageColor3 = color
+						hex.ZIndex = 5
+						hex.Parent = slot.badgeRow
+					end
+					for _, schoolId in ipairs(Spells.schoolOrder) do
+						if entryTraits[schoolId] then
+							addBadge(Spells.schools[schoolId].color)
+						end
+					end
+					for _, traitId in ipairs(Traits.order) do
+						if entryTraits[traitId] then
+							local traitDef = Traits.get(traitId)
+							addBadge(traitDef and traitDef.color or Theme.Semantic.TextBody)
+						end
+					end
+				end
 				local inert = entryLevel > playerLevel
 				slot.inertOverlay.Visible = inert
 				slot.inertLabel.Visible = inert
@@ -1146,10 +1357,19 @@ function InventoryUI.start()
 					slot.thumb:ClearAllChildren()
 				end
 				slot.nameLabel.Visible = true
+				if slot.glow then
+					slot.glow.Visible = false
+				end
+				for _, child in ipairs(slot.badgeRow:GetChildren()) do
+					if child:IsA("GuiObject") then
+						child:Destroy()
+					end
+				end
 				slot.inertOverlay.Visible = false
 				slot.inertLabel.Visible = false
 			end
 		end
+		resetEquipStrokes() -- rarity borders track the (new) occupants
 
 		refreshBindBadges()
 	end
@@ -1233,7 +1453,7 @@ function InventoryUI.start()
 
 	-- ---- gold ----------------------------------------------------------------
 	local function updateGold()
-		goldLabel.Text = "Gold: " .. tostring(player:GetAttribute("Gold") or 0)
+		goldLabel.Text = ("◈ %d Gold"):format(player:GetAttribute("Gold") or 0)
 	end
 	player:GetAttributeChangedSignal("Gold"):Connect(updateGold)
 	updateGold()
@@ -1251,33 +1471,27 @@ function InventoryUI.start()
 	classModal.Size = UDim2.new(0, 380, 0, 330)
 	classModal.Position = UDim2.new(0.5, 0, 0.5, 0)
 	classModal.AnchorPoint = Vector2.new(0.5, 0.5)
-	classModal.BackgroundColor3 = COLORS.panel
-	classModal.BorderSizePixel = 0
 	classModal.Visible = false
 	classModal.ZIndex = 20
 	classModal.Parent = gui
+	UIKit.stylePanel(classModal)
+	UIKit.addShadow(classModal)
+	UIKit.autoScale(classModal)
 
-	local classModalCorner = Instance.new("UICorner")
-	classModalCorner.CornerRadius = UDim.new(0, 8)
-	classModalCorner.Parent = classModal
-
-	local classModalTitle = makeLabel(classModal, "Elegí tu clase", 18)
+	local classModalTitle = makeLabel(
+		classModal,
+		"Elegí tu clase",
+		Theme.Text.Title,
+		Theme.Semantic.TextTitle,
+		Theme.Font.DisplayBold
+	)
 	classModalTitle.Size = UDim2.new(1, -16, 0, 30)
 	classModalTitle.Position = UDim2.new(0, 8, 0, 8)
 	classModalTitle.ZIndex = 20
 
-	local classModalClose = Instance.new("TextButton")
-	classModalClose.Size = UDim2.new(0, 26, 0, 26)
+	local classModalClose = UIKit.closeButton(classModal)
 	classModalClose.Position = UDim2.new(1, -6, 0, 6)
 	classModalClose.AnchorPoint = Vector2.new(1, 0)
-	classModalClose.BackgroundColor3 = Color3.fromRGB(180, 60, 60)
-	classModalClose.BorderSizePixel = 0
-	classModalClose.Font = Enum.Font.GothamBold
-	classModalClose.TextSize = 14
-	classModalClose.TextColor3 = Color3.new(1, 1, 1)
-	classModalClose.Text = "X"
-	classModalClose.ZIndex = 21
-	classModalClose.Parent = classModal
 
 	local CARD_H = 62
 	local classCards = {}
@@ -1296,7 +1510,8 @@ function InventoryUI.start()
 		cardCorner.CornerRadius = UDim.new(0, 6)
 		cardCorner.Parent = card
 
-		local nameLabel = makeLabel(card, def.name, 15, Color3.fromRGB(255, 221, 51))
+		local nameLabel =
+			makeLabel(card, def.name, Theme.Text.Lg, Theme.Semantic.TextHero, Theme.Font.DisplayBold)
 		nameLabel.Size = UDim2.new(1, -90, 0, 20)
 		nameLabel.Position = UDim2.new(0, 10, 0, 6)
 		nameLabel.ZIndex = 20
@@ -1307,22 +1522,12 @@ function InventoryUI.start()
 		descLabel.TextWrapped = true
 		descLabel.ZIndex = 20
 
-		local useBtn = Instance.new("TextButton")
+		local useBtn = UIKit.primaryButton(card, "Usar")
 		useBtn.Size = UDim2.new(0, 74, 0, 26)
 		useBtn.Position = UDim2.new(1, -10, 0, 8)
 		useBtn.AnchorPoint = Vector2.new(1, 0)
-		useBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 90)
-		useBtn.BorderSizePixel = 0
-		useBtn.Font = Enum.Font.GothamBold
-		useBtn.TextSize = 12
-		useBtn.TextColor3 = Color3.new(1, 1, 1)
-		useBtn.Text = "Usar"
+		useBtn.TextSize = Theme.Text.Sm
 		useBtn.ZIndex = 21
-		useBtn.Parent = card
-
-		local useBtnCorner = Instance.new("UICorner")
-		useBtnCorner.CornerRadius = UDim.new(0, 4)
-		useBtnCorner.Parent = useBtn
 
 		useBtn.Activated:Connect(function()
 			useBtn.Text = "..."
@@ -1355,7 +1560,7 @@ function InventoryUI.start()
 				local levelText = lv and string.format(" — Lvl. %d", lv.level) or ""
 				widgets.nameLabel.Text = def.name .. levelText
 				local isActive = classId == activeClass
-				widgets.card.BackgroundColor3 = isActive and Color3.fromRGB(45, 55, 42) or COLORS.section
+				widgets.card.BackgroundColor3 = isActive and Theme.Color.Ember600 or COLORS.section
 				widgets.useBtn.Text = isActive and "Actual" or "Usar"
 				widgets.useBtn.AutoButtonColor = not isActive
 			end
@@ -1382,19 +1587,13 @@ function InventoryUI.start()
 		TweenService:Create(panel, SLIDE_TWEEN, { Position = isOpen and OPEN_POS or CLOSED_POS }):Play()
 	end
 
-	local openBtn = Instance.new("TextButton")
+	local openBtn = UIKit.ghostButton(gui, "Inventory (B)")
 	openBtn.Name = "InventoryButton"
 	openBtn.Size = UDim2.new(0, 120, 0, 34)
 	-- Top-right corner: the bottom corners hold the health/mana orbs (HudUI).
 	openBtn.Position = UDim2.new(1, -16, 0, 16)
 	openBtn.AnchorPoint = Vector2.new(1, 0)
-	openBtn.BackgroundColor3 = Color3.fromRGB(60, 90, 160)
-	openBtn.BorderSizePixel = 0
-	openBtn.Font = Enum.Font.GothamBold
-	openBtn.TextSize = 15
-	openBtn.TextColor3 = Color3.new(1, 1, 1)
-	openBtn.Text = "Inventory (B)"
-	openBtn.Parent = gui
+	openBtn.TextSize = Theme.Text.Body
 
 	openBtn.Activated:Connect(toggle)
 	closeBtn.Activated:Connect(toggle)

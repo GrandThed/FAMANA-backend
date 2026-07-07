@@ -19,6 +19,10 @@ const raw = JSON.parse(
 
 const ARMOR_SLOTS = new Set(["head", "chest", "hands", "legs", "feet"]);
 
+// Optional def-level rarity (absent = common). Mirrors shared/Rarity.lua;
+// rolled-instance rarity is validated separately in inventory.js.
+const RARITIES = new Set(["common", "uncommon", "rare", "epic", "legendary"]);
+
 function fail(message) {
   throw new Error(`content/items.json: ${message}`);
 }
@@ -41,6 +45,9 @@ function validateItem(key, def) {
   }
   if (def.type === "armor" && !ARMOR_SLOTS.has(def.slot)) {
     fail(`armor "${key}" needs a slot in ${[...ARMOR_SLOTS].join("/")}`);
+  }
+  if (def.rarity !== undefined && !RARITIES.has(def.rarity)) {
+    fail(`item "${key}" has unknown rarity "${def.rarity}"`);
   }
 }
 

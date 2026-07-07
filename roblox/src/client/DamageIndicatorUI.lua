@@ -7,11 +7,12 @@ local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
+local Theme = require(script.Parent.Theme)
 
 local DamageIndicatorUI = {}
 
-local NORMAL_COLOR = Color3.fromRGB(255, 255, 255)
-local CRIT_COLOR = Color3.fromRGB(255, 221, 51)
+local NORMAL_COLOR = Theme.Semantic.TextStrong
+local CRIT_COLOR = Theme.Color.Gold400
 
 local NORMAL_SIZE = 22
 local CRIT_SIZE = 34
@@ -48,7 +49,7 @@ local function damageText(amount, isCrit, position)
 	local label = Instance.new("TextLabel")
 	label.Size = UDim2.new(1, 0, 1, 0)
 	label.BackgroundTransparency = 1
-	label.Font = isCrit and Enum.Font.GothamBlack or Enum.Font.GothamBold
+	label.FontFace = isCrit and Theme.Font.DisplayBold or Theme.Font.BodyBold
 	label.TextSize = isCrit and CRIT_SIZE or NORMAL_SIZE
 	label.TextColor3 = isCrit and CRIT_COLOR or NORMAL_COLOR
 	label.TextStrokeTransparency = 0

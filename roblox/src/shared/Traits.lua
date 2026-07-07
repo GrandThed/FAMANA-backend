@@ -12,6 +12,7 @@
 
 local Items = require(script.Parent.Items)
 local Spells = require(script.Parent.Spells) -- school ids also earn equipment points
+local Rarity = require(script.Parent.Rarity) -- shapes rolled drops (bonus points + line count)
 
 local Traits = {}
 
@@ -159,7 +160,8 @@ end
 -- ---- aggregation ----------------------------------------------------------------
 
 -- The effective (itemLevel, traits) of an inventory entry: rolled instance
--- meta ({ itemLevel, traits }) overrides the def's fixed values.
+-- meta ({ itemLevel, rarity?, traits }) overrides the def's fixed values.
+-- (Rarity has its own accessor: Rarity.forEntry.)
 function Traits.entryInfo(entry, def)
 	local meta = entry and entry.meta
 	if typeof(meta) == "table" then
@@ -217,11 +219,13 @@ local function rollLineId(pool)
 	return pool[math.random(#pool)]
 end
 
--- Rolls instance meta for a drop: `itemLevel` points split across 1–2 lines
--- (traits from the item type's pool, or schools) — the sum of points always
--- equals the item level, the core rule. Two-line rolls appear from level 4
--- and keep the bigger share on the main line.
--- Returns { itemLevel, traits } or nil for un-rollable types.
+-- Rolls instance meta for a drop. A weighted RARITY (shared/Rarity) shapes
+-- the roll: total points = itemLevel + the rarity's bonus, spread over the
+-- rarity's line count (distinct traits from the item type's pool, or
+-- schools), front-loaded so the first line carries the biggest share. The
+-- base rule "points = item level" holds for common; rarity is the only
+-- thing that pushes a roll above it. The item's inert gate stays its level.
+-- Returns { itemLevel, rarity, traits } or nil for un-rollable types.
 function Traits.roll(def, itemLevel)
 	local pool = def and TYPE_POOLS[def.type]
 	itemLevel = math.floor(itemLevel or 0)
@@ -229,28 +233,41 @@ function Traits.roll(def, itemLevel)
 		return nil
 	end
 
-	local traits = {}
-	if itemLevel >= 4 and math.random() < 0.6 then
-		local first = rollLineId(pool)
-		local second = first
-		for _ = 1, 10 do
-			second = rollLineId(pool)
-			if second ~= first then
-				break
-			end
+	local rarity = Rarity.roll()
+	local total = itemLevel + rarity.bonusPoints
+	-- Every line needs at least 1 point, so tiny budgets cap the count.
+	local lines = math.min(math.random(rarity.minLines, rarity.maxLines), total)
+
+	-- Distinct line ids; the pool can run short of fresh ids (retries hit
+	-- duplicates), in which case the roll just carries fewer lines.
+	local ids, seen = {}, {}
+	local attempts = 0
+	while #ids < lines and attempts < 20 do
+		attempts += 1
+		local id = rollLineId(pool)
+		if not seen[id] then
+			seen[id] = true
+			ids[#ids + 1] = id
 		end
-		if second == first then
-			traits[first] = itemLevel
-		else
-			local split = math.random(1, itemLevel - 1)
-			local main = math.max(split, itemLevel - split)
-			traits[first] = main
-			traits[second] = itemLevel - main
-		end
-	else
-		traits[rollLineId(pool)] = itemLevel
 	end
-	return { itemLevel = itemLevel, traits = traits }
+
+	local traits = {}
+	local remaining = total
+	for index, id in ipairs(ids) do
+		local linesLeft = #ids - index
+		if linesLeft == 0 then
+			traits[id] = remaining
+		else
+			-- At least the fair share here (front-loads the early lines)
+			-- while keeping 1+ point for every line still to come.
+			local minHere = math.ceil(remaining / (linesLeft + 1))
+			local maxHere = math.max(minHere, remaining - linesLeft)
+			local points = math.random(minHere, maxHere)
+			traits[id] = points
+			remaining -= points
+		end
+	end
+	return { itemLevel = itemLevel, rarity = rarity.id, traits = traits }
 end
 
 -- Collapses totals into one combined stat block (active tiers only, summed

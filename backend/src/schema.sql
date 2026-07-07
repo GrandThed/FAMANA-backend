@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS players (
     level        INT         NOT NULL DEFAULT 1,
     xp           BIGINT      NOT NULL DEFAULT 0,
     hotbar_binds JSONB       NOT NULL DEFAULT '{}'::jsonb, -- ["3".."0" key slot] = itemId
+    settings     JSONB       NOT NULL DEFAULT '{}'::jsonb, -- client prefs (trait tracker mode, ...)
     current_class TEXT       NOT NULL DEFAULT 'knight',    -- knight|archer|mage|summoner
     class_levels JSONB       NOT NULL DEFAULT '{}'::jsonb, -- { [classId]: { level, xp } }
     cell         TEXT        NOT NULL DEFAULT 'A',
@@ -25,6 +26,7 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS gold BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS level INT NOT NULL DEFAULT 1;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS xp BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS hotbar_binds JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE players ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS current_class TEXT NOT NULL DEFAULT 'knight';
 ALTER TABLE players ADD COLUMN IF NOT EXISTS class_levels JSONB NOT NULL DEFAULT '{}'::jsonb;
 

@@ -14,6 +14,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
 local Traits = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Traits"))
+local Rarity = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Rarity"))
 local ArtKit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ArtKit"))
 local ItemModels = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemModels"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
@@ -311,7 +312,10 @@ local function spawnDrop(itemId, quantity, position, opts)
 	label.BackgroundTransparency = 1
 	label.Font = Enum.Font.GothamBold
 	label.TextSize = 13
-	label.TextColor3 = Color3.new(1, 1, 1)
+	-- Above-common drops read in their tier's color; common stays plain
+	-- white (the tier's beige is too dim against the world).
+	local rarity = Rarity.forEntry({ meta = meta }, def)
+	label.TextColor3 = rarity.hasGlow and rarity.textColor or Color3.new(1, 1, 1)
 	label.TextStrokeTransparency = 0.4
 	local displayName = def and def.name or itemId
 	if typeof(meta) == "table" and meta.itemLevel then

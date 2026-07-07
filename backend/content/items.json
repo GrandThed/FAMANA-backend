@@ -3,6 +3,7 @@
     "sword_basic": {
       "id": "sword_basic",
       "name": "Basic Sword",
+      "flavor": "Every legend starts somewhere.",
       "type": "weapon",
       "weaponType": "melee",
       "damageKind": "melee",
@@ -50,9 +51,11 @@
     "sword_iron": {
       "id": "sword_iron",
       "name": "Iron Sword",
+      "flavor": "Honest iron, honestly sharpened.",
       "type": "weapon",
       "weaponType": "melee",
       "damageKind": "melee",
+      "rarity": "uncommon",
       "stackable": false,
       "maxStack": 1,
       "damage": 20,
@@ -148,6 +151,7 @@
     "helmet_leather": {
       "id": "helmet_leather",
       "name": "Leather Helmet",
+      "flavor": "Smells of rain and old campfires.",
       "type": "armor",
       "slot": "head",
       "stackable": false,
@@ -160,6 +164,7 @@
     "chest_leather": {
       "id": "chest_leather",
       "name": "Leather Tunic",
+      "flavor": "Boiled hide, stitched by hunters of the low road.",
       "type": "armor",
       "slot": "chest",
       "stackable": false,
@@ -172,6 +177,7 @@
     "gloves_leather": {
       "id": "gloves_leather",
       "name": "Leather Gloves",
+      "flavor": "Worn soft at the knuckles.",
       "type": "armor",
       "slot": "hands",
       "stackable": false,
@@ -184,6 +190,7 @@
     "legs_leather": {
       "id": "legs_leather",
       "name": "Leather Leggings",
+      "flavor": "Patched more times than anyone admits.",
       "type": "armor",
       "slot": "legs",
       "stackable": false,
@@ -196,6 +203,7 @@
     "boots_leather": {
       "id": "boots_leather",
       "name": "Leather Boots",
+      "flavor": "They know the way home.",
       "type": "armor",
       "slot": "feet",
       "stackable": false,
@@ -234,6 +242,7 @@
       "name": "Brawler Ring",
       "type": "ring",
       "slot": "ring",
+      "rarity": "uncommon",
       "stackable": false,
       "maxStack": 1,
       "size": [
@@ -250,6 +259,7 @@
       "name": "Lynx Ring",
       "type": "ring",
       "slot": "ring",
+      "rarity": "uncommon",
       "stackable": false,
       "maxStack": 1,
       "size": [
@@ -266,6 +276,7 @@
       "name": "Bastion Helm",
       "type": "armor",
       "slot": "head",
+      "rarity": "rare",
       "stackable": false,
       "maxStack": 1,
       "size": [
@@ -281,9 +292,11 @@
     "sword_duelist": {
       "id": "sword_duelist",
       "name": "Duelist Sword",
+      "flavor": "It remembers every parry.",
       "type": "weapon",
       "weaponType": "melee",
       "damageKind": "melee",
+      "rarity": "rare",
       "stackable": false,
       "maxStack": 1,
       "damage": 15,
@@ -301,8 +314,10 @@
     "chest_colossus": {
       "id": "chest_colossus",
       "name": "Colossus Chestplate",
+      "flavor": "Forged for shoulders that carry armies.",
       "type": "armor",
       "slot": "chest",
+      "rarity": "epic",
       "stackable": false,
       "maxStack": 1,
       "size": [
@@ -318,8 +333,10 @@
     "boots_evader": {
       "id": "boots_evader",
       "name": "Evader Boots",
+      "flavor": "Never quite where the blow lands.",
       "type": "armor",
       "slot": "feet",
+      "rarity": "epic",
       "stackable": false,
       "maxStack": 1,
       "size": [
@@ -337,6 +354,7 @@
       "name": "Pyromancer Emblem",
       "type": "ring",
       "slot": "ring",
+      "rarity": "epic",
       "stackable": false,
       "maxStack": 1,
       "size": [
@@ -353,6 +371,7 @@
       "name": "Berserker Emblem",
       "type": "ring",
       "slot": "ring",
+      "rarity": "epic",
       "stackable": false,
       "maxStack": 1,
       "size": [

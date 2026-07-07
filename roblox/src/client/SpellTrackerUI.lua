@@ -8,6 +8,10 @@
 --   * TRAITS — one entry per stat trait you have points in, points vs next
 --     threshold, lit once the first threshold is active. Hover → tooltip
 --     with every threshold's stats.
+-- Two layouts, picked in the options menu (SettingsUI → PlayerSettings
+-- "traitTracker", docs/traits_*_side.png):
+--   * compact — icon + name + count rows (the classic strip)
+--   * minimal — a narrow icon-only column with the count underneath
 -- The mouse is never locked in this game, so this works mid-play;
 -- ClientState.spellHover stops HudUI from also casting on the same keypress.
 
@@ -19,25 +23,31 @@ local HttpService = game:GetService("HttpService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Spells = require(Shared:WaitForChild("Spells"))
 local Traits = require(Shared:WaitForChild("Traits"))
+local Icons = require(Shared:WaitForChild("Icons"))
 local HotbarBinds = require(script.Parent.HotbarBinds)
 local SpellsClient = require(script.Parent.SpellsClient)
 local ClientState = require(script.Parent.ClientState)
+local PlayerSettings = require(script.Parent.PlayerSettings)
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 
 local SpellTrackerUI = {}
 
 local PANEL_X = 10
-local ENTRY_W, ENTRY_H = 158, 36
+local ENTRY_W, ENTRY_H = 158, 36 -- compact rows
+local MINIMAL_W, MINIMAL_H = 48, 46 -- minimal (icon-only) entries
 local TOOLTIP_W = 260
 
+-- Aethelgard palette (client/Theme.lua).
 local COLORS = {
-	panel = Color3.fromRGB(20, 20, 26),
-	line = Color3.fromRGB(60, 60, 72),
-	text = Color3.fromRGB(235, 235, 240),
-	textDim = Color3.fromRGB(140, 140, 152),
-	gold = Color3.fromRGB(255, 220, 120),
-	rowHover = Color3.fromRGB(45, 45, 56),
+	panel = Theme.Color.Ink800,
+	line = Theme.Semantic.BorderMuted,
+	text = Theme.Semantic.TextStrong,
+	textDim = Theme.Semantic.TextMuted,
+	gold = Theme.Semantic.Currency,
+	rowHover = Theme.Color.Ink650,
 }
 
 -- Bind keys 3..0 → hotbar slot index 2..9 (same map as InventoryUI).
@@ -59,13 +69,20 @@ function SpellTrackerUI.start()
 	gui.IgnoreGuiInset = true -- offsets match AbsolutePosition (like HudUI)
 	gui.Parent = player:WaitForChild("PlayerGui")
 
+	-- Layout mode from the options menu; the panel narrows in minimal.
+	local mode = PlayerSettings.get("traitTracker")
+	local function panelWidth()
+		return mode == "minimal" and MINIMAL_W or ENTRY_W
+	end
+
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0, 0.5)
 	panel.Position = UDim2.new(0, PANEL_X, 0.42, 0)
-	panel.Size = UDim2.new(0, ENTRY_W, 0, 0)
+	panel.Size = UDim2.new(0, panelWidth(), 0, 0)
 	panel.AutomaticSize = Enum.AutomaticSize.Y
 	panel.BackgroundTransparency = 1
 	panel.Parent = gui
+	UIKit.autoScale(panel) -- left-edge anchored: scales in place (§9)
 
 	local layout = Instance.new("UIListLayout")
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
@@ -74,20 +91,24 @@ function SpellTrackerUI.start()
 
 	local tooltip = Instance.new("Frame")
 	tooltip.Size = UDim2.new(0, TOOLTIP_W, 0, 100)
-	tooltip.BackgroundColor3 = COLORS.panel
-	tooltip.BackgroundTransparency = 0.04
+	tooltip.BackgroundColor3 = Theme.Semantic.PanelTop
 	tooltip.BorderSizePixel = 0
 	tooltip.Visible = false
 	tooltip.ZIndex = 30
 	tooltip.Parent = gui
+	UIKit.autoScale(tooltip) -- position stays screen-space; content scales
 
-	local tooltipCorner = Instance.new("UICorner")
-	tooltipCorner.CornerRadius = UDim.new(0, 6)
-	tooltipCorner.Parent = tooltip
+	-- Panel treatment, sharp corners by design. Gradient/stroke are UI
+	-- components (not GuiObjects), so the rebuilds that clear the tooltip's
+	-- children leave them alone.
+	local tooltipGradient = Instance.new("UIGradient")
+	tooltipGradient.Rotation = 90
+	tooltipGradient.Color = ColorSequence.new(Theme.Semantic.PanelTop, Theme.Semantic.PanelBot)
+	tooltipGradient.Parent = tooltip
 
 	local tooltipStroke = Instance.new("UIStroke")
-	tooltipStroke.Thickness = 1.5
-	tooltipStroke.Color = COLORS.line
+	tooltipStroke.Thickness = 1
+	tooltipStroke.Color = Theme.Semantic.BorderPanel
 	tooltipStroke.Parent = tooltip
 
 	-- ---- state ----
@@ -145,7 +166,7 @@ function SpellTrackerUI.start()
 	local function makeTooltipLabel(text, size, color, bold)
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
-		label.Font = bold and Enum.Font.GothamBold or Enum.Font.Gotham
+		label.FontFace = bold and Theme.Font.BodyBold or Theme.Font.Body
 		label.TextSize = size
 		label.TextColor3 = color
 		label.TextXAlignment = Enum.TextXAlignment.Left
@@ -228,7 +249,7 @@ function SpellTrackerUI.start()
 				row.BackgroundTransparency = 1
 				row.AutoButtonColor = false
 				row.BorderSizePixel = 0
-				row.Font = Enum.Font.GothamMedium
+				row.FontFace = Theme.Font.Body
 				row.TextSize = 13
 				row.TextColor3 = known and COLORS.text or COLORS.textDim
 				row.TextXAlignment = Enum.TextXAlignment.Left
@@ -244,7 +265,7 @@ function SpellTrackerUI.start()
 				badge.Size = UDim2.new(0, 50, 1, 0)
 				badge.Position = UDim2.new(1, -56, 0, 0)
 				badge.BackgroundTransparency = 1
-				badge.Font = Enum.Font.GothamBold
+				badge.FontFace = Theme.Font.BodyBold
 				badge.TextSize = 12
 				badge.TextXAlignment = Enum.TextXAlignment.Right
 				badge.ZIndex = 32
@@ -284,9 +305,11 @@ function SpellTrackerUI.start()
 		y += 20
 
 		tooltip.Size = UDim2.new(0, TOOLTIP_W, 0, y + 6)
+		-- Screen-space placement: the panel and tooltip render scaled.
+		local s = UIKit.scaleFactor()
 		local anchorY = anchorFrame.AbsolutePosition.Y
-		local maxY = math.max(8, gui.AbsoluteSize.Y - (y + 14))
-		tooltip.Position = UDim2.new(0, PANEL_X + ENTRY_W + 10, 0, math.clamp(anchorY, 8, maxY))
+		local maxY = math.max(8, gui.AbsoluteSize.Y - (y + 14) * s)
+		tooltip.Position = UDim2.new(0, PANEL_X + panelWidth() * s + 10, 0, math.clamp(anchorY, 8, maxY))
 		tooltip.Visible = true
 	end
 
@@ -333,9 +356,10 @@ function SpellTrackerUI.start()
 		end
 
 		tooltip.Size = UDim2.new(0, TOOLTIP_W, 0, y + 8)
+		local s = UIKit.scaleFactor()
 		local anchorY = anchorFrame.AbsolutePosition.Y
-		local maxY = math.max(8, gui.AbsoluteSize.Y - (y + 16))
-		tooltip.Position = UDim2.new(0, PANEL_X + ENTRY_W + 10, 0, math.clamp(anchorY, 8, maxY))
+		local maxY = math.max(8, gui.AbsoluteSize.Y - (y + 16) * s)
+		tooltip.Position = UDim2.new(0, PANEL_X + panelWidth() * s + 10, 0, math.clamp(anchorY, 8, maxY))
 		tooltip.Visible = true
 	end
 
@@ -363,7 +387,137 @@ function SpellTrackerUI.start()
 		end
 	end
 
+	-- The 26px badge for an entry: the hexagon badge from docs/UI.md §6.3 —
+	-- hex border tinted the METAL TIER (Bronze/Silver/Gold by thresholds
+	-- reached, Prismatic rainbow at the cap), dark inset fill (the same
+	-- image scaled down), tier-tinted glyph on top. Falls back to the emoji
+	-- chip while the Icons.lua ids aren't uploaded.
+	local function buildEntryIcon(parent, id, iconText, color, active, tier)
+		local glyphImage = Icons.forTrait(id)
+		local hexImage = Icons.image("Hexagon")
+
+		if glyphImage and hexImage then
+			local badge = Instance.new("Frame")
+			badge.Size = UDim2.new(0, 26, 0, 26)
+			badge.BackgroundTransparency = 1
+			badge.Parent = parent
+
+			local border = Instance.new("ImageLabel")
+			border.Size = UDim2.new(1, 0, 1, 0)
+			border.BackgroundTransparency = 1
+			border.Image = hexImage
+			border.ScaleType = Enum.ScaleType.Fit
+			border.ImageColor3 = tier.border
+			border.Parent = badge
+			if tier == Theme.Tier.Prismatic then
+				border.ImageColor3 = Color3.new(1, 1, 1)
+				local prism = Instance.new("UIGradient")
+				prism.Color = Theme.PrismaticSequence
+				prism.Parent = border
+			end
+
+			local fill = Instance.new("ImageLabel")
+			fill.Size = UDim2.new(0.82, 0, 0.82, 0)
+			fill.Position = UDim2.new(0.09, 0, 0.09, 0)
+			fill.BackgroundTransparency = 1
+			fill.Image = hexImage
+			fill.ScaleType = Enum.ScaleType.Fit
+			fill.ImageColor3 = tier.fill
+			fill.Parent = badge
+
+			local glyph = Instance.new("ImageLabel")
+			glyph.Size = UDim2.new(0.55, 0, 0.55, 0)
+			glyph.Position = UDim2.new(0.225, 0, 0.225, 0)
+			glyph.BackgroundTransparency = 1
+			glyph.Image = glyphImage
+			glyph.ScaleType = Enum.ScaleType.Fit
+			glyph.ImageColor3 = tier.icon
+			glyph.Parent = badge
+			return badge
+		end
+
+		local icon = Instance.new("TextLabel")
+		icon.Size = UDim2.new(0, 26, 0, 26)
+		icon.BackgroundColor3 = color
+		icon.BackgroundTransparency = active and 0.6 or 0.85
+		icon.BorderSizePixel = 0
+		icon.FontFace = Theme.Font.BodyBold
+		icon.TextSize = 15
+		icon.Text = iconText or "✦"
+		icon.Parent = parent
+
+		local iconCorner = Instance.new("UICorner")
+		iconCorner.CornerRadius = UDim.new(0, 5)
+		iconCorner.Parent = icon
+		return icon
+	end
+
 	-- ---- tracker entries ----
+	-- One entry frame in the current layout mode (sharp corners by design):
+	--   compact — [hex] Name        n/next, with a 2px tier edge when active
+	--   minimal — hex over the count, no name (hover for everything else)
+	-- Returns the frame and the count label (the caller fills the count in).
+	local function buildEntryFrame(order, id, iconText, color, name, active, tier)
+		local frame = Instance.new("TextButton")
+		frame.Size = UDim2.new(1, 0, 0, mode == "minimal" and MINIMAL_H or ENTRY_H)
+		frame.LayoutOrder = order
+		frame.AutoButtonColor = false
+		frame.Text = ""
+		frame.BackgroundColor3 = COLORS.panel
+		frame.BackgroundTransparency = active and 0.15 or 0.4
+		frame.BorderSizePixel = 0
+		frame.Parent = panel
+
+		local stroke = Instance.new("UIStroke")
+		stroke.Thickness = 1
+		stroke.Color = Theme.Semantic.BorderHair
+		stroke.Transparency = 0.2
+		stroke.Parent = frame
+
+		-- The mock's left accent: a 2px tier-colored edge on active rows.
+		if active and mode ~= "minimal" then
+			local edge = Instance.new("Frame")
+			edge.Size = UDim2.new(0, 2, 1, 0)
+			edge.BackgroundColor3 = tier.border
+			edge.BorderSizePixel = 0
+			edge.Parent = frame
+		end
+
+		local icon = buildEntryIcon(frame, id, iconText, color, active, tier)
+
+		local count = Instance.new("TextLabel")
+		count.BackgroundTransparency = 1
+		count.FontFace = Theme.Font.BodyBold
+		count.Parent = frame
+
+		if mode == "minimal" then
+			icon.Position = UDim2.new(0.5, -13, 0, 4)
+			count.Size = UDim2.new(1, 0, 0, 14)
+			count.Position = UDim2.new(0, 0, 1, -16)
+			count.TextSize = 11
+			count.TextXAlignment = Enum.TextXAlignment.Center
+		else
+			icon.Position = UDim2.new(0, 6, 0.5, -13)
+			count.Size = UDim2.new(0, 42, 1, 0)
+			count.Position = UDim2.new(1, -48, 0, 0)
+			count.TextSize = 13
+			count.TextXAlignment = Enum.TextXAlignment.Right
+
+			local nameLabel = Instance.new("TextLabel")
+			nameLabel.Size = UDim2.new(1, -84, 1, 0)
+			nameLabel.Position = UDim2.new(0, 39, 0, 0)
+			nameLabel.BackgroundTransparency = 1
+			nameLabel.FontFace = Theme.Font.BodyBold
+			nameLabel.TextSize = 13
+			nameLabel.TextColor3 = active and COLORS.text or COLORS.textDim
+			nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+			nameLabel.Text = name
+			nameLabel.Parent = frame
+		end
+
+		return frame, count
+	end
+
 	-- Schools appear only once equipment gives them points (like traits —
 	-- equipment is the only source), counted points vs next unlock.
 	local function rebuildEntries()
@@ -383,68 +537,20 @@ function SpellTrackerUI.start()
 			if points > 0 then
 				local school = Spells.schools[schoolId]
 
-				local frame = Instance.new("TextButton")
-				frame.Size = UDim2.new(1, 0, 0, ENTRY_H)
-				frame.LayoutOrder = order
-				frame.AutoButtonColor = false
-				frame.Text = ""
-				frame.BackgroundColor3 = COLORS.panel
-				frame.BackgroundTransparency = 0.25
-				frame.BorderSizePixel = 0
-				frame.Parent = panel
-
-				local corner = Instance.new("UICorner")
-				corner.CornerRadius = UDim.new(0, 6)
-				corner.Parent = frame
-
-				local stroke = Instance.new("UIStroke")
-				stroke.Thickness = 1.5
-				stroke.Color = school.color
-				stroke.Transparency = 0.45
-				stroke.Parent = frame
-
-				local icon = Instance.new("TextLabel")
-				icon.Size = UDim2.new(0, 26, 0, 26)
-				icon.Position = UDim2.new(0, 5, 0.5, -13)
-				icon.BackgroundColor3 = school.color
-				icon.BackgroundTransparency = 0.65
-				icon.BorderSizePixel = 0
-				icon.Font = Enum.Font.GothamBold
-				icon.TextSize = 15
-				icon.Text = school.icon or "✦"
-				icon.Parent = frame
-
-				local iconCorner = Instance.new("UICorner")
-				iconCorner.CornerRadius = UDim.new(0, 5)
-				iconCorner.Parent = icon
-
-				local name = Instance.new("TextLabel")
-				name.Size = UDim2.new(1, -84, 1, 0)
-				name.Position = UDim2.new(0, 38, 0, 0)
-				name.BackgroundTransparency = 1
-				name.Font = Enum.Font.GothamBold
-				name.TextSize = 13
-				name.TextColor3 = COLORS.text
-				name.TextXAlignment = Enum.TextXAlignment.Left
-				name.Text = school.name
-				name.Parent = frame
-
-				local count = Instance.new("TextLabel")
-				count.Size = UDim2.new(0, 42, 1, 0)
-				count.Position = UDim2.new(1, -48, 0, 0)
-				count.BackgroundTransparency = 1
-				count.Font = Enum.Font.GothamBold
-				count.TextSize = 13
-				count.TextXAlignment = Enum.TextXAlignment.Right
-				count.Parent = frame
-
-				local nextPoints
-				for _, step in ipairs(Spells.timelineFor(school)) do
-					if step.level > points then
+				-- Metal tier from unlock steps reached (Theme.tierFor).
+				local steps = Spells.timelineFor(school)
+				local reached, nextPoints = 0, nil
+				for _, step in ipairs(steps) do
+					if points >= step.level then
+						reached += 1
+					elseif not nextPoints then
 						nextPoints = step.level
-						break
 					end
 				end
+				local tier = Theme.tierFor(reached, #steps)
+
+				local frame, count =
+					buildEntryFrame(order, schoolId, school.icon, school.color, school.name, true, tier)
 				if nextPoints then
 					count.Text = ("%d/%d"):format(points, nextPoints)
 					count.TextColor3 = COLORS.textDim
@@ -483,60 +589,18 @@ function SpellTrackerUI.start()
 			if points > 0 and traitDef then
 				local active = Traits.activeStats(traitId, points) ~= nil
 
-				local frame = Instance.new("TextButton")
-				frame.Size = UDim2.new(1, 0, 0, ENTRY_H)
-				frame.LayoutOrder = 50 + order -- traits sit below the schools
-				frame.AutoButtonColor = false
-				frame.Text = ""
-				frame.BackgroundColor3 = COLORS.panel
-				frame.BackgroundTransparency = active and 0.25 or 0.45
-				frame.BorderSizePixel = 0
-				frame.Parent = panel
+				-- Metal tier from thresholds reached (Theme.tierFor).
+				local reached = 0
+				for _, threshold in ipairs(traitDef.thresholds) do
+					if points >= threshold[1] then
+						reached += 1
+					end
+				end
+				local tier = Theme.tierFor(reached, #traitDef.thresholds)
 
-				local corner = Instance.new("UICorner")
-				corner.CornerRadius = UDim.new(0, 6)
-				corner.Parent = frame
-
-				local stroke = Instance.new("UIStroke")
-				stroke.Thickness = 1.5
-				stroke.Color = active and traitDef.color or COLORS.line
-				stroke.Transparency = active and 0.35 or 0.5
-				stroke.Parent = frame
-
-				local icon = Instance.new("TextLabel")
-				icon.Size = UDim2.new(0, 26, 0, 26)
-				icon.Position = UDim2.new(0, 5, 0.5, -13)
-				icon.BackgroundColor3 = traitDef.color
-				icon.BackgroundTransparency = active and 0.55 or 0.85
-				icon.BorderSizePixel = 0
-				icon.Font = Enum.Font.GothamBold
-				icon.TextSize = 15
-				icon.Text = traitDef.icon or "✦"
-				icon.Parent = frame
-
-				local iconCorner = Instance.new("UICorner")
-				iconCorner.CornerRadius = UDim.new(0, 5)
-				iconCorner.Parent = icon
-
-				local name = Instance.new("TextLabel")
-				name.Size = UDim2.new(1, -84, 1, 0)
-				name.Position = UDim2.new(0, 38, 0, 0)
-				name.BackgroundTransparency = 1
-				name.Font = Enum.Font.GothamBold
-				name.TextSize = 13
-				name.TextColor3 = active and COLORS.text or COLORS.textDim
-				name.TextXAlignment = Enum.TextXAlignment.Left
-				name.Text = traitDef.name
-				name.Parent = frame
-
-				local count = Instance.new("TextLabel")
-				count.Size = UDim2.new(0, 42, 1, 0)
-				count.Position = UDim2.new(1, -48, 0, 0)
-				count.BackgroundTransparency = 1
-				count.Font = Enum.Font.GothamBold
-				count.TextSize = 13
-				count.TextXAlignment = Enum.TextXAlignment.Right
-				count.Parent = frame
+				-- Traits sit below the schools (LayoutOrder offset).
+				local frame, count =
+					buildEntryFrame(50 + order, traitId, traitDef.icon, traitDef.color, traitDef.name, active, tier)
 
 				local nextPoints = Traits.nextThreshold(traitId, points)
 				if nextPoints then
@@ -577,6 +641,16 @@ function SpellTrackerUI.start()
 	end)
 	SpellsClient.changed:Connect(refreshTooltip)
 	HotbarBinds.changed:Connect(refreshTooltip)
+
+	-- Options menu: swap layouts live (the rebuilds pick up `mode`).
+	PlayerSettings.changed:Connect(function(key)
+		if key == "traitTracker" then
+			mode = PlayerSettings.get("traitTracker")
+			panel.Size = UDim2.new(0, panelWidth(), 0, 0)
+			rebuildEntries()
+			rebuildTraitEntries()
+		end
+	end)
 
 	rebuildEntries()
 	rebuildTraitEntries()

@@ -7,6 +7,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
+local Theme = require(script.Parent.Theme)
 
 local player = Players.LocalPlayer
 
@@ -38,9 +39,9 @@ function LevelUpUI.start()
 	local title = Instance.new("TextLabel")
 	title.Size = UDim2.new(1, 0, 0, 34)
 	title.BackgroundTransparency = 1
-	title.Font = Enum.Font.GothamBlack
-	title.TextSize = 26
-	title.TextColor3 = Color3.fromRGB(255, 221, 51)
+	title.FontFace = Theme.Font.DisplayBold
+	title.TextSize = 30
+	title.TextColor3 = Theme.Color.Gold400
 	title.TextTransparency = 1
 	title.TextStrokeTransparency = 1
 	title.TextStrokeColor3 = Color3.new(0, 0, 0)
@@ -51,9 +52,9 @@ function LevelUpUI.start()
 	levelText.Size = UDim2.new(1, 0, 0, 46)
 	levelText.Position = UDim2.new(0, 0, 0, 36)
 	levelText.BackgroundTransparency = 1
-	levelText.Font = Enum.Font.GothamBlack
-	levelText.TextSize = 38
-	levelText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	levelText.FontFace = Theme.Font.DisplayBold
+	levelText.TextSize = 42
+	levelText.TextColor3 = Theme.Semantic.TextStrong
 	levelText.TextTransparency = 1
 	levelText.TextStrokeTransparency = 1
 	levelText.TextStrokeColor3 = Color3.new(0, 0, 0)

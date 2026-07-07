@@ -27,6 +27,25 @@ PlayerService.xpToNext = xpToNext
 -- [userId] = { health, maxHealth, gold, cell, position = {x,y,z}, inventory = {...}, _temporary? }
 local cache = {}
 
+-- Persisted client preferences (the options menu): [key] = allowed values.
+-- Anything outside this whitelist is dropped on load AND on the remote.
+local SETTING_VALUES = {
+	traitTracker = { compact = true, minimal = true }, -- SpellTrackerUI layout
+}
+
+local function sanitizeSettings(raw)
+	local clean = {}
+	if typeof(raw) == "table" then
+		for key, allowed in pairs(SETTING_VALUES) do
+			local value = raw[key]
+			if typeof(value) == "string" and allowed[value] then
+				clean[key] = value
+			end
+		end
+	end
+	return clean
+end
+
 local inventoryUpdated -- RemoteEvent
 local requestInventory -- RemoteFunction
 local levelUpRemote -- RemoteEvent, resolved in start()
@@ -140,6 +159,12 @@ local function loadProfile(player)
 	end
 	data.hotbarBinds = binds
 	player:SetAttribute("HotbarBinds", HttpService:JSONEncode(binds))
+
+	-- Client preferences (trait tracker layout, ...) travel like the binds:
+	-- published as JSON for the client's PlayerSettings module, pushed back
+	-- through SetPlayerSettings, saved with the profile.
+	data.settings = sanitizeSettings(data.settings)
+	player:SetAttribute("PlayerSettings", HttpService:JSONEncode(data.settings))
 
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
@@ -401,6 +426,7 @@ local function buildSaveFields(player)
 		currentClass = profile.currentClass,
 		classLevels = profile.classLevels,
 		hotbarBinds = profile.hotbarBinds,
+		settings = profile.settings,
 		cell = profile.cell,
 		position = profile.position,
 	}
@@ -511,6 +537,17 @@ function PlayerService.start()
 			clean.pages[p] = map
 		end
 		profile.hotbarBinds = clean
+	end)
+
+	-- The client pushes its whole preference map on change (SettingsUI);
+	-- whitelisted keys/values only, persisted with the next save.
+	local setSettings = Remotes.get("SetPlayerSettings")
+	setSettings.OnServerEvent:Connect(function(player, payload)
+		local profile = cache[player.UserId]
+		if not profile then
+			return
+		end
+		profile.settings = sanitizeSettings(payload)
 	end)
 
 	-- Load data BEFORE the character spawns so HealthService can restore HP/pos.
