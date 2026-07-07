@@ -125,6 +125,7 @@ function SettingsUI.start()
 			button.Parent = row
 
 			local stroke = Instance.new("UIStroke")
+			stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- TextButton
 			stroke.Thickness = 1
 			stroke.Color = Theme.Semantic.BorderDivider
 			stroke.Parent = button

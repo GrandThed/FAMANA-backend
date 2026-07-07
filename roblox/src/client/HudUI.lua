@@ -268,6 +268,7 @@ local function makeSlot(parent, order, reserved, onActivated)
 
 	local baseStroke = reserved and Theme.Color.Ember600 or Theme.Semantic.BorderSlot
 	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- slot is a TextButton
 	stroke.Thickness = 1.5
 	stroke.Color = baseStroke
 	stroke.Transparency = 0.1
@@ -623,6 +624,7 @@ function HudUI.start()
 	pageBtn.Parent = bar
 
 	local pageBtnStroke = Instance.new("UIStroke")
+	pageBtnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- TextButton
 	pageBtnStroke.Thickness = 1.5
 	pageBtnStroke.Color = Theme.Semantic.BorderSlot
 	pageBtnStroke.Transparency = 0.1

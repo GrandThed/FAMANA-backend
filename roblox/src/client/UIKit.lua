@@ -104,6 +104,7 @@ function UIKit.closeButton(parent, size)
 	button.Parent = parent
 
 	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- buttons are text objects
 	stroke.Thickness = 1
 	stroke.Color = Theme.Color.Blood400
 	stroke.Transparency = 0.25
@@ -144,6 +145,7 @@ function UIKit.primaryButton(parent, text)
 	gradient.Parent = button
 
 	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- buttons are text objects
 	stroke.Thickness = 1
 	stroke.Color = Theme.Color.Ember200
 	stroke.Transparency = 0.3
@@ -168,6 +170,7 @@ function UIKit.ghostButton(parent, text)
 	button.Parent = parent
 
 	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- buttons are text objects
 	stroke.Thickness = 1
 	stroke.Color = S.BorderDivider
 	stroke.Parent = button

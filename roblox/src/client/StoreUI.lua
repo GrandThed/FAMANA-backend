@@ -112,6 +112,7 @@ function StoreUI.start()
 		btn.Text = text
 		btn.Parent = tabs
 		local btnStroke = Instance.new("UIStroke")
+		btnStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- tab is a TextButton
 		btnStroke.Thickness = 1
 		btnStroke.Color = Theme.Semantic.BorderMuted
 		btnStroke.Parent = btn
@@ -357,6 +358,7 @@ function StoreUI.start()
 		row.Parent = list
 
 		local rowStroke = Instance.new("UIStroke")
+		rowStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- row is a TextButton
 		rowStroke.Thickness = 1
 		rowStroke.Color = rarity.color
 		rowStroke.Parent = row

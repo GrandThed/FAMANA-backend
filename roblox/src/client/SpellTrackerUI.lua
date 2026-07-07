@@ -469,6 +469,7 @@ function SpellTrackerUI.start()
 		frame.Parent = panel
 
 		local stroke = Instance.new("UIStroke")
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border -- entry is a TextButton
 		stroke.Thickness = 1
 		stroke.Color = Theme.Semantic.BorderHair
 		stroke.Transparency = 0.2

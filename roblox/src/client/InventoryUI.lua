@@ -146,6 +146,74 @@ local function makeViewport(parent)
 	return thumb
 end
 
+-- ---- mini trait badges (grid tiles + equipment slots) --------------------------
+-- Tiny tinted hexes along a tile's bottom-left edge — one per trait/school
+-- the piece grants, schools first, so the lines read at a glance (numbers
+-- live in the tooltip). Rolls carry at most 3 lines (legendary), so 3 hexes
+-- always fit even a 1×1 ring tile.
+local MAX_TRAIT_BADGES = 3
+
+local function makeBadgeRow(parent, zIndex)
+	local badgeRow = Instance.new("Frame")
+	badgeRow.Size = UDim2.new(1, -4, 0, 10)
+	badgeRow.Position = UDim2.new(0, 2, 1, -12)
+	badgeRow.BackgroundTransparency = 1
+	badgeRow.ZIndex = zIndex
+	badgeRow.Parent = parent
+
+	local layout = Instance.new("UIListLayout")
+	layout.FillDirection = Enum.FillDirection.Horizontal
+	layout.Padding = UDim.new(0, 2)
+	layout.Parent = badgeRow
+	return badgeRow
+end
+
+-- Rebuilds a badge row for an entry (the roll rides the ENTRY, not the item
+-- id, so this runs per update). Pass nil to just clear it. The UIListLayout
+-- survives the clear — it's a UI component, not a GuiObject.
+local function fillTraitBadges(badgeRow, entry, def)
+	for _, child in ipairs(badgeRow:GetChildren()) do
+		if child:IsA("GuiObject") then
+			child:Destroy()
+		end
+	end
+	local hexImage = Icons.image("Hexagon")
+	if not hexImage or not entry then
+		return
+	end
+	local _, entryTraits = Traits.entryInfo(entry, def)
+	if typeof(entryTraits) ~= "table" then
+		return
+	end
+
+	local shown = 0
+	local function addBadge(color)
+		if shown >= MAX_TRAIT_BADGES then
+			return
+		end
+		shown += 1
+		local hex = Instance.new("ImageLabel")
+		hex.Size = UDim2.new(0, 9, 0, 10)
+		hex.BackgroundTransparency = 1
+		hex.Image = hexImage
+		hex.ScaleType = Enum.ScaleType.Fit
+		hex.ImageColor3 = color
+		hex.ZIndex = badgeRow.ZIndex
+		hex.Parent = badgeRow
+	end
+	for _, schoolId in ipairs(Spells.schoolOrder) do
+		if entryTraits[schoolId] then
+			addBadge(Spells.schools[schoolId].color)
+		end
+	end
+	for _, traitId in ipairs(Traits.order) do
+		if entryTraits[traitId] then
+			local traitDef = Traits.get(traitId)
+			addBadge(traitDef and traitDef.color or Theme.Semantic.TextBody)
+		end
+	end
+end
+
 function InventoryUI.start()
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "InventoryUI"
@@ -330,19 +398,7 @@ function InventoryUI.start()
 			glow.ZIndex = 3
 		end
 
-		-- Tiny hexes along the bottom edge — one per trait/school the
-		-- equipped piece grants (numbers live in the tooltip, not here).
-		local badgeRow = Instance.new("Frame")
-		badgeRow.Size = UDim2.new(1, -4, 0, 10)
-		badgeRow.Position = UDim2.new(0, 2, 1, -12)
-		badgeRow.BackgroundTransparency = 1
-		badgeRow.ZIndex = 5
-		badgeRow.Parent = frame
-
-		local badgeLayout = Instance.new("UIListLayout")
-		badgeLayout.FillDirection = Enum.FillDirection.Horizontal
-		badgeLayout.Padding = UDim.new(0, 2)
-		badgeLayout.Parent = badgeRow
+		local badgeRow = makeBadgeRow(frame, 5)
 
 		equipSlots[slotName] = {
 			frame = frame,
@@ -1138,6 +1194,9 @@ function InventoryUI.start()
 		record.frame = tile
 
 		local stroke = Instance.new("UIStroke")
+		-- The tile is a TextButton: Contextual (the default) would stroke its
+		-- empty TEXT, so the rarity border never showed. Border it explicitly.
+		stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 		stroke.Thickness = 1
 		stroke.Color = COLORS.tileStroke
 		stroke.Parent = tile
@@ -1178,6 +1237,9 @@ function InventoryUI.start()
 		badge.ZIndex = 5
 		record.badge = badge
 
+		-- Mini trait hexes, bottom-left (the qty label keeps bottom-right).
+		record.badgeRow = makeBadgeRow(tile, 5)
+
 		tile.MouseEnter:Connect(function()
 			hovered = record.entry
 			local currentDef = Items.get(record.itemId)
@@ -1208,15 +1270,17 @@ function InventoryUI.start()
 		record.frame.Size = UDim2.new(0, w * CELL - 2, 0, h * CELL - 2)
 		record.frame.Position = UDim2.new(0, entry.x * CELL + 1, 0, entry.y * CELL + 1)
 		record.qty.Text = entry.quantity > 1 and tostring(entry.quantity) or ""
-		-- Border + glow tint with the tier. Set per update (not per record):
+		-- Border, glow and trait badges track the ENTRY, not the record:
 		-- reused tiles match by itemId, and two instances of the same item
-		-- can carry different rolled rarities.
-		local rarity = Rarity.forEntry(entry, Items.get(entry.itemId))
+		-- can carry different rolls.
+		local def = Items.get(entry.itemId)
+		local rarity = Rarity.forEntry(entry, def)
 		record.stroke.Color = rarity.color
 		if record.glow then
 			record.glow.Visible = rarity.hasGlow
 			record.glow.ImageColor3 = rarity.glowColor
 		end
+		fillTraitBadges(record.badgeRow, entry, def)
 	end
 
 	-- ---- rendering (diff) -----------------------------------------------------
@@ -1309,44 +1373,8 @@ function InventoryUI.start()
 					slot.glow.Visible = rarity.hasGlow
 					slot.glow.ImageColor3 = rarity.glowColor
 				end
-				-- Mini trait hexes: rebuilt per render (the roll rides the
-				-- entry, not the item id). The UIListLayout survives — it's
-				-- a UI component, not a GuiObject.
-				for _, child in ipairs(slot.badgeRow:GetChildren()) do
-					if child:IsA("GuiObject") then
-						child:Destroy()
-					end
-				end
-				local hexImage = Icons.image("Hexagon")
-				local entryLevel, entryTraits = Traits.entryInfo(entry, def)
-				if hexImage and typeof(entryTraits) == "table" then
-					local shown = 0
-					local function addBadge(color)
-						if shown >= 4 then
-							return
-						end
-						shown += 1
-						local hex = Instance.new("ImageLabel")
-						hex.Size = UDim2.new(0, 9, 0, 10)
-						hex.BackgroundTransparency = 1
-						hex.Image = hexImage
-						hex.ScaleType = Enum.ScaleType.Fit
-						hex.ImageColor3 = color
-						hex.ZIndex = 5
-						hex.Parent = slot.badgeRow
-					end
-					for _, schoolId in ipairs(Spells.schoolOrder) do
-						if entryTraits[schoolId] then
-							addBadge(Spells.schools[schoolId].color)
-						end
-					end
-					for _, traitId in ipairs(Traits.order) do
-						if entryTraits[traitId] then
-							local traitDef = Traits.get(traitId)
-							addBadge(traitDef and traitDef.color or Theme.Semantic.TextBody)
-						end
-					end
-				end
+				fillTraitBadges(slot.badgeRow, entry, def)
+				local entryLevel = Traits.entryInfo(entry, def)
 				local inert = entryLevel > playerLevel
 				slot.inertOverlay.Visible = inert
 				slot.inertLabel.Visible = inert
@@ -1360,11 +1388,7 @@ function InventoryUI.start()
 				if slot.glow then
 					slot.glow.Visible = false
 				end
-				for _, child in ipairs(slot.badgeRow:GetChildren()) do
-					if child:IsA("GuiObject") then
-						child:Destroy()
-					end
-				end
+				fillTraitBadges(slot.badgeRow, nil, nil)
 				slot.inertOverlay.Visible = false
 				slot.inertLabel.Visible = false
 			end
