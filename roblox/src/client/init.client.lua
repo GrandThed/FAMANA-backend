@@ -27,7 +27,7 @@ ContentSync.start() -- first: overlays backend item defs onto the mirror
 SpellsClient.start() -- seeds/auto-places spell hotbar binds (HudUI renders them)
 HudUI.start()
 SpellTrackerUI.start() -- TFT-style subclass tracker (right edge, always on)
-InventoryUI.start()
+InventoryUI.start() -- mounts a SECOND tracker instance in its traits column
 BorderFadeUI.start()
 NotificationUI.start()
 PartyUI.start()

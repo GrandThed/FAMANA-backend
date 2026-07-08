@@ -210,10 +210,11 @@ quick binds from `HotbarBinds` — item binds equip Tools, spell binds
 cooldown veil from the `SpellCd_<id>` attributes (grayed while the spell
 isn't currently known — its gear unequipped); clicking an empty bind slot opens a pick-list
 of known spells, and the three bind pages cycle via the button at the bar's
-right end or the `X` key; HUD effect rows drain a remaining-duration bar), `SpellTrackerUI` (TFT-style tracker, an
-always-on rail on the RIGHT screen edge (hover popouts open leftward; the
-big windows draw above it when they overlap), all driven by the
-equipment-earned `TraitPoints` attribute:
+right end or the `X` key; HUD effect rows drain a remaining-duration bar), `SpellTrackerUI` (TFT-style tracker in
+TWO instances: an always-on rail on the RIGHT screen edge (popouts open
+leftward; the big windows draw above it when they overlap) AND the traits
+column inside the inventory panel (popouts open rightward) — both driven
+by the equipment-earned `TraitPoints` attribute:
 school entries appear once gear gives them points (points vs next unlock —
 hover → point timeline + spell rows, hover a row and press 3–0 to bind it;
 sets `ClientState.spellHover` so the keypress doesn't also cast), trait
