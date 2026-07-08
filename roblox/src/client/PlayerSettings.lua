@@ -5,8 +5,8 @@
 -- PlayerService, persisted with the profile).
 --
 -- Keys and their values:
---   traitTracker — "compact" (icon + name + count rows) | "minimal"
---                  (icon-only column); read by SpellTrackerUI.
+--   traitTracker — "minimal" (icon-only column, the default) | "compact"
+--                  (icon + name + count rows); read by SpellTrackerUI.
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
@@ -20,7 +20,7 @@ local player = Players.LocalPlayer
 local PlayerSettings = {}
 
 local DEFAULTS = {
-	traitTracker = "compact",
+	traitTracker = "minimal",
 }
 
 local values = table.clone(DEFAULTS)
