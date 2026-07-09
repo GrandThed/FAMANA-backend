@@ -1,6 +1,7 @@
 {
   "_comment": "Deploy manifest for scripts/deploy-places.mjs. universeId = the experience id, shared by every place in it — print(game.GameId) in the Studio command bar, or read it from the create.roblox.com dashboard URL. placeIds must match GridConfig.cells (and GridConfig.places for instance places).",
   "universeId": 10435243310,
+  "backendUrl": "https://famana-backend-production.up.railway.app",
   "places": {
     "cellA": { "placeId": 130890869057243, "project": "cellA.project.json" },
     "cellB": { "placeId": 96623482055191, "project": "cellB.project.json" }
