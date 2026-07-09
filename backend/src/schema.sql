@@ -80,6 +80,31 @@ CREATE TABLE IF NOT EXISTS admin_audit (
 
 CREATE INDEX IF NOT EXISTS idx_admin_audit_created_at ON admin_audit (created_at DESC);
 
+-- Place registry + deploy ledger (docs/DEPLOYMENT.md). `places` is upserted
+-- from roblox/places.json by scripts/deploy-places.mjs on every deploy, so
+-- every place the pipeline knows about appears here automatically. `deploys`
+-- is the append-only history behind the drift check (a version bump the
+-- ledger didn't record = someone published outside the pipeline) and the
+-- future dashboard Places screen.
+CREATE TABLE IF NOT EXISTS places (
+    place_id     BIGINT PRIMARY KEY,          -- Roblox PlaceId
+    universe_id  BIGINT NOT NULL,
+    name         TEXT   NOT NULL,             -- manifest key, e.g. 'cellA'
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS deploys (
+    id             BIGSERIAL PRIMARY KEY,
+    place_id       BIGINT NOT NULL REFERENCES places(place_id),
+    version_number INT    NOT NULL,           -- Roblox place version
+    version_type   TEXT   NOT NULL,           -- Published | Saved
+    git_commit     TEXT,                      -- short hash baked into BuildInfo
+    deployed_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_deploys_place ON deploys (place_id, id DESC);
+
 -- Per-player event queue. Admin mutations enqueue rows; the game's poll loop
 -- drains them (DELETE ... RETURNING) to push live updates to online players.
 CREATE TABLE IF NOT EXISTS player_events (

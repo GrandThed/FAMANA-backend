@@ -15,8 +15,11 @@
 // 0.0.0.0/0). Set universeId in roblox/places.json (Studio command bar:
 // print(game.GameId)).
 //
-// Usage (PowerShell):
+// The key: put `ROBLOX_API_KEY=<key>` in a `.env` file at the repo root
+// (gitignored — never committed), or set it per session in PowerShell:
 //   $env:ROBLOX_API_KEY = "<key>"
+//
+// Usage:
 //   node scripts/deploy-places.mjs            # build + publish everything
 //   node scripts/deploy-places.mjs cellA      # only the named place(s)
 //   node scripts/deploy-places.mjs --draft    # upload as Saved, not Published
@@ -34,9 +37,24 @@ const BUILD_DIR = path.join(ROBLOX_DIR, "build");
 const MANIFEST = path.join(ROBLOX_DIR, "places.json");
 const SECRET = path.join(ROBLOX_DIR, "src", "server", "Secret.lua");
 
+// Load the repo-root .env (gitignored) so the key survives across terminal
+// sessions; real environment variables win over the file.
+const envFile = path.join(ROOT, ".env");
+if (fs.existsSync(envFile)) {
+  for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
+    const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (match && process.env[match[1]] === undefined) {
+      process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+    }
+  }
+}
+
 const API_KEY = process.env.ROBLOX_API_KEY;
 if (!API_KEY) {
-  console.error("Missing env: set ROBLOX_API_KEY (Open Cloud key with universe-places:write).");
+  console.error(
+    "Missing ROBLOX_API_KEY (Open Cloud key with universe-places:write) — " +
+      "put ROBLOX_API_KEY=<key> in a .env file at the repo root, or set the env var."
+  );
   process.exit(1);
 }
 
@@ -77,6 +95,13 @@ async function robloxFetch(url, options, attempt = 0) {
     const wait = Number(response.headers.get("retry-after") || 5) * 1000;
     console.log(`  … rate limited, retrying in ${wait / 1000}s`);
     await sleep(wait);
+    return robloxFetch(url, options, attempt + 1);
+  }
+  // 409 "Server is busy" is transient (often right after a Studio session on
+  // the place) — Roblox itself says to retry in a couple of minutes.
+  if (response.status === 409 && attempt < 3) {
+    console.log("  … server busy (409), retrying in 45s");
+    await sleep(45000);
     return robloxFetch(url, options, attempt + 1);
   }
   return response;

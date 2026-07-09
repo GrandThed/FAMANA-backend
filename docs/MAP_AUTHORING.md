@@ -83,10 +83,16 @@ One-time setup:
 2. Fill in `universeId` in [`roblox/places.json`](../roblox/places.json) —
    run `print(game.GameId)` in the Studio command bar.
 
+3. Save the key in a **`.env` file at the repo root** (gitignored, so it can
+   never be committed):
+
+   ```
+   ROBLOX_API_KEY=your-key-here
+   ```
+
 Then, whenever code or maps changed:
 
 ```powershell
-$env:ROBLOX_API_KEY = "<key>"
 node scripts/deploy-places.mjs            # build + publish every place
 node scripts/deploy-places.mjs cellB      # just one
 node scripts/deploy-places.mjs --draft    # upload as Saved (test in Studio, don't go live)
@@ -108,6 +114,9 @@ it to `roblox/places.json`. From then on it deploys like the rest.
 
 - **A deploy replaces the whole place.** Map work that was never exported to
   `roblox/maps/` is overwritten. Export before you deploy.
+- **Close the place in Studio before deploying it.** An open Studio session
+  holds a lock on the place and uploads bounce with `409: Server is busy`
+  (the script retries a few times, but a held lock outlasts them).
 - **`Secret.lua` must exist locally** — the script refuses to deploy without
   it, because the built place couldn't reach the backend.
 - **Place-level settings live in the project files now.** The per-place
