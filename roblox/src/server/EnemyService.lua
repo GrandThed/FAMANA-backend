@@ -2,8 +2,6 @@
 -- from weapon swings, die, and respawn. On death, fires kill handlers (the drop
 -- system hooks in here). Enemy types are data-driven (ENEMY_DEFS), so adding a
 -- new enemy is just a new entry. In-memory per server.
--- Placement: authored maps use Enemy_<key> markers (see shared/MapMarkers);
--- the defs' `spots` lists are the fallback for places without a map.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -21,7 +19,6 @@ local ClassService = require(script.Parent.ClassService)
 local PartyService = require(script.Parent.PartyService)
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
-local MapMarkers = require(Shared:WaitForChild("MapMarkers"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local ArtKit = require(Shared:WaitForChild("ArtKit"))
 
@@ -617,7 +614,8 @@ local function updateEnemy(enemy, dt)
 				if math.random() < hookedDodgeChance(target) then
 					dodgePopup(target.Character)
 				else
-					humanoid:TakeDamage(
+					HealthService.damagePlayer(
+						target,
 						enemy.damage * ClassService.getDamageTakenMult(target) * hookedDamageTakenMult(target)
 					)
 					HealthService.registerDamage(target) -- pause the player's regen
@@ -846,7 +844,7 @@ end
 local function onWeaponSwing(player, tool, def)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
-	if not root then
+	if not root or HealthService.isDowned(player) then
 		return
 	end
 
@@ -904,22 +902,11 @@ function EnemyService.start()
 	enemyFolder.Name = "Enemies"
 	enemyFolder.Parent = Workspace
 
-	if MapMarkers.mapPresent() then
-		local markers = MapMarkers.takeFor("Enemy_", ENEMY_DEFS)
-		for key, def in pairs(ENEMY_DEFS) do
-			for _, marker in ipairs(markers[key] or {}) do
-				local entry = { def = def, pos = marker.cframe.Position, enemy = nil }
-				table.insert(spawns, entry)
-				spawnAt(entry)
-			end
-		end
-	else
-		for _, def in pairs(ENEMY_DEFS) do
-			for _, pos in ipairs(def.spots) do
-				local entry = { def = def, pos = pos, enemy = nil }
-				table.insert(spawns, entry)
-				spawnAt(entry)
-			end
+	for _, def in pairs(ENEMY_DEFS) do
+		for _, pos in ipairs(def.spots) do
+			local entry = { def = def, pos = pos, enemy = nil }
+			table.insert(spawns, entry)
+			spawnAt(entry)
 		end
 	end
 

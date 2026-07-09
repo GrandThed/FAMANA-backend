@@ -135,6 +135,33 @@ Items.defs = {
 		size = { 1, 1 },
 	},
 
+	-- ---- crafting outputs (placeholders — see shared/Recipes.lua) ---------
+	crafting_table = {
+		id = "crafting_table",
+		name = "Crafting Table",
+		flavor = "Placeholder crafting-system output — no world placement yet.",
+		type = "misc",
+		stackable = true,
+		maxStack = 5,
+		size = { 1, 1 },
+	},
+	torch = {
+		id = "torch",
+		name = "Torch",
+		type = "misc",
+		stackable = true,
+		maxStack = 50,
+		size = { 1, 1 },
+	},
+	arrow = {
+		id = "arrow",
+		name = "Arrow",
+		type = "misc",
+		stackable = true,
+		maxStack = 99,
+		size = { 1, 1 },
+	},
+
 	-- ---- armor (paper-doll equipment; combat stats come later) -------------
 	helmet_leather = {
 		id = "helmet_leather",
@@ -316,7 +343,7 @@ Items.defs = {
 		itemLevel = 5,
 		traits = { berserker = 5 },
 	},
-	-- ---- todos estos para abajo son items que se craftean
+		-- ---- todos estos para abajo son items que se craftean
 	crafting_table = {
 		id = "crafting_table",
 		name = "Crafting Table",
@@ -342,9 +369,43 @@ Items.defs = {
 		maxStack = 99,
 		size = { 1, 1 },
 	},
+	emblem_sacerdote = {
+		id = "emblem_sacerdote",
+		name = "Sacerdote Emblem",
+		type = "ring",
+		slot = "ring",
+		rarity = "epic",
+		stackable = false,
+		maxStack = 1,
+		size = { 1, 1 },
+		itemLevel = 5,
+		traits = { sacerdote_luz = 5 },
+	},
+	emblem_vengador = {
+		id = "emblem_vengador",
+		name = "Vengador Emblem",
+		type = "ring",
+		slot = "ring",
+		rarity = "epic",
+		stackable = false,
+		maxStack = 1,
+		size = { 1, 1 },
+		itemLevel = 5,
+		traits = { vengador_sagrado = 5 },
+	},
+	emblem_oraculo = {
+		id = "emblem_oraculo",
+		name = "Oráculo Emblem",
+		type = "ring",
+		slot = "ring",
+		rarity = "epic",
+		stackable = false,
+		maxStack = 1,
+		size = { 1, 1 },
+		itemLevel = 5,
+		traits = { oraculo = 5 },
+	},
 }
-
-	
 
 -- Paper-doll equipment slots. A slot's index-1 is its `x` in the `equipment`
 -- container (y = 0). MUST match backend EQUIPMENT_SLOTS order.

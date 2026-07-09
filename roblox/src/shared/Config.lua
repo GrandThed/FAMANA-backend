@@ -20,6 +20,12 @@ return {
 		regenInterval = 2, -- seconds between regen ticks
 		regenDelay = 5, -- seconds out of combat before regen starts
 		respawnDelay = 5, -- seconds after death before respawning
+
+		-- Downed state (a lethal hit downs instead of killing outright):
+		downedBleedTime = 15, -- seconds before a downed player dies for real
+		downedReviveTime = 4, -- seconds an ally must hold the revive prompt
+		downedReviveHealPercent = 0.5, -- HP fraction restored on a full revive
+		downedWalkSpeed = 4, -- crawl speed while downed
 	},
 
 	-- Mana: a live gameplay resource (not persisted) that powers ranged magic.

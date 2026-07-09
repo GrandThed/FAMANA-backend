@@ -513,6 +513,43 @@ local function makeXpBar(parent, width, position, anchorPoint)
 	return barBg
 end
 
+-- Full-screen "you're downed" readout — mirrors the server's `Downed` /
+-- `DownedBleedRemaining` Player attributes (see HealthService.lua) with no
+-- remote, same pattern as the mana orb reading `Mana`/`MaxMana`.
+local function makeDownedOverlay(gui)
+	local overlay = Instance.new("Frame")
+	overlay.Name = "DownedOverlay"
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(90, 10, 10)
+	overlay.BackgroundTransparency = 0.8
+	overlay.Visible = false
+	overlay.ZIndex = 40
+	overlay.Parent = gui
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 1)
+	label.Position = UDim2.new(0.5, 0, 1, -150)
+	label.Size = UDim2.new(0, 460, 0, 30)
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 22
+	label.TextColor3 = Color3.fromRGB(255, 225, 225)
+	label.TextStrokeTransparency = 0.2
+	label.ZIndex = 41
+	label.Parent = overlay
+
+	local function refresh()
+		local remaining = player:GetAttribute("DownedBleedRemaining") or 0
+		label.Text = ("CAÍDO — esperando a un aliado (%ds)"):format(math.ceil(remaining))
+	end
+
+	player:GetAttributeChangedSignal("Downed"):Connect(function()
+		overlay.Visible = player:GetAttribute("Downed") == true
+		refresh()
+	end)
+	player:GetAttributeChangedSignal("DownedBleedRemaining"):Connect(refresh)
+end
+
 function HudUI.start()
 	-- Hide Roblox's default backpack toolbar; our hotbar replaces it.
 	pcall(function()
@@ -531,6 +568,9 @@ function HudUI.start()
 
 	-- ---- active effects (buffs/debuffs) ----
 	makeEffectsPanel(gui)
+
+	-- ---- downed state overlay ----
+	makeDownedOverlay(gui)
 
 	-- ---- hotbar ----
 	local hotbarSize = HOTBAR_SIZE
@@ -890,6 +930,21 @@ function HudUI.start()
 		humanoid.HealthChanged:Connect(update)
 		humanoid:GetPropertyChangedSignal("MaxHealth"):Connect(update)
 		update()
+
+		-- The server's revive ProximityPrompt (HealthService) is parented
+		-- to whoever's downed, including yourself — you can't revive
+		-- yourself, so hide it locally rather than let it dangle in your
+		-- own face. Local-only: doesn't touch what other players see.
+		local root = character:WaitForChild("HumanoidRootPart")
+		local function hideOwnRevivePrompt(inst)
+			if inst:IsA("ProximityPrompt") and inst.Name == "RevivePrompt" then
+				inst.Enabled = false
+			end
+		end
+		for _, child in ipairs(root:GetChildren()) do
+			hideOwnRevivePrompt(child)
+		end
+		root.ChildAdded:Connect(hideOwnRevivePrompt)
 
 		-- Keep the equipped-slot highlight in sync as tools are (un)equipped.
 		character.ChildAdded:Connect(function(child)

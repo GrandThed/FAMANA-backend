@@ -10,8 +10,8 @@ CREATE TABLE IF NOT EXISTS players (
     xp           BIGINT      NOT NULL DEFAULT 0,
     hotbar_binds JSONB       NOT NULL DEFAULT '{}'::jsonb, -- ["3".."0" key slot] = itemId
     settings     JSONB       NOT NULL DEFAULT '{}'::jsonb, -- client prefs (trait tracker mode, ...)
-    granted_starter_items JSONB NOT NULL DEFAULT '[]'::jsonb, -- itemIds ever granted as starter kit
-    current_class TEXT       NOT NULL DEFAULT 'knight',    -- knight|archer|mage|summoner
+     granted_starter_items JSONB NOT NULL DEFAULT '[]'::jsonb, -- itemIds ever granted as starter kit
+    current_class TEXT       NOT NULL DEFAULT 'knight',    -- knight|archer|mage|
     class_levels JSONB       NOT NULL DEFAULT '{}'::jsonb, -- { [classId]: { level, xp } }
     cell         TEXT        NOT NULL DEFAULT 'A',
     pos_x        REAL        NOT NULL DEFAULT 0,

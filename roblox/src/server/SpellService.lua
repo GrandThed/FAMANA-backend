@@ -6,7 +6,7 @@
 --     remote (known + newlyUnlocked + recommended order);
 --   * the CastSpell remote: validation (known, alive, cooldown, mana), then
 --     dispatch to a behavior (projectile / zone / strike / aoe / buff /
---     taunt / summon);
+--     taunt / summon / heal / line);
 --   * per-spell cooldowns, mirrored to the client as SpellCd_<id> player
 --     attributes holding the expiry on the server clock (like Effect_<id>);
 --   * subclass passives (+% damage / armor), fed into EnemyService's damage
@@ -29,6 +29,7 @@ local ManaService = require(script.Parent.ManaService)
 local EnemyService = require(script.Parent.EnemyService)
 local EffectService = require(script.Parent.EffectService)
 local SynergyService = require(script.Parent.SynergyService)
+local HealthService = require(script.Parent.HealthService)
 
 local SpellService = {}
 
@@ -379,6 +380,112 @@ function BEHAVIORS.taunt(player, root, def)
 	end
 end
 
+-- ---- healing (Cleric) -----------------------------------------------------------
+-- Outgoing-heal roll: base amount * (1 + healing-school passives). Mirrors
+-- EnemyService.computePlayerDamage's shape but heals don't crit.
+local function computeHeal(player, baseAmount)
+	local healing = Spells.passivesFor(SynergyService.getSchoolPoints(player)).healing
+	return math.max(1, math.floor(baseAmount * (1 + healing) + 0.5))
+end
+
+-- Every other player within `radius` of `position` that's alive, as
+-- { player, root, humanoid }. Used by both the "heal" auto-target and the
+-- "line" behavior's ally sweep.
+local function alliesNear(position, radius, exclude)
+	local list = {}
+	for _, other in ipairs(Players:GetPlayers()) do
+		if other ~= exclude then
+			local character = other.Character
+			local otherRoot = character and character:FindFirstChild("HumanoidRootPart")
+			local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+			if otherRoot and humanoid and humanoid.Health > 0
+				and (otherRoot.Position - position).Magnitude <= radius then
+				table.insert(list, { player = other, root = otherRoot, humanoid = humanoid })
+			end
+		end
+	end
+	return list
+end
+
+-- Smart-heal auto-target: the lowest-HP% ally in range that isn't already
+-- full, falling back to self. No manual target-picking UI needed for this
+-- first pass — every heal spell just finds whoever needs it most.
+local function acquireHealTarget(player, root, range)
+	local best, bestRatio
+	for _, ally in ipairs(alliesNear(root.Position, range, player)) do
+		if ally.humanoid.Health < ally.humanoid.MaxHealth then
+			local ratio = ally.humanoid.Health / ally.humanoid.MaxHealth
+			if not bestRatio or ratio < bestRatio then
+				best, bestRatio = ally, ratio
+			end
+		end
+	end
+	if best then
+		return best
+	end
+	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if humanoid and humanoid.Health > 0 and humanoid.Health < humanoid.MaxHealth then
+		return { player = player, root = root, humanoid = humanoid }
+	end
+	return nil
+end
+
+-- Single-target instant heal (Toque Curativo, Renacimiento's flat-% variant).
+function BEHAVIORS.heal(player, root, def)
+	local target = acquireHealTarget(player, root, def.range)
+	if not target then
+		return nil, "No one needs healing"
+	end
+	return function()
+		local base = def.healPercent and (target.humanoid.MaxHealth * def.healPercent) or def.healAmount
+		local amount = computeHeal(player, base)
+		HealthService.heal(target.player, amount)
+		burst(target.root.Position, Color3.fromRGB(160, 255, 190), 4, 0.3)
+	end
+end
+
+-- Instant line/box strike in front of the caster: enemies inside take
+-- damage, allies inside get healed, in the same pass (Golpe Sagrado).
+function BEHAVIORS.line(player, root, def)
+	return function()
+		local look = root.CFrame.LookVector
+		local flat = Vector3.new(look.X, 0, look.Z)
+		flat = flat.Magnitude > 0.05 and flat.Unit or Vector3.new(0, 0, -1)
+		local pos = groundPosition(root.Position + flat * def.frontDistance)
+		local centerCF = CFrame.lookAt(pos, pos + flat)
+		local halfWidth, halfDepth = def.box.width / 2 + 1, def.box.depth / 2 + 1
+
+		local visual = makeCosmeticPart({
+			Name = "SpellLine",
+			Size = Vector3.new(def.box.width, def.box.height, def.box.depth),
+			Color = def.color,
+			Transparency = 0.4,
+			CFrame = centerCF * CFrame.new(0, def.box.height / 2, 0),
+		})
+		visual.Parent = Workspace
+		local fade = TweenService:Create(visual, TweenInfo.new(0.35), { Transparency = 1 })
+		fade.Completed:Connect(function()
+			visual:Destroy()
+		end)
+		fade:Play()
+
+		local searchRadius = math.max(def.box.width, def.box.depth)
+		for _, ref in ipairs(EnemyService.enemiesNear(centerCF.Position, searchRadius)) do
+			local lp = centerCF:PointToObjectSpace(ref.part.Position)
+			if math.abs(lp.X) <= halfWidth and math.abs(lp.Z) <= halfDepth then
+				local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
+				EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+			end
+		end
+		for _, ally in ipairs(alliesNear(centerCF.Position, searchRadius, nil)) do
+			local lp = centerCF:PointToObjectSpace(ally.root.Position)
+			if math.abs(lp.X) <= halfWidth and math.abs(lp.Z) <= halfDepth then
+				HealthService.heal(ally.player, computeHeal(player, def.healAmount))
+			end
+		end
+	end
+end
+
 -- ---- familiars ----------------------------------------------------------------
 
 local FAMILIAR_LOOKS = {
@@ -517,7 +624,7 @@ local function tryCast(player, spellId)
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-	if not root or not humanoid or humanoid.Health <= 0 then
+	if not root or not humanoid or humanoid.Health <= 0 or HealthService.isDowned(player) then
 		return
 	end
 

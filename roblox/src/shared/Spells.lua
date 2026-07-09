@@ -54,9 +54,10 @@ Spells.schools = {
 	invoker = {
 		id = "invoker",
 		name = "Invoker",
-		-- The board makes the summoner a mage subclass; the standalone
-		-- summoner class shares it until that open question is settled.
-		classIds = { "mage", "summoner" },
+		-- Settled: the summoner class is gone (replaced by Cleric); this
+		-- stays a mage-only subclass. classIds is flavor/metadata either way
+		-- — points decide what a player can actually use.
+		classIds = { "mage" },
 		icon = "👻",
 		color = Color3.fromRGB(120, 220, 180),
 		passive = {
@@ -132,6 +133,52 @@ Spells.schools = {
 		color = Color3.fromRGB(90, 210, 230),
 		spells = { { "sprint", 1 } },
 	},
+
+	-- ---- Cleric ---------------------------------------------------------------
+	-- Sacerdote/Oráculo use the new "healing" passive stat (see
+	-- Spells.passivesFor) — a flat multiplier on outgoing heals, exactly
+	-- like "magic"/"physical" are for damage. Vengador Sagrado hits enemies
+	-- AND heals allies in the same swing, so it scales off "magic" instead.
+	-- Only each school's level-1 spell is implemented this pass (see
+	-- `implemented = false` below) — enough to test the healing stat and
+	-- the new heal/line behaviors; the rest are full defs already so the
+	-- tracker/thresholds are correct, just not castable yet.
+	sacerdote_luz = {
+		id = "sacerdote_luz",
+		name = "Sacerdote de Luz",
+		classIds = { "cleric" },
+		icon = "✨",
+		color = Color3.fromRGB(255, 230, 170),
+		passive = {
+			stat = "healing",
+			thresholds = { { 1, 0.10 }, { 5, 0.18 }, { 10, 0.25 }, { 15, 0.38 }, { 20, 0.45 } },
+		},
+		spells = { { "toque_curativo", 1 }, { "bendicion", 10 }, { "renacimiento", 20 } },
+	},
+	vengador_sagrado = {
+		id = "vengador_sagrado",
+		name = "Vengador Sagrado",
+		classIds = { "cleric" },
+		icon = "⚔️",
+		color = Color3.fromRGB(230, 190, 90),
+		passive = {
+			stat = "magic",
+			thresholds = { { 1, 0.08 }, { 5, 0.14 }, { 10, 0.22 }, { 15, 0.30 }, { 20, 0.42 } },
+		},
+		spells = { { "golpe_sagrado", 1 }, { "represalia", 10 }, { "juicio_divino", 20 } },
+	},
+	oraculo = {
+		id = "oraculo",
+		name = "Oráculo",
+		classIds = { "cleric" },
+		icon = "👁️",
+		color = Color3.fromRGB(140, 210, 220),
+		passive = {
+			stat = "healing",
+			thresholds = { { 1, 0.08 }, { 5, 0.14 }, { 10, 0.22 }, { 15, 0.30 }, { 20, 0.40 } },
+		},
+		spells = { { "purificar", 1 }, { "vinculo_espiritual", 10 }, { "intervencion", 20 } },
+	},
 }
 
 -- Stable iteration/UI order.
@@ -139,10 +186,13 @@ Spells.schoolOrder = {
 	"pyromancer", "arcanist", "invoker",
 	"berserker", "sentinel", "justicar",
 	"sniper", "trapper", "scout",
+	"sacerdote_luz", "vengador_sagrado", "oraculo",
 }
 
 -- ---- spell defs ---------------------------------------------------------------
--- behavior: "projectile" | "zone" | "strike" | "aoe" | "buff" | "taunt" | "summon".
+-- behavior: "projectile" | "zone" | "strike" | "aoe" | "buff" | "taunt" | "summon"
+--         | "heal" (single target, auto-picks the neediest ally in range)
+--         | "line" (instant box in front — damages enemies, heals allies).
 -- hotbarPriority orders the recommended loadout (lower = earlier slot).
 -- implemented = false marks board placeholders that can't be cast yet.
 
@@ -462,6 +512,110 @@ Spells.defs = {
 		effectId = "sprint",
 		hotbarPriority = 40,
 	},
+
+	-- ---- Cleric -----------------------------------------------------------------
+	-- Only the level-1 spell per school is implemented this pass (enough to
+	-- test the new "healing" passive stat + heal/line behaviors). The rest
+	-- are full defs so thresholds/tooltips are correct, just not castable
+	-- yet — see docs/TRAITS_AND_SPELLS.md "open questions" for the plan.
+	toque_curativo = {
+		id = "toque_curativo",
+		name = "Toque Curativo",
+		school = "sacerdote_luz",
+		icon = "✨",
+		description = "Instantly heals an ally — auto-targets whoever nearby needs it most.",
+		behavior = "heal",
+		manaCost = 25,
+		cooldown = 6,
+		range = 30,
+		healAmount = 50,
+		hotbarPriority = 10,
+	},
+	bendicion = {
+		id = "bendicion",
+		name = "Bendición",
+		school = "sacerdote_luz",
+		icon = "🕊️",
+		description = "Shields an ally and speeds up their regen for a few seconds.",
+		implemented = false,
+		hotbarPriority = 30,
+	},
+	renacimiento = {
+		id = "renacimiento",
+		name = "Renacimiento",
+		school = "sacerdote_luz",
+		icon = "💫",
+		description = "Ultimate: an emergency heal that fills an ally to half their max HP. "
+			.. "(A true revive-while-downed needs its own downed-state system — next pass.)",
+		behavior = "heal",
+		manaCost = 60,
+		cooldown = 90,
+		range = 30,
+		healPercent = 0.5,
+		hotbarPriority = 50,
+	},
+	golpe_sagrado = {
+		id = "golpe_sagrado",
+		name = "Golpe Sagrado",
+		school = "vengador_sagrado",
+		icon = "⚔️",
+		description = "A holy line strike: damages enemies and heals allies it passes through.",
+		behavior = "line",
+		damageKind = "magic",
+		manaCost = 25,
+		cooldown = 5,
+		frontDistance = 20,
+		box = { width = 6, depth = 40, height = 6 },
+		damage = 16,
+		healAmount = 16,
+		color = Color3.fromRGB(230, 190, 90),
+		hotbarPriority = 11,
+	},
+	represalia = {
+		id = "represalia",
+		name = "Represalia",
+		school = "vengador_sagrado",
+		icon = "🩸",
+		description = "Minor lifesteal for the whole party for a few seconds.",
+		implemented = false,
+		hotbarPriority = 31,
+	},
+	juicio_divino = {
+		id = "juicio_divino",
+		name = "Juicio Divino",
+		school = "vengador_sagrado",
+		icon = "☀️",
+		description = "Ultimate: a channeled nuke — the damage it deals also heals the party.",
+		implemented = false,
+		hotbarPriority = 51,
+	},
+	purificar = {
+		id = "purificar",
+		name = "Purificar",
+		school = "oraculo",
+		icon = "🌿",
+		description = "Cleanses an ally's debuffs and briefly prevents new ones.",
+		implemented = false,
+		hotbarPriority = 12,
+	},
+	vinculo_espiritual = {
+		id = "vinculo_espiritual",
+		name = "Vínculo Espiritual",
+		school = "oraculo",
+		icon = "🔗",
+		description = "Links two allies (or you to one) so heals on either also heal the other.",
+		implemented = false,
+		hotbarPriority = 32,
+	},
+	intervencion = {
+		id = "intervencion",
+		name = "Intervención",
+		school = "oraculo",
+		icon = "🕯️",
+		description = "Ultimate: an ally can't die for 5 seconds.",
+		implemented = false,
+		hotbarPriority = 52,
+	},
 }
 
 -- ---- lookups -------------------------------------------------------------------
@@ -534,7 +688,7 @@ end
 -- through different gear, TFT-style).
 -- Returns { magic = frac, physical = frac, melee = frac, armor = flat }.
 function Spells.passivesFor(schoolPoints)
-	local out = { magic = 0, physical = 0, melee = 0, armor = 0 }
+	local out = { magic = 0, physical = 0, melee = 0, armor = 0, healing = 0 }
 	for _, schoolId in ipairs(Spells.schoolOrder) do
 		local points = tonumber(schoolPoints and schoolPoints[schoolId]) or 0
 		local passive = points > 0 and Spells.schools[schoolId].passive or nil
@@ -548,6 +702,8 @@ function Spells.passivesFor(schoolPoints)
 				out.melee += value
 			elseif passive.stat == "armor" then
 				out.armor += value
+			elseif passive.stat == "healing" then
+				out.healing += value
 			end
 		end
 	end
@@ -571,6 +727,8 @@ end
 function Spells.passiveLabel(stat, value)
 	if stat == "armor" then
 		return ("+%d armor"):format(value)
+	elseif stat == "healing" then
+		return ("+%d%% healing"):format(math.floor(value * 100 + 0.5))
 	end
 	local kind = stat == "magic" and "magic damage" or "physical damage"
 	return ("+%d%% %s"):format(math.floor(value * 100 + 0.5), kind)

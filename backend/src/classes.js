@@ -2,7 +2,7 @@
 // needs to know which ids are valid and what a fresh class-levels blob looks
 // like — the passive stat multipliers themselves are Roblox-only.
 
-export const CLASS_IDS = ["knight", "archer", "mage", "summoner"];
+export const CLASS_IDS = ["knight", "archer", "mage", "cleric"];
 
 export const DEFAULT_CLASS = "knight";
 

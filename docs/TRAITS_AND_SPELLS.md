@@ -228,13 +228,25 @@ spells and weapon swings**. All numbers are first-pass and live in
 |---|---|---|---|---|
 | Pyromancer / Piromante (mage) | Fireball — projectile + splash | Flame Wall — burning wall zone | SuperNova — huge self AoE | +10…55% magic dmg |
 | Arcanist / Arcano (mage) | Arcane Missile — fast/cheap bolt | Arcane Rain — zone on target | Arcane Storm — big zone | +10…50% magic dmg |
-| Invoker / Invocador (mage/summoner) | Summon Familiar — pet that orbits + shoots | 2nd familiar (passive) · Arcane Rain at 15 | Grand Familiar — big angry pet | +6…35% magic dmg |
+| Invoker / Invocador (mage) | Summon Familiar — pet that orbits + shoots | 2nd familiar (passive) · Arcane Rain at 15 | Grand Familiar — big angry pet | +6…35% magic dmg |
 | Berserker (knight) | Battle Cry — +physical dmg buff | Savage Strike — heavy strike | Frenzy — big damage + speed buff | +10…50% physical dmg |
 | Sentinel / Centinela (knight) | Provoke — taunt + guard buff | Steel Loyalty — armor buff (allies too) | Bulwark — 50% damage taken, allies too | +8…42 armor |
 | Justicar / Justiciero (knight) | Stunning Strike — strike + stun | Judgment — AoE + mini-stun | Verdict — huge strike + long stun | +10…35% physical dmg |
 | Sniper / Francotirador (ranger) | Deadeye Shot — precision shot (needs focus) | — | — | — |
 | Trapper / Trampero (ranger) | Snare Trap — slow zone in front of you | — | — | — |
 | Scout / Explorador (ranger) | Sprint — speed buff | — | — | — |
+| Sacerdote de Luz (cleric) | Toque Curativo — heal, auto-targets neediest ally ✅ | Bendición — shield + fast regen (not built yet) | Renacimiento — emergency heal to 50% max HP (not built yet; true revive-while-downed is future work) | +10…45% healing |
+| Vengador Sagrado (cleric) | Golpe Sagrado — line strike, dmg to enemies + heal to allies in it ✅ | Represalia — party lifesteal (not built yet) | Juicio Divino — channeled nuke, dmg heals party (not built yet) | +8…42% magic dmg |
+| Oráculo (cleric) | Purificar — cleanse + debuff immunity (not built yet) | Vínculo Espiritual — link two allies' healing (not built yet) | Intervención — 5s can't-die on an ally (not built yet) | +8…40% healing |
+
+The Cleric's three level-1 spells (✅) are live; the other six are full defs
+(so the tracker/thresholds are correct) with `implemented = false` — same
+board-placeholder pattern the ranger spells' `implemented` flag exists for,
+just actually used here for the first time. Each needs its own new plumbing
+before it can be built (a shield/HoT effect type, real party-membership
+lookups for Represalia, a cast-time/channel system for Juicio Divino, a
+debuff-on-players concept for Purificar to cleanse, cross-player heal
+propagation for Vínculo Espiritual, a damage-clamp hook for Intervención).
 
 The three ranger spells are **proposals** (the board only says
 burst/CC/movement) — rename/redesign freely. Ultimates without board names
@@ -337,7 +349,11 @@ right mix of gear.
 - Snare Trap is a **visible** slow zone; a real hidden, one-shot trigger trap
   is still future work. No knockback primitive exists for SuperNova.
 - Rest of the game is still Spanish (class names Caballero/Arquero/Mago/
-  Invocador, class picker, some UI). Translate everything for consistency?
+  Clérigo, class picker, some UI). Translate everything for consistency?
+- Cleric (replacing the old standalone Summoner class — Invoker stays a
+  mage-only subclass now) has its three schools now (Sacerdote de
+  Luz/Vengador Sagrado/Oráculo, see the table above) — only each one's
+  level-1 spell is built so far, the rest are placeholders.
 - Do enemies eventually need diminishing returns too? (A stun-chain can
   perma-lock a single mob — fun vs. degenerate once bosses exist.)
 

@@ -52,24 +52,24 @@ Classes.defs = {
 		walkSpeedMult = 0.95,
 		critChanceBonus = 0.05,
 	},
-	summoner = {
-		id = "summoner",
-		name = "Invocador",
-		description = "Maná alto pensado para invocaciones (próximamente). Combate débil por ahora.",
-		hpMult = 0.85,
-		maxManaMult = 1.50,
-		manaRegenMult = 1.30,
-		meleeDamageMult = 0.70,
-		rangedDamageMult = 0.75,
-		magicDamageMult = 0.90,
-		damageTakenMult = 1.10,
+	cleric = {
+		id = "cleric",
+		name = "Clérigo",
+		description = "Magia curativa y de soporte. El corazón de toda party.",
+		hpMult = 1.05,
+		maxManaMult = 1.40,
+		manaRegenMult = 1.25,
+		meleeDamageMult = 0.85,
+		rangedDamageMult = 0.80,
+		magicDamageMult = 1.10,
+		damageTakenMult = 0.95,
 		walkSpeedMult = 1.00,
 		critChanceBonus = 0.00,
 	},
 }
 
 -- Display order for UI pickers.
-Classes.order = { "knight", "archer", "mage", "summoner" }
+Classes.order = { "knight", "archer", "mage", "cleric" }
 
 Classes.DEFAULT = "knight"
 
