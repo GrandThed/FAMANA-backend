@@ -1,0 +1,36 @@
+-- Sonido de swing de arma/herramienta, distinto según el tipo (melee/
+-- ranged/magic/tool). server/ToolService.lua ya dispara SwingRemote por
+-- cada golpe válido (con su propio debounce de 0.4s ahí adentro —
+-- SWING_COOLDOWN — así que este sonido ya viene naturalmente limitado sin
+-- que tengamos que throttlear nada acá).
+--
+-- El daño en sí (dealDamage en EnemyService) todavía NO tiene ese mismo
+-- límite — se puede spamear el click y pegar de más — así que el sonido de
+-- IMPACTO (hit/critHit) vive en DamageIndicatorUI con Sfx.playThrottled en
+-- vez de Sfx.play, como parche de audio hasta que exista un cooldown real
+-- de combate.
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
+local Sfx = require(script.Parent.Sfx)
+
+local CombatSfx = {}
+
+-- styleName llega de ToolService.swingStyleFor: "slash" (espadas melee),
+-- "draw" (arcos), "cast" (varitas/staffs mágicos) o "chop" (herramientas,
+-- hacha/pico). Cada uno con su propio SFX registrado en Sfx.lua.
+local SOUND_BY_STYLE = {
+	slash = "swingMelee",
+	draw = "swingRanged",
+	cast = "swingMagic",
+	chop = "swing",
+}
+
+function CombatSfx.start()
+	Remotes.get("SwingRemote").OnClientEvent:Connect(function(styleName)
+		Sfx.play(SOUND_BY_STYLE[styleName] or "swing")
+	end)
+end
+
+return CombatSfx

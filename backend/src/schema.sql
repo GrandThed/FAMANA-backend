@@ -31,6 +31,9 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS settings JSONB NOT NULL DEFAULT '{}
 ALTER TABLE players ADD COLUMN IF NOT EXISTS current_class TEXT NOT NULL DEFAULT 'knight';
 ALTER TABLE players ADD COLUMN IF NOT EXISTS class_levels JSONB NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE players ADD COLUMN IF NOT EXISTS granted_starter_items JSONB NOT NULL DEFAULT '[]'::jsonb;
+-- Quest progress: { [questId]: { status: "active"|"completed", objectives: { [objectiveId]: count } } }.
+-- Same shape as the old in-memory QuestService.progress table.
+ALTER TABLE players ADD COLUMN IF NOT EXISTS quest_progress JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper

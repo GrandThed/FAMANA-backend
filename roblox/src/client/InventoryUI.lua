@@ -49,6 +49,7 @@ local SpellTrackerUI = require(script.Parent.SpellTrackerUI)
 local Theme = require(script.Parent.Theme)
 local TopRightMenu = require(script.Parent.TopRightMenu)
 local UIKit = require(script.Parent.UIKit)
+local Sfx = require(script.Parent.Sfx)
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -662,10 +663,14 @@ function InventoryUI.start()
 			if not (ok and typeof(result) == "table" and result.ok == true) then
 				return
 			end
+			Sfx.play("unequip")
 		end
-		pcall(function()
+		local ok2, result2 = pcall(function()
 			return moveItemRemote:InvokeServer(from, equipRef)
 		end)
+		if ok2 and typeof(result2) == "table" and result2.ok == true then
+			Sfx.play("equip")
+		end
 	end
 
 	-- Occupied slots rest at their item's rarity color, empty ones at the
@@ -908,6 +913,18 @@ function InventoryUI.start()
 			return
 		end
 		render(currentInventory)
+
+		-- Sonido en el mismo momento que el cambio optimista se ve en
+		-- pantalla, no cuando el server confirma (mismo criterio que el
+		-- resto de este archivo: se revierte solo si el server rechaza).
+		if not isWorldDrop then
+			if target.containerId == "equipment" then
+				Sfx.play("equip")
+			elseif from.containerId == "equipment" then
+				Sfx.play("unequip")
+			end
+		end
+
 		local generationAtMove = serverGeneration
 
 		task.spawn(function()
@@ -1057,12 +1074,15 @@ function InventoryUI.start()
 					if slotIndex and moveItemRemote then
 						hideTooltip()
 						task.spawn(function()
-							pcall(function()
+							local ok, result = pcall(function()
 								return moveItemRemote:InvokeServer(
 									{ containerId = "main", x = entryNow.x, y = entryNow.y },
 									{ containerId = "equipment", x = slotIndex, y = 0 }
 								)
 							end)
+							if ok and typeof(result) == "table" and result.ok == true then
+								Sfx.play("equip")
+							end
 						end)
 					end
 					return
@@ -1233,9 +1253,12 @@ function InventoryUI.start()
 					elseif moveItemRemote then
 						hideTooltip()
 						task.spawn(function()
-							pcall(function()
+							local ok, result = pcall(function()
 								return moveItemRemote:InvokeServer(slotRef, spot)
 							end)
+							if ok and typeof(result) == "table" and result.ok == true then
+								Sfx.play("unequip")
+							end
 						end)
 					end
 					return
@@ -1426,6 +1449,10 @@ function InventoryUI.start()
 	-- ---- toggling ------------------------------------------------------------
 	local function toggle()
 		isOpen = not isOpen
+		-- Un solo choke point para botón (top-right) Y tecla B — así ambos
+		-- caminos suenan igual, en vez de depender del uiClick genérico que
+		-- solo dispara si tocaste el botón.
+		Sfx.play(isOpen and "panelOpen" or "panelClose")
 		-- Free the cursor (via ShiftLockController) while the panel is open.
 		ClientState.inventoryOpen = isOpen
 		if isOpen then

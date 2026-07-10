@@ -10,6 +10,7 @@ local Workspace = game:GetService("Workspace")
 
 local Theme = require(script.Parent.Theme)
 local Icons = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Icons"))
+local Sfx = require(script.Parent.Sfx)
 
 local UIKit = {}
 
@@ -111,6 +112,9 @@ function UIKit.closeButton(parent, size)
 	stroke.Parent = button
 
 	UIKit.hover(button, Theme.Color.Blood600, Theme.Color.Blood500)
+	button.Activated:Connect(function()
+		Sfx.play("uiClick")
+	end)
 	return button
 end
 
@@ -177,6 +181,9 @@ function UIKit.primaryButton(parent, text)
 		pressed = false
 		restyle()
 	end)
+	button.Activated:Connect(function()
+		Sfx.play("uiClick")
+	end)
 	return button
 end
 
@@ -201,6 +208,9 @@ function UIKit.ghostButton(parent, text)
 	stroke.Parent = button
 
 	UIKit.hover(button, Theme.Color.Ink700, Theme.Color.Ink650)
+	button.Activated:Connect(function()
+		Sfx.play("uiClick")
+	end)
 	return button
 end
 

@@ -19,12 +19,15 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Traits = require(Shared:WaitForChild("Traits"))
 local Spells = require(Shared:WaitForChild("Spells"))
+local Config = require(Shared:WaitForChild("Config"))
+local Classes = require(Shared:WaitForChild("Classes"))
 
 local PlayerService = require(script.Parent.PlayerService)
 local EnemyService = require(script.Parent.EnemyService)
 local ToolService = require(script.Parent.ToolService)
 local EffectService = require(script.Parent.EffectService)
 local HealthService = require(script.Parent.HealthService)
+local ClassService = require(script.Parent.ClassService)
 
 local SynergyService = {}
 
@@ -78,11 +81,41 @@ recompute = function(player)
 			schoolPoints[id] = points
 		end
 	end
-	statsCache[player.UserId] = Traits.statsFor(totals)
+	local stats = Traits.statsFor(totals)
+	statsCache[player.UserId] = stats
 	schoolCache[player.UserId] = schoolPoints
 	player:SetAttribute("TraitPoints", HttpService:JSONEncode(totals))
 	-- Max HP depends on the Brawler tier; re-derive it right away.
 	HealthService.refreshMaxHealth(player)
+
+	-- Derived read-only stats for CharacterUI: crit chance, HP regen/s and
+	-- mana regen/s. These already drive real gameplay elsewhere (EnemyService
+	-- crit rolls, HealthService/ManaService regen ticks) — this just exposes
+	-- the same numbers as attributes so the Character window can show them
+	-- without a remote, same pattern as Armor/AttackDamage/etc.
+	local classDef = ClassService.getDef(player)
+	local level = ClassService.getLevel(player)
+	local classStats = Classes.statsAtLevel(classDef, level)
+
+	local critChance = Config.Combat.critChance + classDef.critChanceBonus + (stats.crit or 0)
+	player:SetAttribute("CritChance", math.clamp(critChance, 0, 1))
+
+	player:SetAttribute("DodgeChance", math.clamp(stats.dodge or 0, 0, 1))
+
+	-- Brawler's trickle applies even in combat, so it's always "live" —
+	-- unlike the base regen, which only kicks in after regenDelay seconds
+	-- out of combat (the Character window notes that distinction).
+	local hpMult = 1 + (stats.hp or 0)
+	local effectiveMaxHp = classStats.hp * hpMult
+	local brawlerRegenPerSec = (stats.regen or 0) * effectiveMaxHp
+	player:SetAttribute("HpRegenPerSec", Config.HP.regenAmount / Config.HP.regenInterval)
+	player:SetAttribute("HpRegenAlwaysOnPerSec", brawlerRegenPerSec)
+
+	player:SetAttribute(
+		"ManaRegenPerSec",
+		(Config.Mana.regenAmount * classDef.manaRegenMult) / Config.Mana.regenInterval
+	)
+
 	for _, fn in ipairs(recomputedCallbacks) do
 		task.spawn(fn, player)
 	end

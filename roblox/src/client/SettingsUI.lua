@@ -20,6 +20,7 @@ local PlayerSettings = require(script.Parent.PlayerSettings)
 local Theme = require(script.Parent.Theme)
 local TopRightMenu = require(script.Parent.TopRightMenu)
 local UIKit = require(script.Parent.UIKit)
+local Sfx = require(script.Parent.Sfx)
 
 local player = Players.LocalPlayer
 
@@ -186,9 +187,11 @@ function SettingsUI.start()
 
 	openBtn.Activated:Connect(function()
 		panel.Visible = not panel.Visible
+		Sfx.play(panel.Visible and "panelOpen" or "panelClose")
 	end)
 	closeBtn.Activated:Connect(function()
 		panel.Visible = false
+		Sfx.play("panelClose")
 	end)
 end
 

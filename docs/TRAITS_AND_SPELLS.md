@@ -235,7 +235,7 @@ spells and weapon swings**. All numbers are first-pass and live in
 | Sniper / Francotirador (ranger) | Deadeye Shot — precision shot (needs focus) | — | — | — |
 | Trapper / Trampero (ranger) | Snare Trap — slow zone in front of you | — | — | — |
 | Scout / Explorador (ranger) | Sprint — speed buff | — | — | — |
-| Sacerdote de Luz (cleric) | Toque Curativo — heal, auto-targets neediest ally ✅ | Bendición — shield + fast regen (not built yet) | Renacimiento — emergency heal to 50% max HP (not built yet; true revive-while-downed is future work) | +10…45% healing |
+| Sacerdote de Luz (cleric) | Toque Curativo — heal, auto-targets neediest ally ✅ | Bendición — shield + fast regen (not built yet) | Renacimiento — instantly revives a downed ally at 50% max HP, skips their bleed timer ✅ | +10…45% healing |
 | Vengador Sagrado (cleric) | Golpe Sagrado — line strike, dmg to enemies + heal to allies in it ✅ | Represalia — party lifesteal (not built yet) | Juicio Divino — channeled nuke, dmg heals party (not built yet) | +8…42% magic dmg |
 | Oráculo (cleric) | Purificar — cleanse + debuff immunity (not built yet) | Vínculo Espiritual — link two allies' healing (not built yet) | Intervención — 5s can't-die on an ally (not built yet) | +8…40% healing |
 

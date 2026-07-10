@@ -21,6 +21,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local ArtKit = require(Shared:WaitForChild("ArtKit"))
+local Classes = require(Shared:WaitForChild("Classes"))
 
 local V = Vector3.new
 
@@ -246,13 +247,19 @@ local function dodgePopup(character)
 	end)
 end
 
--- The full outgoing-damage roll for a player: class multiplier, hook
--- multipliers (effects + passives), then the crit roll. Used by weapon swings
--- here and by SpellService for spell damage. Returns (damage, isCrit).
+-- The full outgoing-damage roll for a player: AD/AP (from class + level, see
+-- shared/Classes.lua), hook multipliers (effects + passives), then the crit
+-- roll. Used by weapon swings here and by SpellService for spell damage.
+-- Returns (damage, isCrit).
+--
+-- `baseDamage` (a weapon/spell def's own flat damage) is intentionally
+-- IGNORED: AD (melee + physical/bow) and AP (magic) alone determine
+-- outgoing damage now — the plan is for equipment to eventually carry no
+-- stats of its own. The param is kept so existing call sites (which still
+-- pass def.damage) don't need to change.
 function EnemyService.computePlayerDamage(player, baseDamage, damageKind, opts)
-	local damage = baseDamage
-		* ClassService.getDamageMult(player, damageKind)
-		* hookedDamageMult(player, damageKind)
+	local stat = damageKind == "magic" and ClassService.getAP(player) or ClassService.getAD(player)
+	local damage = stat * hookedDamageMult(player, damageKind)
 
 	local isCrit = false
 	if not (opts and opts.noCrit) then
@@ -614,9 +621,10 @@ local function updateEnemy(enemy, dt)
 				if math.random() < hookedDodgeChance(target) then
 					dodgePopup(target.Character)
 				else
+					local mitigation = Classes.mitigation(ClassService.getArmor(target))
 					HealthService.damagePlayer(
 						target,
-						enemy.damage * ClassService.getDamageTakenMult(target) * hookedDamageTakenMult(target)
+						enemy.damage * (1 - mitigation) * hookedDamageTakenMult(target)
 					)
 					HealthService.registerDamage(target) -- pause the player's regen
 					for _, fn in ipairs(EnemyService.playerHitHandlers) do

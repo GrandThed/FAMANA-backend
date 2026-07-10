@@ -51,13 +51,13 @@ export default async function playerRoutes(fastify) {
   });
 
   // Save coarse fields (health, gold, level, xp, class + per-class levels,
-  // hotbar binds, client settings, cell, position).
+  // hotbar binds, client settings, quest progress, cell, position).
   fastify.post("/player/:id/save", async (request, reply) => {
     const id = parseId(request, reply);
     if (id === null) return;
 
-    const { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, cell, position } = request.body || {};
-    const ok = await savePlayer(id, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, cell, position });
+    const { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, cell, position } = request.body || {};
+    const ok = await savePlayer(id, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, cell, position });
     if (!ok) {
       reply.code(404);
       return { error: "not_found" };

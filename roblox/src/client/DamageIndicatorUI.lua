@@ -8,6 +8,7 @@ local Workspace = game:GetService("Workspace")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local Theme = require(script.Parent.Theme)
+local Sfx = require(script.Parent.Sfx)
 
 local DamageIndicatorUI = {}
 
@@ -90,6 +91,11 @@ function DamageIndicatorUI.start()
 			return
 		end
 		damageText(amount, isCrit == true, position)
+		-- playThrottled, no play: dealDamage (server/EnemyService.lua) todavía
+		-- no tiene cooldown propio, así que esto es lo único que evita que
+		-- clickear rápido sature de sonido hasta que eso se resuelva del
+		-- lado del gameplay.
+		Sfx.playThrottled(isCrit and "critHit" or "hit", 0.07)
 	end)
 end
 

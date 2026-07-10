@@ -20,6 +20,7 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 local Theme = require(script.Parent.Theme)
 local TopRightMenu = require(script.Parent.TopRightMenu)
 local UIKit = require(script.Parent.UIKit)
+local Sfx = require(script.Parent.Sfx)
 
 local player = Players.LocalPlayer
 
@@ -392,6 +393,7 @@ function CraftUI.start()
 	-- ---- toggling ---------------------------------------------------------------
 	local function setOpen(open)
 		isOpen = open
+		Sfx.play(isOpen and "panelOpen" or "panelClose")
 		panel.Visible = isOpen
 		if isOpen then
 			statusLabel.Text = ""

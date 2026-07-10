@@ -29,6 +29,7 @@ local ItemGrid = require(script.Parent.ItemGrid)
 local ItemTooltip = require(script.Parent.ItemTooltip)
 local Theme = require(script.Parent.Theme)
 local UIKit = require(script.Parent.UIKit)
+local Sfx = require(script.Parent.Sfx)
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse() -- gui-space coords, same space as AbsolutePosition
@@ -917,6 +918,7 @@ function StoreUI.start()
 		ClientState.storeOpen = false
 		hidePopover()
 		tooltip.hide()
+		Sfx.play("panelClose")
 	end
 	closeBtn.Activated:Connect(close)
 	ClientState.closeStore = close
@@ -935,6 +937,7 @@ function StoreUI.start()
 		setStatus(nil)
 		panel.Visible = true
 		ClientState.storeOpen = true
+		Sfx.play("panelOpen")
 		updateGold()
 		refreshStock()
 		refreshDeal()

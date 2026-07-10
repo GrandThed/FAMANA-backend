@@ -6,7 +6,7 @@
 --     remote (known + newlyUnlocked + recommended order);
 --   * the CastSpell remote: validation (known, alive, cooldown, mana), then
 --     dispatch to a behavior (projectile / zone / strike / aoe / buff /
---     taunt / summon / heal / line);
+--     taunt / summon / heal / line / revive);
 --   * per-spell cooldowns, mirrored to the client as SpellCd_<id> player
 --     attributes holding the expiry on the server clock (like Effect_<id>);
 --   * subclass passives (+% damage / armor), fed into EnemyService's damage
@@ -431,6 +431,23 @@ local function acquireHealTarget(player, root, range)
 end
 
 -- Single-target instant heal (Toque Curativo, Renacimiento's flat-% variant).
+-- Nearest DOWNED ally in range — Renacimiento's target pool is disjoint
+-- from acquireHealTarget's (downed players sit at 1 HP forever, so
+-- "neediest by HP%" would always just point at whoever's already downed;
+-- this instead only considers players HealthService actually has flagged).
+local function acquireDownedAlly(root, range)
+	local best, bestDist
+	for _, ally in ipairs(alliesNear(root.Position, range, nil)) do
+		if HealthService.isDowned(ally.player) then
+			local dist = (ally.root.Position - root.Position).Magnitude
+			if not bestDist or dist < bestDist then
+				best, bestDist = ally, dist
+			end
+		end
+	end
+	return best
+end
+
 function BEHAVIORS.heal(player, root, def)
 	local target = acquireHealTarget(player, root, def.range)
 	if not target then
@@ -441,6 +458,25 @@ function BEHAVIORS.heal(player, root, def)
 		local amount = computeHeal(player, base)
 		HealthService.heal(target.player, amount)
 		burst(target.root.Position, Color3.fromRGB(160, 255, 190), 4, 0.3)
+	end
+end
+
+-- Instant revive: skips a downed ally's bleed timer entirely (Renacimiento).
+-- Distinct from "heal" — it targets HealthService's downed set specifically,
+-- not "whoever's hurt", and goes through HealthService.reviveDowned instead
+-- of a flat HP add so it also restores WalkSpeed/JumpPower and tears down
+-- the ProximityPrompt/billboard, exactly like completing the manual revive.
+function BEHAVIORS.revive(player, root, def)
+	local target = acquireDownedAlly(root, def.range)
+	if not target then
+		return nil, "No one nearby is downed"
+	end
+	return function()
+		-- healing-school passives scale how full the revive lands, same
+		-- math as a flat heal, just expressed as a percent of max HP.
+		local percent = math.min(1, def.healPercent * (1 + Spells.passivesFor(SynergyService.getSchoolPoints(player)).healing))
+		HealthService.reviveDowned(target.player, percent)
+		burst(target.root.Position, Color3.fromRGB(255, 235, 170), 6, 0.5)
 	end
 end
 

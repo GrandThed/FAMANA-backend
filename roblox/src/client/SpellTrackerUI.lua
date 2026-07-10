@@ -6,9 +6,16 @@
 --   * the traits column inside the inventory panel —
 --     `SpellTrackerUI.start(hostFrame)` from InventoryUI, popouts open
 --     RIGHTWARD.
--- EVERYTHING here is earned by equipment (the server-set `TraitPoints`
--- attribute — schools and traits alike; the class never feeds points).
--- Two sections in one strip:
+-- EVERYTHING except the class-passive entry is earned by equipment (the
+-- server-set `TraitPoints` attribute — schools and traits alike; the class
+-- never feeds points into THAT system). The class-passive entry (see
+-- shared/ClassPassives.lua) is the one exception: it's earned purely by the
+-- player's own class level (`Level`/`Class` attributes), no equipment
+-- involved, and always shows once a class is picked.
+-- Three sections in one strip:
+--   * CLASS PASSIVE — always one entry, the active class's own passive (see
+--     shared/ClassPassives.lua), progress read as level vs next threshold
+--     ("7/10"). Sits at the top, ahead of everything gear-earned below it.
 --   * SCHOOLS — one entry per school you have points in, points vs next
 --     unlock ("3/10"). Hover → tooltip with the whole point timeline
 --     (reached tiers bright / future gray) and the spell list; hover a
@@ -33,6 +40,7 @@ local HttpService = game:GetService("HttpService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Spells = require(Shared:WaitForChild("Spells"))
 local Traits = require(Shared:WaitForChild("Traits"))
+local ClassPassives = require(Shared:WaitForChild("ClassPassives"))
 local Icons = require(Shared:WaitForChild("Icons"))
 local HotbarBinds = require(script.Parent.HotbarBinds)
 local SpellsClient = require(script.Parent.SpellsClient)
@@ -145,7 +153,8 @@ function SpellTrackerUI.start(hostFrame)
 	-- ---- state ----
 	local entries = {} -- [schoolId] = { frame, count, school }
 	local traitEntries = {} -- [traitId] = { frame, count, stroke }
-	local currentSchool, currentTraitId, currentAnchor -- tooltip subject + its entry
+	local classPassiveEntry -- single { frame, count } — every class has exactly one
+	local currentSchool, currentTraitId, currentClassPassiveId, currentAnchor -- tooltip subject + its entry
 	local hoveredSpellId -- spell row under the mouse (known spells only)
 	local hideToken = 0
 
@@ -186,7 +195,7 @@ function SpellTrackerUI.start(hostFrame)
 		task.delay(0.15, function()
 			if token == hideToken then
 				tooltip.Visible = false
-				currentSchool, currentTraitId, currentAnchor = nil, nil, nil
+				currentSchool, currentTraitId, currentClassPassiveId, currentAnchor = nil, nil, nil, nil
 				setHoveredSpell(nil)
 			end
 		end)
@@ -402,14 +411,72 @@ function SpellTrackerUI.start(hostFrame)
 
 	local function showTooltip(school, anchorFrame)
 		cancelHide()
-		currentSchool, currentTraitId, currentAnchor = school, nil, anchorFrame
+		currentSchool, currentTraitId, currentClassPassiveId, currentAnchor = school, nil, nil, anchorFrame
 		buildTooltip(school, anchorFrame)
 	end
 
 	local function showTraitTooltip(traitDef, anchorFrame)
 		cancelHide()
-		currentSchool, currentTraitId, currentAnchor = nil, traitDef.id, anchorFrame
+		currentSchool, currentTraitId, currentClassPassiveId, currentAnchor = nil, traitDef.id, nil, anchorFrame
 		buildTraitTooltip(traitDef, anchorFrame)
+	end
+
+	-- Class-passive tooltip: same shape as buildTraitTooltip, "level" reads
+	-- where equipment traits would read "points" — description + every
+	-- threshold, reached ones (level >= threshold) bright, the rest gray.
+	local function buildClassPassiveTooltip(passiveDef, level, anchorFrame)
+		for _, child in ipairs(tooltip:GetChildren()) do
+			if child:IsA("GuiObject") then
+				child:Destroy()
+			end
+		end
+		setHoveredSpell(nil)
+
+		local y = 8
+
+		local title = makeTooltipLabel(
+			("%s  %s — Lv %d"):format(passiveDef.icon or "✦", passiveDef.name, level),
+			16,
+			passiveDef.color,
+			true
+		)
+		title.Size = UDim2.new(1, -20, 0, 20)
+		title.Position = UDim2.new(0, 10, 0, y)
+		y += 24
+
+		local desc = makeTooltipLabel(passiveDef.description or "", 11, COLORS.textDim)
+		desc.Size = UDim2.new(1, -20, 0, 28)
+		desc.Position = UDim2.new(0, 10, 0, y)
+		desc.TextWrapped = true
+		desc.TextTruncate = Enum.TextTruncate.None
+		y += 32
+
+		for _, threshold in ipairs(passiveDef.thresholds) do
+			local reached = level >= threshold[1]
+			local line = makeTooltipLabel(
+				("Lv %d — %s"):format(threshold[1], ClassPassives.tierLabel(threshold[2])),
+				12,
+				reached and COLORS.text or COLORS.textDim
+			)
+			line.Size = UDim2.new(1, -20, 0, 15)
+			line.Position = UDim2.new(0, 10, 0, y)
+			y += 17
+		end
+
+		tooltip.Size = UDim2.new(0, TOOLTIP_W, 0, y + 8)
+		local s = UIKit.scaleFactor()
+		local anchorY = anchorFrame.AbsolutePosition.Y
+		local maxY = math.max(8, gui.AbsoluteSize.Y - (y + 16) * s)
+		local tooltipX = hostFrame and (panel.AbsolutePosition.X + panel.AbsoluteSize.X + 10)
+			or (panel.AbsolutePosition.X - TOOLTIP_W * s - 10)
+		tooltip.Position = UDim2.new(0, tooltipX, 0, math.clamp(anchorY, 8, maxY))
+		tooltip.Visible = true
+	end
+
+	local function showClassPassiveTooltip(passiveDef, level, anchorFrame)
+		cancelHide()
+		currentSchool, currentTraitId, currentClassPassiveId, currentAnchor = nil, nil, passiveDef.id, anchorFrame
+		buildClassPassiveTooltip(passiveDef, level, anchorFrame)
 	end
 
 	-- Rebuild in place (badges, known states, timeline/tier brightness).
@@ -421,6 +488,12 @@ function SpellTrackerUI.start(hostFrame)
 			buildTooltip(currentSchool, currentAnchor)
 		elseif currentTraitId and Traits.get(currentTraitId) then
 			buildTraitTooltip(Traits.get(currentTraitId), currentAnchor)
+		elseif currentClassPassiveId then
+			local classId = player:GetAttribute("Class")
+			local passiveDef = classId and ClassPassives.get(classId)
+			if passiveDef and passiveDef.id == currentClassPassiveId then
+				buildClassPassiveTooltip(passiveDef, player:GetAttribute("Level") or 1, currentAnchor)
+			end
 		end
 	end
 
@@ -659,6 +732,58 @@ function SpellTrackerUI.start(hostFrame)
 		end
 	end
 
+	-- ---- class-passive entry (see shared/ClassPassives.lua) ----
+	-- Unlike schools/traits, always shows once a class is picked — it's
+	-- earned purely by playing that class, not by finding gear, so there's
+	-- no "0 points, hidden" state. Sits at the very top (LayoutOrder 0),
+	-- ahead of the gear-earned entries below it.
+	local function rebuildClassPassiveEntry()
+		if classPassiveEntry then
+			classPassiveEntry.frame:Destroy()
+			classPassiveEntry = nil
+		end
+		if currentClassPassiveId then
+			tooltip.Visible = false
+			currentClassPassiveId, currentAnchor = nil, nil
+		end
+
+		local classId = player:GetAttribute("Class")
+		local passiveDef = classId and ClassPassives.get(classId)
+		if not passiveDef then
+			return
+		end
+		local level = player:GetAttribute("Level") or 1
+
+		-- Metal tier from thresholds reached (Theme.tierFor) — same math as
+		-- the equipment trait loop above, just off `level` instead of points.
+		local reached = 0
+		for _, threshold in ipairs(passiveDef.thresholds) do
+			if level >= threshold[1] then
+				reached += 1
+			end
+		end
+		local tier = Theme.tierFor(reached, #passiveDef.thresholds)
+
+		local frame, count =
+			buildEntryFrame(0, passiveDef.id, passiveDef.icon, passiveDef.color, passiveDef.name, true, tier)
+
+		local nextLevel = ClassPassives.nextThreshold(classId, level)
+		if nextLevel then
+			count.Text = ("%d/%d"):format(level, nextLevel)
+			count.TextColor3 = COLORS.textDim
+		else
+			count.Text = tostring(level)
+			count.TextColor3 = COLORS.gold
+		end
+
+		frame.MouseEnter:Connect(function()
+			showClassPassiveTooltip(passiveDef, level, frame)
+		end)
+		frame.MouseLeave:Connect(scheduleHide)
+
+		classPassiveEntry = { frame = frame, count = count }
+	end
+
 	-- Hovered spell + 3–0 → bind to that key on the active page. HudUI skips
 	-- its cast/equip handling while ClientState.spellHover is set.
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
@@ -677,6 +802,16 @@ function SpellTrackerUI.start(hostFrame)
 		rebuildTraitEntries()
 		refreshTooltip()
 	end)
+	-- Class passive tracks the player's own Level/Class instead — no gear
+	-- involved (see shared/ClassPassives.lua).
+	player:GetAttributeChangedSignal("Level"):Connect(function()
+		rebuildClassPassiveEntry()
+		refreshTooltip()
+	end)
+	player:GetAttributeChangedSignal("Class"):Connect(function()
+		rebuildClassPassiveEntry()
+		refreshTooltip()
+	end)
 	SpellsClient.changed:Connect(refreshTooltip)
 	HotbarBinds.changed:Connect(refreshTooltip)
 
@@ -688,11 +823,13 @@ function SpellTrackerUI.start(hostFrame)
 			panel.Size = UDim2.new(0, panelWidth(), 0, 0)
 			rebuildEntries()
 			rebuildTraitEntries()
+			rebuildClassPassiveEntry()
 		end
 	end)
 
 	rebuildEntries()
 	rebuildTraitEntries()
+	rebuildClassPassiveEntry()
 end
 
 return SpellTrackerUI

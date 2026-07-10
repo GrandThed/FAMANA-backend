@@ -201,6 +201,10 @@ local function notifyPickup(player, itemId, added)
 	local def = Items.get(itemId)
 	local total = PlayerService.getItemCount(player, itemId)
 	Remotes.get("Notify"):FireClient(player, string.format("+%d %s (%d)", added, def and def.name or itemId, total))
+	-- Remote aparte del toast de texto: así el cliente puede tocar un sonido
+	-- de pickup sin tener que parsear el string de Notify (que también lo
+	-- usan craft/vendor/party/etc. para otras cosas).
+	Remotes.get("DropPickup"):FireClient(player, itemId)
 end
 
 -- -1 al tirar un ítem al piso, mismo estilo que notifyPickup pero restando.
@@ -348,6 +352,11 @@ function DropService.start()
 	flyFolder = Instance.new("Folder")
 	flyFolder.Name = "FlyingPickups"
 	flyFolder.Parent = Workspace
+
+	-- Pre-crear el remote acá (no solo dentro de notifyPickup): así el
+	-- cliente puede hacer WaitForChild sin quedarse colgado hasta el
+	-- primer pickup de la sesión.
+	Remotes.get("DropPickup")
 
 	-- Spawn loot when an enemy dies: the regular table plus a chance at a
 	-- rolled trait item leveled off the mob.

@@ -10,6 +10,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local Config = require(Shared:WaitForChild("Config"))
+local Sfx = require(script.Parent.Sfx)
 
 local player = Players.LocalPlayer
 
@@ -400,14 +401,19 @@ function PartyUI.start()
 		end
 	end
 
-	toggleBtn.MouseButton1Click:Connect(function()
-		panel.Visible = not panel.Visible
-		if panel.Visible then
+	local function setPanelOpen(open)
+		panel.Visible = open
+		Sfx.play(open and "panelOpen" or "panelClose")
+		if open then
 			refresh()
 		end
+	end
+
+	toggleBtn.MouseButton1Click:Connect(function()
+		setPanelOpen(not panel.Visible)
 	end)
 	closeBtn.MouseButton1Click:Connect(function()
-		panel.Visible = false
+		setPanelOpen(false)
 	end)
 	leaveBtn.MouseButton1Click:Connect(function()
 		partyLeave:FireServer()
@@ -419,10 +425,7 @@ function PartyUI.start()
 
 	ContextActionService:BindAction("TogglePartyPanel", function(_, inputState)
 		if inputState == Enum.UserInputState.Begin then
-			panel.Visible = not panel.Visible
-			if panel.Visible then
-				refresh()
-			end
+			setPanelOpen(not panel.Visible)
 		end
 		return Enum.ContextActionResult.Pass
 	end, false, Enum.KeyCode.O)

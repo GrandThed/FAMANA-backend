@@ -50,6 +50,15 @@ local inventoryUpdated -- RemoteEvent
 local requestInventory -- RemoteFunction
 local levelUpRemote -- RemoteEvent, resolved in start()
 
+-- Other services (ClassService, for HP/Mana caps that scale with level) can
+-- hook into level-ups here instead of PlayerService requiring them directly
+-- (that would create a require cycle, since ClassService already requires
+-- PlayerService).
+local levelUpHandlers = {}
+function PlayerService.registerLevelUpHandler(fn)
+	table.insert(levelUpHandlers, fn)
+end
+
 function PlayerService.get(player)
 	return cache[player.UserId]
 end
@@ -86,8 +95,6 @@ local function loadProfile(player)
 		-- can still play. Marked _temporary so we never persist over real data.
 		warn("[PlayerService] Using temporary profile for " .. player.Name .. " (backend unavailable).")
 		data = {
-			health = Config.HP.max,
-			maxHealth = Config.HP.max,
 			gold = 0,
 			cell = GridConfig.currentCell(),
 			position = { x = 0, y = 0, z = 0 },
@@ -165,6 +172,11 @@ local function loadProfile(player)
 	-- through SetPlayerSettings, saved with the profile.
 	data.settings = sanitizeSettings(data.settings)
 	player:SetAttribute("PlayerSettings", HttpService:JSONEncode(data.settings))
+
+	-- Quest progress ({ [questId] = { status, objectives } }, same shape
+	-- QuestService used to keep purely in memory). Profiles saved before
+	-- this existed come back without it.
+	data.questProgress = typeof(data.questProgress) == "table" and data.questProgress or {}
 
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
@@ -345,8 +357,9 @@ function PlayerService.spendGold(player, amount)
 end
 
 -- Grants XP (e.g. from an enemy kill or, later, a quest reward), rolling
--- over into as many level-ups as the amount covers. Purely cosmetic for
--- now: no stat bonuses, just the persisted level/xp and a client toast.
+-- over into as many level-ups as the amount covers. Each level-up re-derives
+-- HP/Mana caps (see shared/Classes.lua statsAtLevel, wired via
+-- registerLevelUpHandler below) on top of the persisted level/xp + toast.
 -- XP is per-class: it only advances the currently active class's own
 -- level/xp track (profile.classLevels[currentClass]). profile.level/xp keep
 -- mirroring that active track so the rest of the game stays unaware classes
@@ -378,8 +391,13 @@ function PlayerService.addXp(player, amount)
 	player:SetAttribute("Xp", profile.xp)
 	player:SetAttribute("XpToNext", xpToNext(profile.level))
 
-	if leveledUp and levelUpRemote then
-		levelUpRemote:FireClient(player, profile.level)
+	if leveledUp then
+		for _, fn in ipairs(levelUpHandlers) do
+			task.spawn(fn, player)
+		end
+		if levelUpRemote then
+			levelUpRemote:FireClient(player, profile.level)
+		end
 	end
 end
 
@@ -453,6 +471,7 @@ local function buildSaveFields(player)
 		classLevels = profile.classLevels,
 		hotbarBinds = profile.hotbarBinds,
 		settings = profile.settings,
+		questProgress = profile.questProgress,
 		cell = profile.cell,
 		position = profile.position,
 	}

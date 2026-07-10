@@ -8,6 +8,7 @@ local TweenService = game:GetService("TweenService")
 
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local Theme = require(script.Parent.Theme)
+local Sfx = require(script.Parent.Sfx)
 
 local player = Players.LocalPlayer
 
@@ -62,6 +63,7 @@ function LevelUpUI.start()
 
 	local function play(level)
 		levelText.Text = string.format("Nivel %d", level)
+		Sfx.play("levelUp")
 
 		scale.Scale = 0.3
 		title.TextTransparency = 1
