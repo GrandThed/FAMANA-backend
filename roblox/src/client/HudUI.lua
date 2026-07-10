@@ -516,6 +516,14 @@ end
 -- Full-screen "you're downed" readout — mirrors the server's `Downed` /
 -- `DownedBleedRemaining` Player attributes (see HealthService.lua) with no
 -- remote, same pattern as the mana orb reading `Mana`/`MaxMana`.
+--
+-- The DownedBillboard's range-limited visibility (only shown within
+-- `Config.HP.downedVisibleRange` studs) is handled entirely server-side via
+-- BillboardGui.MaxDistance — no client filtering needed for that. The one
+-- thing that still needs a client-side nudge: hiding your OWN RevivePrompt,
+-- since you can't revive yourself but the prompt still gets created on you
+-- so anyone else nearby can. See bindCharacter's hideOwnRevivePrompt below.
+
 local function makeDownedOverlay(gui)
 	local overlay = Instance.new("Frame")
 	overlay.Name = "DownedOverlay"

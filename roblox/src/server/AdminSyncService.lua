@@ -47,6 +47,11 @@ local function poll()
 						-- Same full refresh as a player-initiated class switch:
 						-- new class's HP/mana caps + walk speed, refilled.
 						ClassService.respecLiveStats(player)
+					elseif typeof(event.payload) == "table" and typeof(event.payload.level) == "number" then
+						-- Level-only edit: HP/Mana caps scale with level too
+						-- (see shared/Classes.lua), so re-derive them without
+						-- a full refill.
+						ClassService.refreshStatsForLevel(player)
 					end
 					print("[AdminSyncService] applied admin stats for " .. player.Name)
 				else

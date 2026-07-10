@@ -8,10 +8,16 @@
 --   * can't move past a crawl, can't jump, take no further damage, and
 --     can't cast/attack (SpellService/EnemyService check isDowned());
 --   * have `Config.HP.downedBleedTime` seconds before it becomes a real
---     death — unless an ally holds the ProximityPrompt on them, which
---     pauses the bleed timer for as long as they hold it (PromptButtonHold-
---     Began/Ended) and, once the hold completes (Triggered), revives them
---     at `Config.HP.downedReviveHealPercent` of max HP.
+--     death — unless ANY nearby player holds the ProximityPrompt on them
+--     (no party requirement), which pauses the bleed timer for as long as
+--     they hold it (PromptButtonHoldBegan/Ended) and, once the hold
+--     completes (Triggered), revives them at
+--     `Config.HP.downedReviveHealPercent` of max HP;
+--   * are only *visible* as downed (the floating billboard) within
+--     `Config.HP.downedVisibleRange` studs — BillboardGui.MaxDistance does
+--     this natively, no per-player client filtering needed. The revive
+--     prompt itself is already shorter-range than that (its
+--     MaxActivationDistance), so nothing extra is needed there.
 -- The `Downed` / `DownedBleedRemaining` Player attributes are how the
 -- client's HUD overlay (HudUI) reads this with no remote.
 
@@ -34,6 +40,18 @@ local downed = {}
 
 function HealthService.isDowned(player)
 	return downed[player.UserId] ~= nil
+end
+
+-- Public entrypoint for spells (Renacimiento): instantly revives a downed
+-- player, skipping their bleed timer, at `healPercent` of max HP. No-ops if
+-- they're not actually downed (SpellService should already be targeting a
+-- downed ally, but this stays safe regardless of caller).
+function HealthService.reviveDowned(player, healPercent)
+	if not downed[player.UserId] then
+		return false
+	end
+	exitDowned(player, true, healPercent)
+	return true
 end
 
 local enterDowned, exitDowned -- forward declarations (mutually referenced)
@@ -64,6 +82,18 @@ function enterDowned(player, humanoid)
 			humanoid.WalkSpeed = Config.HP.downedWalkSpeed
 		end
 	end)
+	-- Belt-and-suspenders: every Health-raising code path already checks
+	-- isDowned() before touching a downed player, but this watchdog makes
+	-- it unconditional — if Health ever ticks above 1 while downed, for
+	-- ANY reason, it's slapped back down the same frame. Health *can* still
+	-- go to 0 here (a stray hit landing before some other system's guard
+	-- catches up); that's fine, it just reads as the bleed timer's own
+	-- exitDowned(false) a moment early.
+	state.healthWatchdog = humanoid.HealthChanged:Connect(function()
+		if downed[player.UserId] == state and humanoid.Health > 1 then
+			humanoid.Health = 1
+		end
+	end)
 
 	player:SetAttribute("Downed", true)
 	player:SetAttribute("DownedBleedRemaining", state.bleedRemaining)
@@ -74,6 +104,7 @@ function enterDowned(player, humanoid)
 	billboard.Size = UDim2.new(0, 180, 0, 44)
 	billboard.StudsOffset = Vector3.new(0, 3.2, 0)
 	billboard.AlwaysOnTop = true
+	billboard.MaxDistance = Config.HP.downedVisibleRange -- only shows up close
 	billboard.Parent = root
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
@@ -116,16 +147,19 @@ function enterDowned(player, humanoid)
 	end)
 end
 
--- revived == true: an ally completed the hold, restore movement + heal.
+-- revived == true: skips the bleed timer entirely — either an ally
+-- completed the ProximityPrompt hold (healPercentOverride nil, uses
+-- Config.HP.downedReviveHealPercent) or a spell like Renacimiento revived
+-- them directly (passes its own scaled percent).
 -- revived == false: the bleed timer hit zero — this is a real death now.
-function exitDowned(player, revived)
+function exitDowned(player, revived, healPercentOverride)
 	local state = downed[player.UserId]
 	if not state then
 		return
 	end
 	downed[player.UserId] = nil
 
-	for _, conn in ipairs({ state.watchdog, state.holdBegan, state.holdEnded, state.triggered }) do
+	for _, conn in ipairs({ state.watchdog, state.healthWatchdog, state.holdBegan, state.holdEnded, state.triggered }) do
 		if conn then
 			conn:Disconnect()
 		end
@@ -150,7 +184,8 @@ function exitDowned(player, revived)
 		humanoid.WalkSpeed = state.savedWalkSpeed
 		humanoid.JumpPower = state.savedJumpPower
 		humanoid.JumpHeight = state.savedJumpHeight
-		humanoid.Health = math.max(1, math.floor(humanoid.MaxHealth * Config.HP.downedReviveHealPercent + 0.5))
+		local healPercent = healPercentOverride or Config.HP.downedReviveHealPercent
+		humanoid.Health = math.max(1, math.floor(humanoid.MaxHealth * healPercent + 0.5))
 	else
 		humanoid.Health = 0 -- fires Humanoid.Died -> the normal respawn flow
 	end
@@ -230,10 +265,13 @@ end
 
 local function maxHealthFor(player)
 	local profile = PlayerService.get(player)
-	-- Base max HP scaled by the player's current class (see shared/Classes)
-	-- and any registered multipliers (Brawler trait).
+	-- Base max HP scaled by the player's current class AND level (see
+	-- shared/Classes.lua statsAtLevel), plus any registered multipliers
+	-- (Brawler trait).
 	local classDef = Classes.get(profile and profile.currentClass)
-	return math.floor(Config.HP.max * classDef.hpMult * hookedMaxHealthMult(player) + 0.5)
+	local level = (profile and profile.level) or 1
+	local stats = Classes.statsAtLevel(classDef, level)
+	return math.floor(stats.hp * hookedMaxHealthMult(player) + 0.5)
 end
 
 -- Re-derives MaxHealth mid-life (equipment/trait changes). Current HP stays
@@ -306,7 +344,7 @@ function HealthService.start()
 		local state = downed[player.UserId]
 		if state then
 			downed[player.UserId] = nil
-			for _, conn in ipairs({ state.watchdog, state.holdBegan, state.holdEnded, state.triggered }) do
+			for _, conn in ipairs({ state.watchdog, state.healthWatchdog, state.holdBegan, state.holdEnded, state.triggered }) do
 				if conn then
 					conn:Disconnect()
 				end

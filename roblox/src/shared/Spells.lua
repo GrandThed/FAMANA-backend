@@ -192,7 +192,9 @@ Spells.schoolOrder = {
 -- ---- spell defs ---------------------------------------------------------------
 -- behavior: "projectile" | "zone" | "strike" | "aoe" | "buff" | "taunt" | "summon"
 --         | "heal" (single target, auto-picks the neediest ally in range)
---         | "line" (instant box in front — damages enemies, heals allies).
+--         | "line" (instant box in front — damages enemies, heals allies)
+--         | "revive" (targets a DOWNED ally specifically, skips their bleed
+--           timer entirely — see HealthService.reviveDowned).
 -- hotbarPriority orders the recommended loadout (lower = earlier slot).
 -- implemented = false marks board placeholders that can't be cast yet.
 
@@ -545,12 +547,11 @@ Spells.defs = {
 		name = "Renacimiento",
 		school = "sacerdote_luz",
 		icon = "💫",
-		description = "Ultimate: an emergency heal that fills an ally to half their max HP. "
-			.. "(A true revive-while-downed needs its own downed-state system — next pass.)",
-		behavior = "heal",
+		description = "Ultimate: instantly revives a downed ally at half their max HP, skipping the bleed timer entirely.",
+		behavior = "revive",
 		manaCost = 60,
 		cooldown = 90,
-		range = 30,
+		range = 20,
 		healPercent = 0.5,
 		hotbarPriority = 50,
 	},

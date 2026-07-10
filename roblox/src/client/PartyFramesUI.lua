@@ -125,10 +125,17 @@ function PartyFramesUI.start()
 		local connections = {}
 
 		local function refreshClass()
+			if memberPlayer:GetAttribute("Downed") then
+				classLabel.Text = "Caído"
+				classLabel.TextColor3 = Color3.fromRGB(255, 110, 110)
+				return
+			end
 			local def = Classes.get(memberPlayer:GetAttribute("Class"))
+			classLabel.TextColor3 = COLORS.textDim
 			classLabel.Text = def and def.name or ""
 		end
 		table.insert(connections, memberPlayer:GetAttributeChangedSignal("Class"):Connect(refreshClass))
+		table.insert(connections, memberPlayer:GetAttributeChangedSignal("Downed"):Connect(refreshClass))
 		refreshClass()
 
 		local function refreshMana()

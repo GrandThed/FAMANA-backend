@@ -4,13 +4,17 @@
 -- (see PlayerService), so switching never erases progress on another class.
 --
 -- Ownership split to avoid systems stepping on each other:
---   * HealthService still owns MaxHealth/Health on spawn (reads the class
---     def itself to scale Config.HP.max).
+--   * HealthService still owns MaxHealth/Health on spawn (reads
+--     Classes.statsAtLevel itself to scale HP by class + level).
 --   * ManaService still owns the regen tick; it just reads the
 --     "ManaRegenAmount" attribute this service sets instead of a fixed
 --     constant.
 --   * ClassService owns WalkSpeed, Mana caps, the switch-class remote, and
---     the multiplier lookups combat code calls into.
+--     the AD/AP/Armor/MR stat lookups combat code calls into.
+--
+-- Stats scale with level (see shared/Classes.lua statsAtLevel): weapons and
+-- spells no longer carry their own flat damage — AD/AP alone determine
+-- outgoing damage, Armor/MR alone determine incoming mitigation.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -21,6 +25,7 @@ local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local PlayerService = require(script.Parent.PlayerService)
+local HealthService = require(script.Parent.HealthService)
 
 local ClassService = {}
 
@@ -33,32 +38,66 @@ local function classDefFor(player)
 	return Classes.get(profile and profile.currentClass)
 end
 
+local function levelFor(player)
+	local profile = PlayerService.get(player)
+	return (profile and profile.level) or 1
+end
+
 -- ---- lookups used by combat/health/mana systems ---------------------------
 
 function ClassService.getDef(player)
 	return classDefFor(player)
 end
 
--- kind: "melee" | "physical" | "magic"
-function ClassService.getDamageMult(player, kind)
-	return Classes.damageMult(classDefFor(player), kind)
+function ClassService.getLevel(player)
+	return levelFor(player)
+end
+
+-- All six live combat stats (hp, mana, armor, mr, ad, ap) for this player's
+-- current class at their current level. See shared/Classes.lua.
+function ClassService.getStats(player)
+	return Classes.statsAtLevel(classDefFor(player), levelFor(player))
+end
+
+function ClassService.getAD(player)
+	return ClassService.getStats(player).ad
+end
+
+function ClassService.getAP(player)
+	return ClassService.getStats(player).ap
+end
+
+function ClassService.getArmor(player)
+	return ClassService.getStats(player).armor
+end
+
+function ClassService.getMR(player)
+	return ClassService.getStats(player).mr
 end
 
 function ClassService.getCritBonus(player)
 	return classDefFor(player).critChanceBonus
 end
 
-function ClassService.getDamageTakenMult(player)
-	return classDefFor(player).damageTakenMult
-end
-
 -- ---- live stat application -------------------------------------------------
+
+-- Replicates the combat stats that don't already have their own attribute
+-- (Armor/MR/AD/AP — MaxMana/Mana are set by the caller directly, MaxHealth
+-- lives on the Humanoid) so read-only UI (CharacterUI) can show them without
+-- a remote, same pattern as Level/Xp/Gold/etc.
+local function applyStatAttributes(player, stats)
+	player:SetAttribute("Armor", stats.armor)
+	player:SetAttribute("MagicResist", stats.mr)
+	player:SetAttribute("AttackDamage", stats.ad)
+	player:SetAttribute("AbilityPower", stats.ap)
+end
 
 -- Movement + mana caps only (called on spawn). Deliberately does NOT touch
 -- Health/MaxHealth — HealthService owns restoring saved HP on spawn and
 -- would otherwise race with this.
 function ClassService.applyMovementAndMana(player)
 	local classDef = classDefFor(player)
+	local stats = Classes.statsAtLevel(classDef, levelFor(player))
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -66,10 +105,10 @@ function ClassService.applyMovementAndMana(player)
 		humanoid.WalkSpeed = BASE_WALK_SPEED * classDef.walkSpeedMult
 	end
 
-	local maxMana = math.floor(Config.Mana.max * classDef.maxManaMult + 0.5)
-	player:SetAttribute("MaxMana", maxMana)
-	player:SetAttribute("Mana", maxMana)
+	player:SetAttribute("MaxMana", stats.mana)
+	player:SetAttribute("Mana", stats.mana)
 	player:SetAttribute("ManaRegenAmount", Config.Mana.regenAmount * classDef.manaRegenMult)
+	applyStatAttributes(player, stats)
 end
 
 -- Full "respec" refresh for an explicit class switch: unlike spawn, this
@@ -78,20 +117,36 @@ end
 -- (and simplest) behavior rather than trying to rescale a partial HP bar.
 function ClassService.respecLiveStats(player)
 	local classDef = classDefFor(player)
+	local stats = Classes.statsAtLevel(classDef, levelFor(player))
 
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if humanoid then
 		humanoid.WalkSpeed = BASE_WALK_SPEED * classDef.walkSpeedMult
-		local maxHealth = math.floor(Config.HP.max * classDef.hpMult + 0.5)
-		humanoid.MaxHealth = maxHealth
-		humanoid.Health = maxHealth
+		humanoid.MaxHealth = stats.hp
+		humanoid.Health = stats.hp
 	end
 
-	local maxMana = math.floor(Config.Mana.max * classDef.maxManaMult + 0.5)
-	player:SetAttribute("MaxMana", maxMana)
-	player:SetAttribute("Mana", maxMana)
+	player:SetAttribute("MaxMana", stats.mana)
+	player:SetAttribute("Mana", stats.mana)
 	player:SetAttribute("ManaRegenAmount", Config.Mana.regenAmount * classDef.manaRegenMult)
+	applyStatAttributes(player, stats)
+end
+
+-- Re-derives HP/Mana caps after a level-up (called via
+-- PlayerService.registerLevelUpHandler). Unlike respecLiveStats, current
+-- HP/Mana stay absolute — leveling up only raises the ceiling, it doesn't
+-- refill you (HealthService.refreshMaxHealth already follows this pattern
+-- for HP; this mirrors it for Mana).
+function ClassService.refreshStatsForLevel(player)
+	local stats = ClassService.getStats(player)
+
+	HealthService.refreshMaxHealth(player)
+
+	local currentMana = player:GetAttribute("Mana") or stats.mana
+	player:SetAttribute("MaxMana", stats.mana)
+	player:SetAttribute("Mana", math.min(currentMana, stats.mana))
+	applyStatAttributes(player, stats)
 end
 
 -- ---- switching --------------------------------------------------------------
@@ -100,6 +155,9 @@ end
 function ClassService.switchClass(player, classId)
 	if not Classes.isValid(classId) then
 		return false, "invalid_class"
+	end
+	if HealthService.isDowned(player) then
+		return false, "downed"
 	end
 
 	local profile = PlayerService.get(player)
@@ -151,6 +209,12 @@ function ClassService.start()
 		player.CharacterAdded:Connect(function()
 			ClassService.applyMovementAndMana(player)
 		end)
+	end)
+
+	-- Levels raise HP/Mana caps (see shared/Classes.lua statsAtLevel); hook
+	-- into PlayerService's level-up event to re-derive them live.
+	PlayerService.registerLevelUpHandler(function(player)
+		ClassService.refreshStatsForLevel(player)
 	end)
 end
 

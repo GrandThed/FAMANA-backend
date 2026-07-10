@@ -26,6 +26,7 @@ return {
 		downedReviveTime = 4, -- seconds an ally must hold the revive prompt
 		downedReviveHealPercent = 0.5, -- HP fraction restored on a full revive
 		downedWalkSpeed = 4, -- crawl speed while downed
+		downedVisibleRange = 30, -- studs: how close others must be to see you're downed
 	},
 
 	-- Mana: a live gameplay resource (not persisted) that powers ranged magic.
@@ -56,13 +57,12 @@ return {
 	},
 
 	-- Player leveling curve. xpToNext(level) = baseXp + (level-1)*xpPerLevel.
-	-- Purely cosmetic for now (level + progress bar) — no stat bonuses yet.
-	-- The class system (Archer/Berserker/Knight) will read `level` later to
-	-- apply its own per-class bonuses on top of this.
+	-- `level` drives HP/Mana/Armor/MR/AD/AP directly (see shared/Classes.lua
+	-- statsAtLevel) — maxLevel here MUST match Classes.MAX_LEVEL.
 	PlayerLeveling = {
 		baseXp = 50, -- xp needed to go from level 1 -> 2
 		xpPerLevel = 25, -- extra xp required per level after that
-		maxLevel = 60, -- soft cap; xp stops accruing once reached
+		maxLevel = 20, -- hard cap; xp stops accruing once reached
 	},
 
 	-- Parties: solo en la memoría del sv, no en la base de datos
