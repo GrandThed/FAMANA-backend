@@ -217,6 +217,42 @@ local function hookedDodgeChance(player)
 	return math.min(chance, 0.9)
 end
 
+-- Additive fn(player) -> number hooks, all following the crit-bonus pattern:
+--   registerCritDamageBonus — added to the crit MULTIPLIER (Executioner:
+--     +0.40 makes crits hit x2.4 instead of x2).
+--   registerLifesteal — fraction of WEAPON damage healed back (Leech; spells
+--     deliberately excluded).
+--   registerReflect — fraction of melee damage taken reflected back at the
+--     attacking enemy (Retribution).
+--   registerDebuffDurationBonus — bonus on stun/slow durations the player
+--     inflicts (Inferno).
+--   registerSlowPotency — the player's slows are this much STRONGER
+--     (Trapper's control passive): a 50% slow at +0.4 becomes 70%.
+local function additiveHook()
+	local hooks = {}
+	local register = function(fn)
+		table.insert(hooks, fn)
+	end
+	local total = function(player)
+		local sum = 0
+		for _, fn in ipairs(hooks) do
+			local ok, value = pcall(fn, player)
+			if ok and typeof(value) == "number" then
+				sum += value
+			end
+		end
+		return sum
+	end
+	return register, total
+end
+
+local hookedCritDamageBonus, hookedLifesteal, hookedReflect, hookedDebuffDurationBonus, hookedSlowPotency
+EnemyService.registerCritDamageBonus, hookedCritDamageBonus = additiveHook()
+EnemyService.registerLifesteal, hookedLifesteal = additiveHook()
+EnemyService.registerReflect, hookedReflect = additiveHook()
+EnemyService.registerDebuffDurationBonus, hookedDebuffDurationBonus = additiveHook()
+EnemyService.registerSlowPotency, hookedSlowPotency = additiveHook()
+
 -- Floating "Dodge!" popup over a player who just evaded a hit.
 local function dodgePopup(character)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -267,7 +303,8 @@ function EnemyService.computePlayerDamage(player, baseDamage, damageKind, opts)
 		local critChance = CRIT_CHANCE + ClassService.getCritBonus(player) + hookedCritBonus(player)
 		isCrit = math.random() < critChance
 		if isCrit then
-			damage *= CRIT_MULTIPLIER
+			-- Executioner's bonus rides the multiplier itself (x2 -> x2.4...).
+			damage *= CRIT_MULTIPLIER + hookedCritDamageBonus(player)
 		end
 	end
 	return math.max(1, math.floor(damage + 0.5)), isCrit
@@ -598,8 +635,11 @@ local function playerInRange(player, position, range)
 		and (root.Position - position).Magnitude <= range
 end
 
-local function updateEnemy(enemy, dt)
-	if enemy.dead then
+local dealDamage -- forward-declared: updateEnemy's reflect path needs it
+
+local function updateEnemy(entry, dt)
+	local enemy = entry.enemy
+	if not enemy or enemy.dead then
 		return
 	end
 	local def = enemy.def
@@ -678,11 +718,15 @@ local function updateEnemy(enemy, dt)
 					dodgePopup(target.Character)
 				else
 					local mitigation = Classes.mitigation(ClassService.getArmor(target))
-					HealthService.damagePlayer(
-						target,
-						enemy.damage * (1 - mitigation) * hookedDamageTakenMult(target)
-					)
+					local taken = enemy.damage * (1 - mitigation) * hookedDamageTakenMult(target)
+					HealthService.damagePlayer(target, taken)
 					HealthService.registerDamage(target) -- pause the player's regen
+					-- Retribution: melee attackers eat a share of what they
+					-- dealt (post-mitigation — what actually landed).
+					local reflect = hookedReflect(target)
+					if reflect > 0 then
+						dealDamage(entry, enemy, math.max(1, math.floor(taken * reflect + 0.5)), target, false)
+					end
 					for _, fn in ipairs(EnemyService.playerHitHandlers) do
 						task.spawn(fn, def.lootSource, target)
 					end
@@ -765,7 +809,7 @@ local function targetFor(player, root, reach)
 	return hitEntry, hitEnemy
 end
 
-local function dealDamage(entry, enemy, damage, killer, isCrit)
+dealDamage = function(entry, enemy, damage, killer, isCrit)
 	if not enemy or enemy.dead then
 		return
 	end
@@ -837,9 +881,40 @@ function EnemyService.dealSpellDamage(ref, damage, player, isCrit)
 	end
 end
 
-function EnemyService.stun(ref, duration)
+-- Enemy-side diminishing returns, mirroring the player-side EffectService
+-- rule: the same CC kind reapplied within 8s lands at 100/50/25% duration
+-- (the math.max in stun/slow means an active timer is never CUT). This is
+-- the guard that lets Inferno/control scale without party permastun.
+local DR_WINDOW = 8
+local DR_STEPS = { 1, 0.5, 0.25 }
+
+local function diminishedDuration(enemy, kind, duration)
+	local now = os.clock()
+	local dr = enemy.dr
+	if not dr then
+		dr = {}
+		enemy.dr = dr
+	end
+	local state = dr[kind]
+	if state and now < state.windowUntil then
+		state.count = math.min(state.count + 1, #DR_STEPS)
+	else
+		state = { count = 1 }
+		dr[kind] = state
+	end
+	state.windowUntil = now + DR_WINDOW
+	return duration * DR_STEPS[state.count]
+end
+
+-- `player` (optional) is the caster: their debuff-duration bonus (Inferno)
+-- scales the stun before diminishing returns apply.
+function EnemyService.stun(ref, duration, player)
 	if ref and ref.enemy and not ref.enemy.dead then
 		local enemy = ref.enemy
+		if player then
+			duration *= 1 + hookedDebuffDurationBonus(player)
+		end
+		duration = diminishedDuration(enemy, "stun", duration)
 		enemy.stunnedUntil = math.max(enemy.stunnedUntil or 0, os.clock() + duration)
 		enemy.stunTotal = enemy.stunnedUntil - os.clock() -- drain bar refills on refresh
 	end
@@ -847,11 +922,23 @@ end
 
 -- Slows the enemy's movement to `mult` (default 0.5) for `duration` seconds.
 -- Reapplying refreshes the timer; the strongest (lowest) mult wins.
-function EnemyService.slow(ref, duration, mult)
+-- `player` (optional) is the caster: Inferno lengthens the slow and the
+-- control passive (Trapper) deepens it — a 50% slow at +40% control becomes
+-- a 70% slow, floored so enemies always keep a crawl.
+function EnemyService.slow(ref, duration, mult, player)
 	if ref and ref.enemy and not ref.enemy.dead then
 		local enemy = ref.enemy
+		mult = mult or 0.5
+		if player then
+			duration *= 1 + hookedDebuffDurationBonus(player)
+			local potency = hookedSlowPotency(player)
+			if potency > 0 then
+				mult = math.max(0.05, 1 - (1 - mult) * (1 + potency))
+			end
+		end
+		duration = diminishedDuration(enemy, "slow", duration)
 		enemy.slowedUntil = math.max(enemy.slowedUntil or 0, os.clock() + duration)
-		enemy.slowMult = math.min(enemy.slowMult or 1, mult or 0.5)
+		enemy.slowMult = math.min(enemy.slowMult or 1, mult)
 		enemy.slowTotal = enemy.slowedUntil - os.clock()
 	end
 end
@@ -942,6 +1029,15 @@ local function onWeaponSwing(player, tool, def)
 	local damageKind = def.damageKind or (ranged and "physical" or "melee")
 	local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage or 10, damageKind)
 
+	-- Leech: WEAPON hits heal back a share of their damage (spells go
+	-- through dealSpellDamage and deliberately don't).
+	local function applyLifesteal()
+		local lifesteal = hookedLifesteal(player)
+		if lifesteal > 0 then
+			HealthService.heal(player, damage * lifesteal)
+		end
+	end
+
 	if ranged then
 		-- Ranged magic costs mana; block the cast (and warn) when too low. Only
 		-- charged here, once we know there's a valid target to fire at.
@@ -956,9 +1052,11 @@ local function onWeaponSwing(player, tool, def)
 		end
 		fireMissile(root.Position + Vector3.new(0, 2, 0), hitEnemy.part, function()
 			dealDamage(hitEntry, hitEnemy, damage, player, isCrit)
+			applyLifesteal()
 		end, damageKind)
 	else
 		dealDamage(hitEntry, hitEnemy, damage, player, isCrit)
+		applyLifesteal()
 	end
 end
 
@@ -988,7 +1086,7 @@ function EnemyService.start()
 	RunService.Heartbeat:Connect(function(dt)
 		for _, entry in ipairs(spawns) do
 			if entry.enemy then
-				updateEnemy(entry.enemy, dt)
+				updateEnemy(entry, dt)
 			end
 		end
 	end)

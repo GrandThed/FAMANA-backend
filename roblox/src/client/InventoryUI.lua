@@ -298,7 +298,7 @@ function InventoryUI.start()
 	equipTitle.Size = UDim2.new(1, 0, 0, 22)
 	equipTitle.Position = UDim2.new(0, 0, 0, HEADER_H)
 
-	-- "<Class> Lvl. <N>" above the character, e.g. "Caballero Lvl. 5", read
+	-- "<Class> Lvl. <N>" above the character, e.g. "Knight Lvl. 5", read
 	-- from the server-set "Class"/"Level" attributes.
 	local classLabel =
 		makeLabel(leftCol, "", Theme.Text.Hero, Theme.Semantic.TextHero, Theme.Font.DisplayBold)
@@ -1419,7 +1419,7 @@ function InventoryUI.start()
 		classCards[classId] = { card = card, nameLabel = nameLabel, useBtn = useBtn }
 	end
 
-	-- Fetches every class's level (so the picker can show "Mago Lvl. 3" even
+	-- Fetches every class's level (so the picker can show "Mage Lvl. 3" even
 	-- for classes you're not currently playing) and highlights the active one.
 	local function openClassPicker()
 		classModal.Visible = true
@@ -1545,9 +1545,9 @@ function InventoryUI.start()
 		local bindSlot = BIND_KEYS[input.KeyCode]
 		if bindSlot and hovered then
 			local def = Items.get(hovered.itemId)
-			-- Decided rule: tools, consumables, and placeables are
-			-- quick-bindable (weapons live on the reserved 1/2 keys).
-			if def and (def.type == "tool" or def.type == "consumable" or def.type == "placeable") then
+			-- Decided rule: only tools and consumables are quick-bindable
+			-- (weapons live on the reserved 1/2 keys).
+			if def and (def.type == "tool" or def.type == "consumable") then
 				HotbarBinds.set(bindSlot, hovered.itemId)
 			end
 		end

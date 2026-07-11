@@ -18,7 +18,8 @@ Spells.BIND_PREFIX = "spell:"
 Spells.cdAttributePrefix = "SpellCd_"
 
 -- ---- schools (subclasses) ---------------------------------------------------
--- passive.stat: "magic" | "physical" (physical also boosts melee) | "armor".
+-- passive.stat: "magic" | "physical" (physical also boosts melee) | "armor"
+--             | "healing" | "attackSpeed" | "control" (stronger slows).
 -- passive.thresholds: { {points, value} } — highest reached tier applies.
 -- spells: { {id, points} } — actives granted at that school point total.
 -- familiars: invoker-only summon-count thresholds.
@@ -35,7 +36,7 @@ Spells.schools = {
 		color = Color3.fromRGB(255, 120, 50),
 		passive = {
 			stat = "magic",
-			thresholds = { { 1, 0.10 }, { 5, 0.20 }, { 10, 0.30 }, { 15, 0.42 }, { 20, 0.55 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.06 }, { 10, 0.16 }, { 15, 0.29 }, { 20, 0.44 }, { 25, 0.62 }, { 30, 0.81 } },
 		},
 		spells = { { "fireball", 1 }, { "flame_wall", 10 }, { "supernova", 20 } },
 	},
@@ -47,7 +48,7 @@ Spells.schools = {
 		color = Color3.fromRGB(150, 90, 255),
 		passive = {
 			stat = "magic",
-			thresholds = { { 1, 0.10 }, { 5, 0.15 }, { 10, 0.25 }, { 15, 0.35 }, { 20, 0.50 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.05 }, { 10, 0.14 }, { 15, 0.25 }, { 20, 0.38 }, { 25, 0.52 }, { 30, 0.69 } },
 		},
 		spells = { { "arcane_missile", 1 }, { "arcane_rain", 10 }, { "arcane_storm", 20 } },
 	},
@@ -62,7 +63,7 @@ Spells.schools = {
 		color = Color3.fromRGB(120, 220, 180),
 		passive = {
 			stat = "magic",
-			thresholds = { { 1, 0.06 }, { 5, 0.12 }, { 10, 0.18 }, { 15, 0.25 }, { 20, 0.35 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.04 }, { 10, 0.11 }, { 15, 0.20 }, { 20, 0.31 }, { 25, 0.43 }, { 30, 0.57 } },
 		},
 		-- Level 10 is the second familiar (see familiars below), level 15
 		-- borrows Arcane Rain per the board.
@@ -79,7 +80,7 @@ Spells.schools = {
 		color = Color3.fromRGB(220, 80, 60),
 		passive = {
 			stat = "physical",
-			thresholds = { { 1, 0.10 }, { 5, 0.18 }, { 10, 0.28 }, { 15, 0.38 }, { 20, 0.50 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.06 }, { 10, 0.16 }, { 15, 0.29 }, { 20, 0.44 }, { 25, 0.62 }, { 30, 0.81 } },
 		},
 		spells = { { "battle_cry", 1 }, { "savage_strike", 10 }, { "frenzy", 20 } },
 	},
@@ -91,7 +92,7 @@ Spells.schools = {
 		color = Color3.fromRGB(120, 150, 200),
 		passive = {
 			stat = "armor",
-			thresholds = { { 1, 8 }, { 5, 16 }, { 10, 24 }, { 15, 32 }, { 20, 42 } },
+			thresholds = { { 1, 1 }, { 5, 7 }, { 10, 21 }, { 15, 38 }, { 20, 59 }, { 25, 82 }, { 30, 108 } },
 		},
 		spells = { { "provoke", 1 }, { "steel_loyalty", 10 }, { "bulwark", 20 } },
 	},
@@ -103,18 +104,28 @@ Spells.schools = {
 		color = Color3.fromRGB(240, 200, 90),
 		passive = {
 			stat = "physical",
-			thresholds = { { 1, 0.10 }, { 5, 0.15 }, { 10, 0.25 }, { 15, 0.30 }, { 20, 0.35 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.05 }, { 10, 0.14 }, { 15, 0.25 }, { 20, 0.38 }, { 25, 0.52 }, { 30, 0.69 } },
 		},
 		spells = { { "stunning_strike", 1 }, { "judgment", 10 }, { "verdict", 20 } },
 	},
 
-	-- ---- Ranger (board is still sketchy: burst / CC / movement) ---------------
+	-- ---- Ranger ----------------------------------------------------------------
+	-- Passives per docs/TRAITS_CATALOG.md §2: Sniper rides the damage
+	-- template; Scout's attack speed sums with Agile Hands into the same
+	-- swing-cooldown hook; Trapper's "control" is the NEW slow-potency stat
+	-- (your slows are X% stronger — EnemyService.registerSlowPotency).
+	-- The 10/20 spells are still board-only (see the catalog) — only each
+	-- school's level-1 spell exists as a def today.
 	sniper = {
 		id = "sniper",
 		name = "Sniper",
 		classIds = { "archer" },
 		icon = "🎯",
 		color = Color3.fromRGB(90, 200, 90),
+		passive = {
+			stat = "physical",
+			thresholds = { { 1, 0.01 }, { 5, 0.06 }, { 10, 0.16 }, { 15, 0.29 }, { 20, 0.44 }, { 25, 0.62 }, { 30, 0.81 } },
+		},
 		spells = { { "deadeye_shot", 1 } },
 	},
 	trapper = {
@@ -123,6 +134,10 @@ Spells.schools = {
 		classIds = { "archer" },
 		icon = "🕸️",
 		color = Color3.fromRGB(160, 130, 80),
+		passive = {
+			stat = "control",
+			thresholds = { { 1, 0.01 }, { 5, 0.06 }, { 10, 0.16 }, { 15, 0.28 }, { 20, 0.44 }, { 25, 0.61 }, { 30, 0.80 } },
+		},
 		spells = { { "snare_trap", 1 } },
 	},
 	scout = {
@@ -131,53 +146,57 @@ Spells.schools = {
 		classIds = { "archer" },
 		icon = "💨",
 		color = Color3.fromRGB(90, 210, 230),
+		passive = {
+			stat = "attackSpeed",
+			thresholds = { { 1, 0.01 }, { 5, 0.05 }, { 10, 0.14 }, { 15, 0.26 }, { 20, 0.39 }, { 25, 0.55 }, { 30, 0.72 } },
+		},
 		spells = { { "sprint", 1 } },
 	},
 
 	-- ---- Cleric ---------------------------------------------------------------
-	-- Sacerdote/Oráculo use the new "healing" passive stat (see
+	-- Light Priest/Oracle use the new "healing" passive stat (see
 	-- Spells.passivesFor) — a flat multiplier on outgoing heals, exactly
-	-- like "magic"/"physical" are for damage. Vengador Sagrado hits enemies
+	-- like "magic"/"physical" are for damage. Holy Avenger hits enemies
 	-- AND heals allies in the same swing, so it scales off "magic" instead.
 	-- Only each school's level-1 spell is implemented this pass (see
 	-- `implemented = false` below) — enough to test the healing stat and
 	-- the new heal/line behaviors; the rest are full defs already so the
 	-- tracker/thresholds are correct, just not castable yet.
-	sacerdote_luz = {
-		id = "sacerdote_luz",
-		name = "Sacerdote de Luz",
+	light_priest = {
+		id = "light_priest",
+		name = "Light Priest",
 		classIds = { "cleric" },
 		icon = "✨",
 		color = Color3.fromRGB(255, 230, 170),
 		passive = {
 			stat = "healing",
-			thresholds = { { 1, 0.10 }, { 5, 0.18 }, { 10, 0.25 }, { 15, 0.38 }, { 20, 0.45 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.06 }, { 10, 0.16 }, { 15, 0.29 }, { 20, 0.44 }, { 25, 0.62 }, { 30, 0.81 } },
 		},
-		spells = { { "toque_curativo", 1 }, { "bendicion", 10 }, { "renacimiento", 20 } },
+		spells = { { "healing_touch", 1 }, { "blessing", 10 }, { "revival", 20 } },
 	},
-	vengador_sagrado = {
-		id = "vengador_sagrado",
-		name = "Vengador Sagrado",
+	holy_avenger = {
+		id = "holy_avenger",
+		name = "Holy Avenger",
 		classIds = { "cleric" },
 		icon = "⚔️",
 		color = Color3.fromRGB(230, 190, 90),
 		passive = {
 			stat = "magic",
-			thresholds = { { 1, 0.08 }, { 5, 0.14 }, { 10, 0.22 }, { 15, 0.30 }, { 20, 0.42 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.05 }, { 10, 0.14 }, { 15, 0.25 }, { 20, 0.38 }, { 25, 0.52 }, { 30, 0.69 } },
 		},
-		spells = { { "golpe_sagrado", 1 }, { "represalia", 10 }, { "juicio_divino", 20 } },
+		spells = { { "holy_strike", 1 }, { "reprisal", 10 }, { "divine_judgment", 20 } },
 	},
-	oraculo = {
-		id = "oraculo",
-		name = "Oráculo",
+	oracle = {
+		id = "oracle",
+		name = "Oracle",
 		classIds = { "cleric" },
 		icon = "👁️",
 		color = Color3.fromRGB(140, 210, 220),
 		passive = {
 			stat = "healing",
-			thresholds = { { 1, 0.08 }, { 5, 0.14 }, { 10, 0.22 }, { 15, 0.30 }, { 20, 0.40 } },
+			thresholds = { { 1, 0.01 }, { 5, 0.05 }, { 10, 0.14 }, { 15, 0.25 }, { 20, 0.38 }, { 25, 0.52 }, { 30, 0.69 } },
 		},
-		spells = { { "purificar", 1 }, { "vinculo_espiritual", 10 }, { "intervencion", 20 } },
+		spells = { { "purify", 1 }, { "spirit_link", 10 }, { "intervention", 20 } },
 	},
 }
 
@@ -186,7 +205,7 @@ Spells.schoolOrder = {
 	"pyromancer", "arcanist", "invoker",
 	"berserker", "sentinel", "justicar",
 	"sniper", "trapper", "scout",
-	"sacerdote_luz", "vengador_sagrado", "oraculo",
+	"light_priest", "holy_avenger", "oracle",
 }
 
 -- ---- spell defs ---------------------------------------------------------------
@@ -520,10 +539,10 @@ Spells.defs = {
 	-- test the new "healing" passive stat + heal/line behaviors). The rest
 	-- are full defs so thresholds/tooltips are correct, just not castable
 	-- yet — see docs/TRAITS_AND_SPELLS.md "open questions" for the plan.
-	toque_curativo = {
-		id = "toque_curativo",
-		name = "Toque Curativo",
-		school = "sacerdote_luz",
+	healing_touch = {
+		id = "healing_touch",
+		name = "Healing Touch",
+		school = "light_priest",
 		icon = "✨",
 		description = "Instantly heals an ally — auto-targets whoever nearby needs it most.",
 		behavior = "heal",
@@ -533,19 +552,19 @@ Spells.defs = {
 		healAmount = 50,
 		hotbarPriority = 10,
 	},
-	bendicion = {
-		id = "bendicion",
-		name = "Bendición",
-		school = "sacerdote_luz",
+	blessing = {
+		id = "blessing",
+		name = "Blessing",
+		school = "light_priest",
 		icon = "🕊️",
 		description = "Shields an ally and speeds up their regen for a few seconds.",
 		implemented = false,
 		hotbarPriority = 30,
 	},
-	renacimiento = {
-		id = "renacimiento",
-		name = "Renacimiento",
-		school = "sacerdote_luz",
+	revival = {
+		id = "revival",
+		name = "Revival",
+		school = "light_priest",
 		icon = "💫",
 		description = "Ultimate: instantly revives a downed ally at half their max HP, skipping the bleed timer entirely.",
 		behavior = "revive",
@@ -555,10 +574,10 @@ Spells.defs = {
 		healPercent = 0.5,
 		hotbarPriority = 50,
 	},
-	golpe_sagrado = {
-		id = "golpe_sagrado",
-		name = "Golpe Sagrado",
-		school = "vengador_sagrado",
+	holy_strike = {
+		id = "holy_strike",
+		name = "Holy Strike",
+		school = "holy_avenger",
 		icon = "⚔️",
 		description = "A holy line strike: damages enemies and heals allies it passes through.",
 		behavior = "line",
@@ -572,46 +591,46 @@ Spells.defs = {
 		color = Color3.fromRGB(230, 190, 90),
 		hotbarPriority = 11,
 	},
-	represalia = {
-		id = "represalia",
-		name = "Represalia",
-		school = "vengador_sagrado",
+	reprisal = {
+		id = "reprisal",
+		name = "Reprisal",
+		school = "holy_avenger",
 		icon = "🩸",
 		description = "Minor lifesteal for the whole party for a few seconds.",
 		implemented = false,
 		hotbarPriority = 31,
 	},
-	juicio_divino = {
-		id = "juicio_divino",
-		name = "Juicio Divino",
-		school = "vengador_sagrado",
+	divine_judgment = {
+		id = "divine_judgment",
+		name = "Divine Judgment",
+		school = "holy_avenger",
 		icon = "☀️",
 		description = "Ultimate: a channeled nuke — the damage it deals also heals the party.",
 		implemented = false,
 		hotbarPriority = 51,
 	},
-	purificar = {
-		id = "purificar",
-		name = "Purificar",
-		school = "oraculo",
+	purify = {
+		id = "purify",
+		name = "Purify",
+		school = "oracle",
 		icon = "🌿",
 		description = "Cleanses an ally's debuffs and briefly prevents new ones.",
 		implemented = false,
 		hotbarPriority = 12,
 	},
-	vinculo_espiritual = {
-		id = "vinculo_espiritual",
-		name = "Vínculo Espiritual",
-		school = "oraculo",
+	spirit_link = {
+		id = "spirit_link",
+		name = "Spirit Link",
+		school = "oracle",
 		icon = "🔗",
 		description = "Links two allies (or you to one) so heals on either also heal the other.",
 		implemented = false,
 		hotbarPriority = 32,
 	},
-	intervencion = {
-		id = "intervencion",
-		name = "Intervención",
-		school = "oraculo",
+	intervention = {
+		id = "intervention",
+		name = "Intervention",
+		school = "oracle",
 		icon = "🕯️",
 		description = "Ultimate: an ally can't die for 5 seconds.",
 		implemented = false,
@@ -687,9 +706,10 @@ end
 -- Aggregated school passives from point totals. Each school contributes from
 -- its OWN points, so same-stat passives sum (they're independently earned
 -- through different gear, TFT-style).
--- Returns { magic = frac, physical = frac, melee = frac, armor = flat }.
+-- Returns { magic, physical, melee, healing, attackSpeed, control = frac,
+-- armor = flat }.
 function Spells.passivesFor(schoolPoints)
-	local out = { magic = 0, physical = 0, melee = 0, armor = 0, healing = 0 }
+	local out = { magic = 0, physical = 0, melee = 0, armor = 0, healing = 0, attackSpeed = 0, control = 0 }
 	for _, schoolId in ipairs(Spells.schoolOrder) do
 		local points = tonumber(schoolPoints and schoolPoints[schoolId]) or 0
 		local passive = points > 0 and Spells.schools[schoolId].passive or nil
@@ -705,6 +725,10 @@ function Spells.passivesFor(schoolPoints)
 				out.armor += value
 			elseif passive.stat == "healing" then
 				out.healing += value
+			elseif passive.stat == "attackSpeed" then
+				out.attackSpeed += value
+			elseif passive.stat == "control" then
+				out.control += value
 			end
 		end
 	end
@@ -730,6 +754,10 @@ function Spells.passiveLabel(stat, value)
 		return ("+%d armor"):format(value)
 	elseif stat == "healing" then
 		return ("+%d%% healing"):format(math.floor(value * 100 + 0.5))
+	elseif stat == "attackSpeed" then
+		return ("+%d%% attack speed"):format(math.floor(value * 100 + 0.5))
+	elseif stat == "control" then
+		return ("+%d%% stronger slows"):format(math.floor(value * 100 + 0.5))
 	end
 	local kind = stat == "magic" and "magic damage" or "physical damage"
 	return ("+%d%% %s"):format(math.floor(value * 100 + 0.5), kind)

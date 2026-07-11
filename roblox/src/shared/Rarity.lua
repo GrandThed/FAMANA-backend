@@ -3,10 +3,13 @@
 -- Rarity is cosmetic AND mechanical:
 --   * cosmetic — slot/tile borders, tooltip title + frame, drop labels all
 --     tint with the tier (Common stays neutral, no glow).
---   * mechanical — a rolled drop's rarity grants BONUS trait points on top
---     of its item level and widens how many trait lines the roll can carry
---     (see Traits.roll). The base rule "points = item level" still holds
---     for fixed defs; rarity is the only thing that pushes a roll above it.
+--   * mechanical — rarity ramps BOTH axes of a roll (docs/TRAITS_V2.md §6):
+--     CONCENTRATION (the main line carries mainShare × itemLevel points —
+--     only a legendary's main line reaches the full item level, and the
+--     convex trait ladders make concentration power) and BONUS points
+--     (bonusPercent of the item level, ceil, min 1, arriving as side
+--     lines). Commons smear points into a generalist; legendaries build
+--     specialists. See Traits.roll.
 --
 -- Where an item's rarity lives:
 --   * fixed items — optional `rarity` on the def (backend content/items.json
@@ -18,10 +21,13 @@
 
 local Rarity = {}
 
--- weight      — relative roll odds (Traits.roll).
--- bonusPoints — trait points granted on top of the rolled item level.
--- minLines/maxLines — how many distinct trait/school lines a roll spreads
---                     its points over (clamped by the point budget).
+-- weight       — relative roll odds (Traits.roll).
+-- bonusPercent — bonus trait points as a fraction of item level (ceil,
+--                min 1 when > 0), delivered as side lines.
+-- mainShare    — the main line's cap as a fraction of ITEM LEVEL (1.0 =
+--                a legendary main line carries the full item level).
+-- lines        — total line count the tier aims for (number, or {min,max}
+--                rolled per drop); clamped so every line keeps ≥1 point.
 Rarity.defs = {
 	common = {
 		id = "common",
@@ -32,9 +38,9 @@ Rarity.defs = {
 		glowColor = Color3.fromRGB(154, 148, 132),
 		hasGlow = false,
 		weight = 50,
-		bonusPoints = 0,
-		minLines = 1,
-		maxLines = 1,
+		bonusPercent = 0,
+		mainShare = 0.40,
+		lines = 4,
 	},
 	uncommon = {
 		id = "uncommon",
@@ -45,9 +51,9 @@ Rarity.defs = {
 		glowColor = Color3.fromRGB(92, 138, 60),
 		hasGlow = true,
 		weight = 28,
-		bonusPoints = 1,
-		minLines = 1,
-		maxLines = 2,
+		bonusPercent = 0.05,
+		mainShare = 0.60,
+		lines = 3,
 	},
 	rare = {
 		id = "rare",
@@ -58,9 +64,9 @@ Rarity.defs = {
 		glowColor = Color3.fromRGB(60, 110, 168),
 		hasGlow = true,
 		weight = 14,
-		bonusPoints = 2,
-		minLines = 2,
-		maxLines = 2,
+		bonusPercent = 0.10,
+		mainShare = 0.70,
+		lines = { 2, 3 },
 	},
 	epic = {
 		id = "epic",
@@ -71,9 +77,9 @@ Rarity.defs = {
 		glowColor = Color3.fromRGB(167, 106, 214),
 		hasGlow = true,
 		weight = 6,
-		bonusPoints = 3,
-		minLines = 2,
-		maxLines = 3,
+		bonusPercent = 0.15,
+		mainShare = 0.90,
+		lines = { 2, 3 },
 	},
 	legendary = {
 		id = "legendary",
@@ -84,9 +90,9 @@ Rarity.defs = {
 		glowColor = Color3.fromRGB(224, 160, 58),
 		hasGlow = true,
 		weight = 2,
-		bonusPoints = 5,
-		minLines = 3,
-		maxLines = 3,
+		bonusPercent = 0.25,
+		mainShare = 1.00,
+		lines = { 2, 3 },
 	},
 }
 

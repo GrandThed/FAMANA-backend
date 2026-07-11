@@ -237,15 +237,36 @@ function HealthService.registerDamage(player)
 	lastDamage[player.UserId] = os.clock()
 end
 
+-- registerHealReceivedMult: fn(player) -> multiplier on healing RECEIVED
+-- (Life Essence trait). Applies to heal() below — spells, lifesteal, future
+-- potions — but deliberately NOT to natural/bonus regen (no Brawler
+-- double-dip).
+local healReceivedMultHooks = {}
+function HealthService.registerHealReceivedMult(fn)
+	table.insert(healReceivedMultHooks, fn)
+end
+
+local function hookedHealReceivedMult(player)
+	local mult = 1
+	for _, fn in ipairs(healReceivedMultHooks) do
+		local ok, value = pcall(fn, player)
+		if ok and typeof(value) == "number" then
+			mult *= value
+		end
+	end
+	return mult
+end
+
 -- Heals `player` by `amount`, clamped to their current MaxHealth. Used by
--- Cleric spells (SpellService's "heal"/"line" behaviors) — this is the only
--- writer of positive Health deltas outside natural regen, so it's the one
--- place to add e.g. an "overheal" or heal-received hook later if needed.
+-- Cleric spells (SpellService's "heal"/"line" behaviors) and weapon
+-- lifesteal — the only writer of positive Health deltas outside natural
+-- regen, so heal-received scaling lives here.
 function HealthService.heal(player, amount)
 	local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 or downed[player.UserId] then
 		return
 	end
+	amount *= hookedHealReceivedMult(player)
 	humanoid.Health = math.min(humanoid.MaxHealth, humanoid.Health + amount)
 end
 

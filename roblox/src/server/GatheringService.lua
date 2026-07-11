@@ -30,6 +30,44 @@ local resourceFolder
 -- [n] = function(player, itemId, amount, position)  fired after a successful
 -- harvest (the drop system hooks in to fly the resource to the player).
 GatheringService.gatheredHandlers = {}
+-- Gathering-bonus hooks (Prospector/Woodsman gear traits via SynergyService
+-- + the class gathering identities via ClassPassiveService). All additive
+-- fn(player, toolType) -> number:
+--   registerYieldBonus     — fraction of extra yield per harvest (the extra
+--                            is FREE: it never consumes node capacity).
+--   registerDoubleChance   — chance the whole harvest doubles (also free).
+--   registerNoDepleteChance — chance the swing doesn't consume the node.
+local yieldBonusHooks = {}
+local doubleChanceHooks = {}
+local noDepleteChanceHooks = {}
+
+local function additiveHook(hooks)
+	return function(player, toolType)
+		local sum = 0
+		for _, fn in ipairs(hooks) do
+			local ok, value = pcall(fn, player, toolType)
+			if ok and typeof(value) == "number" then
+				sum += value
+			end
+		end
+		return sum
+	end
+end
+
+function GatheringService.registerYieldBonus(fn)
+	table.insert(yieldBonusHooks, fn)
+end
+function GatheringService.registerDoubleChance(fn)
+	table.insert(doubleChanceHooks, fn)
+end
+function GatheringService.registerNoDepleteChance(fn)
+	table.insert(noDepleteChanceHooks, fn)
+end
+
+local hookedYieldBonus = additiveHook(yieldBonusHooks)
+local hookedDoubleChance = additiveHook(doubleChanceHooks)
+local hookedNoDepleteChance = additiveHook(noDepleteChanceHooks)
+
 function GatheringService.onGathered(fn)
 	table.insert(GatheringService.gatheredHandlers, fn)
 end
@@ -423,7 +461,22 @@ local function onToolSwing(player, tool, def)
 	end
 	lastGather[player.UserId] = now
 
-	local amount = math.min(def.gatherPower or 1, node.amount)
+	-- Only the BASE amount consumes node capacity; yield/double bonuses are
+	-- free extra on top (same spirit as the node's own bonusYield).
+	local baseAmount = math.min(def.gatherPower or 1, node.amount)
+	local extra = 0
+	local yieldBonus = hookedYieldBonus(player, def.toolType)
+	if yieldBonus > 0 then
+		local raw = baseAmount * yieldBonus
+		extra = math.floor(raw)
+		if math.random() < raw - extra then
+			extra += 1
+		end
+	end
+	if math.random() < hookedDoubleChance(player, def.toolType) then
+		extra += baseAmount
+	end
+	local amount = baseAmount + extra
 
 	-- eto hace que suene cuando le pegas a la piedra o al rbol
 	Remotes.get("GatherFeedback"):FireClient(player, node.def.yield, amount, node.anchor.Position)
@@ -468,7 +521,11 @@ local function onToolSwing(player, tool, def)
 		end
 	end
 
-	node.amount -= amount
+	-- Prospector's capstone: sometimes the swing doesn't wear the node.
+	if math.random() < hookedNoDepleteChance(player, def.toolType) then
+		return
+	end
+	node.amount -= baseAmount
 	if node.amount <= 0 then
 		node.deplete()
 		task.delay(node.def.respawn, function()

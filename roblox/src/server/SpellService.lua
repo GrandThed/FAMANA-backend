@@ -30,6 +30,7 @@ local EnemyService = require(script.Parent.EnemyService)
 local EffectService = require(script.Parent.EffectService)
 local SynergyService = require(script.Parent.SynergyService)
 local HealthService = require(script.Parent.HealthService)
+local ToolService = require(script.Parent.ToolService)
 
 local SpellService = {}
 
@@ -296,7 +297,7 @@ function BEHAVIORS.zone(player, root, def)
 							EnemyService.dealSpellDamage(ref, tick, player, false)
 						end
 						if def.slow then
-							EnemyService.slow(ref, def.slow.duration, def.slow.mult)
+							EnemyService.slow(ref, def.slow.duration, def.slow.mult, player)
 						end
 					end
 				end
@@ -321,7 +322,7 @@ function BEHAVIORS.strike(player, root, def)
 		local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
 		EnemyService.dealSpellDamage(ref, damage, player, isCrit)
 		if def.stunDuration then
-			EnemyService.stun(ref, def.stunDuration)
+			EnemyService.stun(ref, def.stunDuration, player)
 		end
 		if ref.part then
 			burst(ref.part.Position, Color3.fromRGB(255, 240, 200), 3, 0.25)
@@ -341,7 +342,7 @@ function BEHAVIORS.aoe(player, root, def)
 			local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
 			EnemyService.dealSpellDamage(ref, damage, player, isCrit)
 			if def.stunDuration then
-				EnemyService.stun(ref, def.stunDuration)
+				EnemyService.stun(ref, def.stunDuration, player)
 			end
 		end
 	end
@@ -732,6 +733,15 @@ function SpellService.start()
 	EnemyService.registerDamageTakenMult(function(player)
 		local armor = Spells.passivesFor(SynergyService.getSchoolPoints(player)).armor
 		return armor > 0 and 100 / (100 + armor) or 1
+	end)
+	-- Ranger school passives (docs/TRAITS_CATALOG.md §2): Scout's attack
+	-- speed sums with Agile Hands in the same swing-cooldown hook; Trapper's
+	-- control makes the player's slows bite deeper.
+	ToolService.registerSwingCooldownMult(function(player)
+		return 1 / (1 + Spells.passivesFor(SynergyService.getSchoolPoints(player)).attackSpeed)
+	end)
+	EnemyService.registerSlowPotency(function(player)
+		return Spells.passivesFor(SynergyService.getSchoolPoints(player)).control
 	end)
 
 	-- Equipment is the only source of school points, so knowns re-derive on

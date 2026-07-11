@@ -44,7 +44,7 @@ Recipes.defs = {
 	},
 	simple_forge = {
 		id = "simple_forge",
-		name = "Forja Sencilla",
+		name = "Simple Forge",
 		result = { itemId = "simple_forge", quantity = 1 },
 		ingredients = {
 			{ itemId = "stone", quantity = 15 },

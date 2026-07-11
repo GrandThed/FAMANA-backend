@@ -1,5 +1,5 @@
--- Class passives — ONE fixed trait per main class (Caballero/Arquero/Mago/
--- Clérigo), independent of equipment. Unlike shared/Traits.lua (points come
+-- Class passives — ONE fixed trait per main class (Knight/Archer/Mage/
+-- Cleric), independent of equipment. Unlike shared/Traits.lua (points come
 -- from the equipped paper doll), these scale purely off the player's own
 -- CLASS LEVEL (see ClassService.getLevel), at the same tier breakpoints as
 -- the subclass unlock ladder: 1 / 5 / 10 / 15 / 20 (Classes.MAX_LEVEL).
@@ -17,11 +17,20 @@
 -- additively without knowing about each other.
 --
 -- Stat keys (same shape as Traits.lua, only the ones actually used here):
---   damageTakenMult — multiplier on incoming damage (Caballero)
---   crit            — added critical strike chance, fraction (Arquero)
---   duration        — buff/ability duration bonus, fraction (Mago)
+--   damageTakenMult — multiplier on incoming damage (Knight)
+--   crit            — added critical strike chance, fraction (Archer)
+--   duration        — buff/ability duration bonus, fraction (Mage)
 --   regen           — HP regen per second, as a fraction of max HP,
---                      always on, even in combat (Clérigo)
+--                      always on, even in combat (Cleric)
+-- Each class ALSO carries its GATHERING IDENTITY from level 5 up
+-- (docs/TRAITS_V2.md §5 — how each class harvests the world; gear traits
+-- like Prospector stack additively on top):
+--   gatherYield — Knight: +% yield from natural resources (wood/stone/ore)
+--   mobDrops    — Archer: +% drops from enemies (NEVER equipment)
+--   craftDouble — Mage: chance a potion craft produces double
+--                 (content-gated: waits on potion recipes)
+--   herbYield   — Cleric: +% herb yield (content-gated: waits on herb
+--                 nodes + the sickle tool)
 
 local ClassPassives = {}
 
@@ -31,61 +40,61 @@ ClassPassives.defs = {
 	knight = {
 		id = "oakskin",
 		classId = "knight",
-		name = "Piel de Roble",
+		name = "Oakskin",
 		icon = "🛡️",
 		color = Color3.fromRGB(150, 160, 190),
-		description = "La coraza natural del Caballero: reduce todo el daño que recibe.",
+		description = "The Knight's natural armor: reduces all incoming damage.",
 		thresholds = {
 			{ 1, { damageTakenMult = 0.95 } }, -- -5%
-			{ 5, { damageTakenMult = 0.91 } }, -- -9%
-			{ 10, { damageTakenMult = 0.87 } }, -- -13%
-			{ 15, { damageTakenMult = 0.83 } }, -- -17%
-			{ 20, { damageTakenMult = 0.78 } }, -- -22%
+			{ 5, { damageTakenMult = 0.91, gatherYield = 0.10 } }, -- -9%
+			{ 10, { damageTakenMult = 0.87, gatherYield = 0.29 } }, -- -13%
+			{ 15, { damageTakenMult = 0.83, gatherYield = 0.53 } }, -- -17%
+			{ 20, { damageTakenMult = 0.78, gatherYield = 0.82 } }, -- -22%
 		},
 	},
 	archer = {
 		id = "hawk_eye",
 		classId = "archer",
-		name = "Ojo de Halcón",
+		name = "Hawk Eye",
 		icon = "🦅",
 		color = Color3.fromRGB(240, 190, 70),
-		description = "Puntería innata del Arquero: probabilidad de crítico adicional.",
+		description = "The Archer's innate aim: bonus critical strike chance.",
 		thresholds = {
 			{ 1, { crit = 0.05 } },
-			{ 5, { crit = 0.09 } },
-			{ 10, { crit = 0.13 } },
-			{ 15, { crit = 0.17 } },
-			{ 20, { crit = 0.22 } },
+			{ 5, { crit = 0.09, mobDrops = 0.10 } },
+			{ 10, { crit = 0.13, mobDrops = 0.29 } },
+			{ 15, { crit = 0.17, mobDrops = 0.53 } },
+			{ 20, { crit = 0.22, mobDrops = 0.82 } },
 		},
 	},
 	mage = {
 		id = "arcane_mastery",
 		classId = "mage",
-		name = "Dominio Arcano",
+		name = "Arcane Mastery",
 		icon = "🔮",
 		color = Color3.fromRGB(150, 130, 220),
-		description = "El Mago sostiene sus propios buffs y debuffs por más tiempo.",
+		description = "The Mage sustains their own buffs and debuffs for longer.",
 		thresholds = {
 			{ 1, { duration = 0.08 } },
-			{ 5, { duration = 0.15 } },
-			{ 10, { duration = 0.22 } },
-			{ 15, { duration = 0.30 } },
-			{ 20, { duration = 0.40 } },
+			{ 5, { duration = 0.15, craftDouble = 0.10 } },
+			{ 10, { duration = 0.22, craftDouble = 0.29 } },
+			{ 15, { duration = 0.30, craftDouble = 0.53 } },
+			{ 20, { duration = 0.40, craftDouble = 0.82 } },
 		},
 	},
 	cleric = {
 		id = "vital_aura",
 		classId = "cleric",
-		name = "Aura Vital",
+		name = "Vital Aura",
 		icon = "✨",
 		color = Color3.fromRGB(220, 110, 90),
-		description = "El Clérigo regenera vida de forma constante, incluso en combate.",
+		description = "The Cleric steadily regenerates health, even in combat.",
 		thresholds = {
 			{ 1, { regen = 0.010 } },
-			{ 5, { regen = 0.015 } },
-			{ 10, { regen = 0.020 } },
-			{ 15, { regen = 0.025 } },
-			{ 20, { regen = 0.035 } },
+			{ 5, { regen = 0.015, herbYield = 0.10 } },
+			{ 10, { regen = 0.020, herbYield = 0.29 } },
+			{ 15, { regen = 0.025, herbYield = 0.53 } },
+			{ 20, { regen = 0.035, herbYield = 0.82 } },
 		},
 	},
 }
@@ -131,7 +140,8 @@ end
 
 -- ---- labels (UI) --------------------------------------------------------------
 
-local STAT_ORDER = { "damageTakenMult", "crit", "duration", "regen" }
+local STAT_ORDER =
+	{ "damageTakenMult", "crit", "duration", "regen", "gatherYield", "mobDrops", "craftDouble", "herbYield" }
 
 local STAT_LABELS = {
 	damageTakenMult = function(v)
@@ -145,6 +155,18 @@ local STAT_LABELS = {
 	end,
 	regen = function(v)
 		return ("+%.1f%%/s HP regen"):format(v * 100)
+	end,
+	gatherYield = function(v)
+		return ("+%d%% resource yield"):format(math.floor(v * 100 + 0.5))
+	end,
+	mobDrops = function(v)
+		return ("+%d%% enemy drops"):format(math.floor(v * 100 + 0.5))
+	end,
+	craftDouble = function(v)
+		return ("%d%% double brew"):format(math.floor(v * 100 + 0.5))
+	end,
+	herbYield = function(v)
+		return ("+%d%% herb yield"):format(math.floor(v * 100 + 0.5))
 	end,
 }
 

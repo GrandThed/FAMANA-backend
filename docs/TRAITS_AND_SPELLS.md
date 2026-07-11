@@ -16,6 +16,14 @@ Two halves:
 
 ## Part 1 — Trait system (design)
 
+> [!NOTE]
+> **2026-07-10:** a v2 proposal (convex power curve, the board's missing
+> traits, gathering + class-innate traits, rarity line rework) lives in
+> [`TRAITS_V2.md`](TRAITS_V2.md). This part stays the record of what shipped.
+> Spanish names below document the shipped code as-is; the canonical
+> English names + id rename map live in
+> [`TRAITS_CATALOG.md`](TRAITS_CATALOG.md) §6 (implementation step 0).
+
 ### The idea (as understood)
 
 - Every piece of equipment (weapons, armor, rings) carries **traits** with

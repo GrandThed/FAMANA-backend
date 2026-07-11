@@ -206,6 +206,30 @@ local function buildHandle(def)
 	return handle
 end
 
+-- ---- held-item tracking (the hand rule, docs/TRAITS_V2.md §1.4) -----------
+-- Which item is actually OUT in the player's hands right now. SynergyService
+-- swaps weapon/tool trait contributions on this (armor/rings always count).
+local heldItem = {} -- [userId] = itemId of the equipped Tool, or nil
+
+local heldChangedCallbacks = {}
+function ToolService.onHeldChanged(fn)
+	table.insert(heldChangedCallbacks, fn)
+end
+
+function ToolService.getHeldItemId(player)
+	return heldItem[player.UserId]
+end
+
+local function setHeld(player, itemId)
+	if heldItem[player.UserId] == itemId then
+		return
+	end
+	heldItem[player.UserId] = itemId
+	for _, fn in ipairs(heldChangedCallbacks) do
+		task.spawn(fn, player)
+	end
+end
+
 local function buildTool(player, itemId)
 	local def = Items.get(itemId)
 	local tool = Instance.new("Tool")
@@ -213,6 +237,14 @@ local function buildTool(player, itemId)
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
 	tool:SetAttribute("itemId", itemId)
+	tool.Equipped:Connect(function()
+		setHeld(player, itemId)
+	end)
+	tool.Unequipped:Connect(function()
+		if heldItem[player.UserId] == itemId then
+			setHeld(player, nil)
+		end
+	end)
 	local handle = buildHandle(def)
 	handle.Parent = tool
 
@@ -316,6 +348,7 @@ function ToolService.start()
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastSwing[player.UserId] = nil
+		heldItem[player.UserId] = nil
 	end)
 end
 

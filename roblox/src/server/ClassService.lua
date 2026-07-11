@@ -1,4 +1,4 @@
--- Classes: Caballero / Arquero / Mago / Clérigo. MVP pass is passive stats
+-- Classes: Knight / Archer / Mage / Cleric. MVP pass is passive stats
 -- only (no active abilities yet). A player can switch class at any time
 -- (e.g. via the inventory panel); each class keeps its own level/xp track
 -- (see PlayerService), so switching never erases progress on another class.
@@ -197,7 +197,7 @@ function ClassService.start()
 		return { ok = ok, error = err }
 	end
 
-	-- Lets the class-picker UI show every class's own level (e.g. "Mago
+	-- Lets the class-picker UI show every class's own level (e.g. "Mage
 	-- Lvl. 3") even for classes the player isn't currently playing.
 	local classLevelsRemote = Remotes.getFunction("RequestClassLevels")
 	classLevelsRemote.OnServerInvoke = function(player)

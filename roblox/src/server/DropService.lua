@@ -152,6 +152,25 @@ local function flyToPlayer(itemId, position, player)
 	end)
 end
 
+-- registerQuantityBonus: fn(player) -> fraction of extra quantity on the
+-- killer's TABLE loot (Archer's mob-drop identity). Gear rolls (GEAR_LOOT)
+-- deliberately never scale — equipment stays out of the bonus economy.
+local quantityBonusHooks = {}
+function DropService.registerQuantityBonus(fn)
+	table.insert(quantityBonusHooks, fn)
+end
+
+local function hookedQuantityBonus(player)
+	local sum = 0
+	for _, fn in ipairs(quantityBonusHooks) do
+		local ok, value = pcall(fn, player)
+		if ok and typeof(value) == "number" then
+			sum += value
+		end
+	end
+	return sum
+end
+
 local function rollLoot(source)
 	local lootTable = LOOT[source]
 	if not lootTable then
@@ -359,10 +378,22 @@ function DropService.start()
 	Remotes.get("DropPickup")
 
 	-- Spawn loot when an enemy dies: the regular table plus a chance at a
-	-- rolled trait item leveled off the mob.
-	EnemyService.onKilled(function(source, position, _killer, level)
+	-- rolled trait item leveled off the mob. The killer's mob-drop bonus
+	-- (the Archer's class identity) scales the TABLE drops only — gear
+	-- rolls stay untouched so the rolled-item economy doesn't inflate.
+	EnemyService.onKilled(function(source, position, killer, level)
+		local dropBonus = killer and hookedQuantityBonus(killer) or 0
 		for _, drop in ipairs(rollLoot(source)) do
-			spawnDrop(drop.itemId, drop.quantity, position)
+			local quantity = drop.quantity
+			if dropBonus > 0 then
+				local raw = quantity * dropBonus
+				local extra = math.floor(raw)
+				if math.random() < raw - extra then
+					extra += 1
+				end
+				quantity += extra
+			end
+			spawnDrop(drop.itemId, quantity, position)
 		end
 		local gearId, gearMeta = rollGear(source, level)
 		if gearId then

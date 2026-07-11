@@ -3,10 +3,10 @@
 -- involved at all. Feeds into the exact same stat hooks SynergyService
 -- (equipment traits) uses, so the two stack additively without either
 -- system knowing the other exists:
---   * Caballero "Piel de Roble"   → EnemyService damage-taken hook
---   * Arquero   "Ojo de Halcón"   → EnemyService crit-chance hook
---   * Mago      "Dominio Arcano"  → EffectService buff-duration hook
---   * Clérigo   "Aura Vital"      → HealthService always-on bonus regen
+--   * Knight "Oakskin"            → EnemyService damage-taken hook
+--   * Archer "Hawk Eye"           → EnemyService crit-chance hook
+--   * Mage "Arcane Mastery"      → EffectService buff-duration hook
+--   * Cleric "Vital Aura"         → HealthService always-on bonus regen
 -- Recomputes on level-up and on class switch (both change which tier is
 -- active). Replicates the active tier as the `ClassPassive` attribute (JSON:
 -- { id, name, level, nextLevel? }) so client UI can show it with no remote.
@@ -22,6 +22,9 @@ local EnemyService = require(script.Parent.EnemyService)
 local EffectService = require(script.Parent.EffectService)
 local HealthService = require(script.Parent.HealthService)
 local ClassService = require(script.Parent.ClassService)
+local GatheringService = require(script.Parent.GatheringService)
+local DropService = require(script.Parent.DropService)
+local CraftingService = require(script.Parent.CraftingService)
 
 local ClassPassiveService = {}
 
@@ -86,6 +89,27 @@ function ClassPassiveService.start()
 		local character = player.Character
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		return humanoid and fraction * humanoid.MaxHealth or 0
+	end)
+
+	-- ---- gathering identities (docs/TRAITS_V2.md §5) -----------------------
+	-- Knight harvests natural resources better; Cleric owns herbs (waits on
+	-- herb nodes + the sickle toolType); Archer loots more from enemies
+	-- (never equipment); Mage brews doubles (waits on potion recipes).
+	GatheringService.registerYieldBonus(function(player, toolType)
+		local stats = statsFor(player)
+		if toolType == "sickle" then
+			return stats.herbYield or 0
+		end
+		return stats.gatherYield or 0
+	end)
+	DropService.registerQuantityBonus(function(player)
+		return statsFor(player).mobDrops or 0
+	end)
+	CraftingService.registerDoubleCraftChance(function(player, recipeDef)
+		if recipeDef.potion then
+			return statsFor(player).craftDouble or 0
+		end
+		return 0
 	end)
 
 	-- ---- recompute triggers ------------------------------------------------

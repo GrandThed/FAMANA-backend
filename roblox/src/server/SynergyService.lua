@@ -28,6 +28,8 @@ local ToolService = require(script.Parent.ToolService)
 local EffectService = require(script.Parent.EffectService)
 local HealthService = require(script.Parent.HealthService)
 local ClassService = require(script.Parent.ClassService)
+local ManaService = require(script.Parent.ManaService)
+local GatheringService = require(script.Parent.GatheringService)
 
 local SynergyService = {}
 
@@ -73,8 +75,10 @@ recompute = function(player)
 		return
 	end
 	-- One aggregation pass; school ids and trait ids split into their
-	-- families here (Traits.statsFor already ignores school ids).
-	local totals = Traits.totalsFor(profile.inventory, profile.level)
+	-- families here (Traits.statsFor already ignores school ids). The held
+	-- item drives the hand rule: wielding a grid tool swaps the doll's
+	-- weapon/offhand contribution for the tool's own lines.
+	local totals = Traits.totalsFor(profile.inventory, profile.level, ToolService.getHeldItemId(player))
 	local schoolPoints = {}
 	for id, points in pairs(totals) do
 		if Spells.schools[id] then
@@ -113,7 +117,8 @@ recompute = function(player)
 
 	player:SetAttribute(
 		"ManaRegenPerSec",
-		(Config.Mana.regenAmount * classDef.manaRegenMult) / Config.Mana.regenInterval
+		(Config.Mana.regenAmount * classDef.manaRegenMult * (1 + (stats.manaRegen or 0)))
+			/ Config.Mana.regenInterval
 	)
 
 	for _, fn in ipairs(recomputedCallbacks) do
@@ -151,11 +156,60 @@ function SynergyService.start()
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 		return humanoid and fraction * humanoid.MaxHealth or 0
 	end)
+	-- Phase 2 traits (docs/TRAITS_CATALOG.md): damage %, crit damage,
+	-- lifesteal, reflect, debuff duration, healing received, mana regen.
+	EnemyService.registerDamageMult(function(player, kind)
+		local stats = statsFor(player)
+		if kind == "magic" then
+			return 1 + (stats.magicDamage or 0)
+		end
+		-- "physical" (bow) and "melee" both count as physical damage.
+		return 1 + (stats.physicalDamage or 0)
+	end)
+	EnemyService.registerCritDamageBonus(function(player)
+		return statsFor(player).critDamage or 0
+	end)
+	EnemyService.registerLifesteal(function(player)
+		return statsFor(player).lifesteal or 0
+	end)
+	EnemyService.registerReflect(function(player)
+		return statsFor(player).reflect or 0
+	end)
+	EnemyService.registerDebuffDurationBonus(function(player)
+		return statsFor(player).debuffDuration or 0
+	end)
+	HealthService.registerHealReceivedMult(function(player)
+		return 1 + (statsFor(player).healReceived or 0)
+	end)
+	ManaService.registerRegenMult(function(player)
+		return 1 + (statsFor(player).manaRegen or 0)
+	end)
+	-- Gathering gear traits (Prospector/Woodsman), keyed by the wielded
+	-- tool's kind — the hand rule already means these stats only exist in
+	-- the totals while the matching tool is out.
+	local GATHER_KEYS = {
+		pickaxe = { yield = "miningYield", double = "miningDouble", noDeplete = "miningNoDeplete" },
+		axe = { yield = "loggingYield", double = "loggingDouble", noDeplete = "loggingNoDeplete" },
+	}
+	GatheringService.registerYieldBonus(function(player, toolType)
+		local keys = GATHER_KEYS[toolType]
+		return keys and (statsFor(player)[keys.yield] or 0) or 0
+	end)
+	GatheringService.registerDoubleChance(function(player, toolType)
+		local keys = GATHER_KEYS[toolType]
+		return keys and (statsFor(player)[keys.double] or 0) or 0
+	end)
+	GatheringService.registerNoDepleteChance(function(player, toolType)
+		local keys = GATHER_KEYS[toolType]
+		return keys and (statsFor(player)[keys.noDeplete] or 0) or 0
+	end)
 
 	-- ---- recompute triggers ----------------------------------------------------
 	-- Equip/unequip (any inventory change), plus Level/Class changes — both
 	-- move the inert gate, and Level can activate a piece that was too high.
+	-- Wielding/stowing a Tool moves the hand rule (weapon <-> tool traits).
 	PlayerService.onInventoryChanged(recompute)
+	ToolService.onHeldChanged(recompute)
 
 	Players.PlayerAdded:Connect(function(player)
 		player:GetAttributeChangedSignal("Level"):Connect(function()

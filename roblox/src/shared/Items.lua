@@ -209,6 +209,15 @@ Items.defs = {
 	},
 
 	-- ---- crafting outputs (placeholders — see shared/Recipes.lua) ---------
+	crafting_table = {
+		id = "crafting_table",
+		name = "Crafting Table",
+		flavor = "Solo se puede plantar dentro de una Acampada activa — ver roblox/src/server/CampFurnitureService.lua.",
+		type = "placeable",
+		stackable = false,
+		maxStack = 1,
+		size = { 2, 2 },
+	},
 	simple_forge = {
 		id = "simple_forge",
 		name = "Forja Sencilla",
@@ -443,35 +452,12 @@ Items.defs = {
 		itemLevel = 5,
 		traits = { berserker = 5 },
 	},
-		-- ---- todos estos para abajo son items que se craftean
-	crafting_table = {
-		id = "crafting_table",
-		name = "Crafting Table",
-		flavor = "Solo se puede plantar dentro de una Acampada activa — ver roblox/src/server/CampFurnitureService.lua.",
-		type = "placeable",
-		stackable = false,
-		maxStack = 1,
-		size = { 2, 2 },
-	},
-	torch = {
-		id = "torch",
-		name = "Torch",
-		type = "misc",
-		stackable = true,
-		maxStack = 50,
-		size = { 1, 1 },
-	},
-	arrow = {
-		id = "arrow",
-		name = "Arrow",
-		type = "misc",
-		stackable = true,
-		maxStack = 99,
-		size = { 1, 1 },
-	},
-	emblem_sacerdote = {
-		id = "emblem_sacerdote",
-		name = "Sacerdote Emblem",
+	-- (crafting_table / torch / arrow were duplicated here by mistake — the
+	-- single defs above match backend content/items.json, incl. the 1x1
+	-- crafting_table footprint the backend validates placement with.)
+	emblem_light_priest = {
+		id = "emblem_light_priest",
+		name = "Light Priest Emblem",
 		type = "ring",
 		slot = "ring",
 		rarity = "epic",
@@ -479,11 +465,11 @@ Items.defs = {
 		maxStack = 1,
 		size = { 1, 1 },
 		itemLevel = 5,
-		traits = { sacerdote_luz = 5 },
+		traits = { light_priest = 5 },
 	},
-	emblem_vengador = {
-		id = "emblem_vengador",
-		name = "Vengador Emblem",
+	emblem_holy_avenger = {
+		id = "emblem_holy_avenger",
+		name = "Holy Avenger Emblem",
 		type = "ring",
 		slot = "ring",
 		rarity = "epic",
@@ -491,11 +477,11 @@ Items.defs = {
 		maxStack = 1,
 		size = { 1, 1 },
 		itemLevel = 5,
-		traits = { vengador_sagrado = 5 },
+		traits = { holy_avenger = 5 },
 	},
-	emblem_oraculo = {
-		id = "emblem_oraculo",
-		name = "Oráculo Emblem",
+	emblem_oracle = {
+		id = "emblem_oracle",
+		name = "Oracle Emblem",
 		type = "ring",
 		slot = "ring",
 		rarity = "epic",
@@ -503,7 +489,7 @@ Items.defs = {
 		maxStack = 1,
 		size = { 1, 1 },
 		itemLevel = 5,
-		traits = { oraculo = 5 },
+		traits = { oracle = 5 },
 	},
 }
 

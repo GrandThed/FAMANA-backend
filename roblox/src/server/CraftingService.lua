@@ -66,7 +66,8 @@ local function buildTable(def)
 	stationsByType[def.station] = stationsByType[def.station] or {}
 	table.insert(stationsByType[def.station], { position = model.PrimaryPart.Position })
 end
--- Forja Sencilla: stone furnace with a dark firebox opening and a steel
+
+-- Simple Forge: stone furnace with a dark firebox opening and a steel
 -- chimney, so it reads as "metalworking" next to the wooden crafting_table.
 local function buildForge(def)
 	local y = groundY(def.position.X, def.position.Z)
@@ -94,7 +95,7 @@ end
 
 local WORKBENCH_DEFS = {
 	{ station = "crafting_table", name = "Crafting Table", position = Vector3.new(22, 0, -28), facing = 200, build = buildTable },
-	{ station = "simple_forge", name = "Forja Sencilla", position = Vector3.new(28, 0, -34), facing = 160, build = buildForge },
+	{ station = "simple_forge", name = "Simple Forge", position = Vector3.new(28, 0, -34), facing = 160, build = buildForge },
 }
 
 -- Whether `player` currently stands within range of any workbench running
@@ -167,6 +168,25 @@ local function refreshProximity()
 	end
 end
 
+-- registerDoubleCraftChance: fn(player, recipeDef) -> chance the craft
+-- produces a second copy for free (the Mage's brewing identity — its
+-- callback gates on potion recipes — and future Alchemist gear).
+local doubleCraftHooks = {}
+function CraftingService.registerDoubleCraftChance(fn)
+	table.insert(doubleCraftHooks, fn)
+end
+
+local function hookedDoubleCraftChance(player, recipeDef)
+	local sum = 0
+	for _, fn in ipairs(doubleCraftHooks) do
+		local ok, value = pcall(fn, player, recipeDef)
+		if ok and typeof(value) == "number" then
+			sum += value
+		end
+	end
+	return sum
+end
+
 local function craftMessage(def)
 	local quantity = def.result.quantity
 	local resultDef = Items.get(def.result.itemId)
@@ -220,6 +240,15 @@ local function handleCraft(player, recipeId)
 
 	if notifyRemote then
 		notifyRemote:FireClient(player, craftMessage(def))
+	end
+
+	-- Double-craft roll (the Mage's brewing identity + future Alchemist
+	-- gear): a second copy of the output, free. Silent on no-space — the
+	-- paid-for craft already landed.
+	if math.random() < hookedDoubleCraftChance(player, def) then
+		if PlayerService.addItem(player, def.result.itemId, def.result.quantity) and notifyRemote then
+			notifyRemote:FireClient(player, "Double craft!")
+		end
 	end
 	return { ok = true }
 end

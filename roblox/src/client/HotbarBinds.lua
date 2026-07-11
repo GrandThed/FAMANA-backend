@@ -119,10 +119,29 @@ end
 task.spawn(function()
 	setBindsRemote = Remotes.get("SetHotbarBinds")
 
+	-- 2026-07 English rename: spell ids persisted in pre-rename binds
+	-- translate on load; the next push re-saves the new ids. (Item-id and
+	-- trait-id legacies translate backend-side — see inventory.js LEGACY_IDS.)
+	local LEGACY_SPELL_IDS = {
+		toque_curativo = "healing_touch",
+		bendicion = "blessing",
+		renacimiento = "revival",
+		golpe_sagrado = "holy_strike",
+		represalia = "reprisal",
+		juicio_divino = "divine_judgment",
+		purificar = "purify",
+		vinculo_espiritual = "spirit_link",
+		intervencion = "intervention",
+	}
+
 	local function applyMap(target, map)
 		for key, value in pairs(map) do
 			local slot = tonumber(key)
 			if slot and slot >= FIRST_SLOT and slot <= LAST_SLOT and typeof(value) == "string" then
+				local spellId = value:match("^spell:(.+)$")
+				if spellId and LEGACY_SPELL_IDS[spellId] then
+					value = "spell:" .. LEGACY_SPELL_IDS[spellId]
+				end
 				target[slot] = value
 			end
 		end

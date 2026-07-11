@@ -32,6 +32,24 @@ local function refill(player)
 	player:SetAttribute("Mana", Config.Mana.max)
 end
 
+-- registerRegenMult: fn(player) -> multiplier on the per-tick mana regen
+-- (Clarity trait; class scaling stays in the ManaRegenAmount attribute).
+local regenMultHooks = {}
+function ManaService.registerRegenMult(fn)
+	table.insert(regenMultHooks, fn)
+end
+
+local function hookedRegenMult(player)
+	local mult = 1
+	for _, fn in ipairs(regenMultHooks) do
+		local ok, value = pcall(fn, player)
+		if ok and typeof(value) == "number" then
+			mult *= value
+		end
+	end
+	return mult
+end
+
 function ManaService.start()
 	Players.PlayerAdded:Connect(function(player)
 		refill(player)
@@ -56,10 +74,10 @@ function ManaService.start()
 		for _, player in ipairs(Players:GetPlayers()) do
 			local current = player:GetAttribute("Mana")
 			local max = player:GetAttribute("MaxMana") or Config.Mana.max
-			-- ClassService overrides this per-class (Mago regens faster, etc).
+			-- ClassService overrides this per-class (Mage regens faster, etc).
 			local regenAmount = player:GetAttribute("ManaRegenAmount") or Config.Mana.regenAmount
 			if current and current < max then
-				player:SetAttribute("Mana", math.min(max, current + regenAmount))
+				player:SetAttribute("Mana", math.min(max, current + regenAmount * hookedRegenMult(player)))
 			end
 		end
 	end)

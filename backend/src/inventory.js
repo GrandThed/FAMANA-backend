@@ -25,6 +25,34 @@ import {
 const err = (message, code, extra = {}) =>
   Object.assign(new Error(message), { code, ...extra });
 
+// 2026-07 English rename (game language decision): item ids and trait/school
+// ids persisted before the rename translate at READ time — every write path
+// below then stores the new ids, so rows converge to English as they're
+// touched (sortInventory rewrites them wholesale). Spell ids in hotbar binds
+// are translated client-side by HotbarBinds on load.
+const LEGACY_IDS = {
+  emblem_sacerdote: "emblem_light_priest",
+  emblem_vengador: "emblem_holy_avenger",
+  emblem_oraculo: "emblem_oracle",
+  sacerdote_luz: "light_priest",
+  vengador_sagrado: "holy_avenger",
+  oraculo: "oracle",
+};
+
+function translateLegacyRow(row) {
+  if (LEGACY_IDS[row.itemId]) row.itemId = LEGACY_IDS[row.itemId];
+  const traits = row.meta && row.meta.traits;
+  if (traits) {
+    for (const [traitId, points] of Object.entries(traits)) {
+      if (LEGACY_IDS[traitId]) {
+        delete traits[traitId];
+        traits[LEGACY_IDS[traitId]] = points;
+      }
+    }
+  }
+  return row;
+}
+
 async function fetchRows(client, playerId) {
   const { rows } = await client.query(
     `SELECT id, slot_index AS "slotIndex", container_id AS "containerId",
@@ -34,7 +62,7 @@ async function fetchRows(client, playerId) {
       ORDER BY container_id, y NULLS LAST, x NULLS LAST, id`,
     [playerId]
   );
-  return rows;
+  return rows.map(translateLegacyRow);
 }
 
 // Rarity tiers a rolled instance may carry (mirrors Roblox shared/Rarity.lua
@@ -64,7 +92,7 @@ export function sanitizeMeta(meta) {
         points >= 1 &&
         points <= 30
       ) {
-        traits[traitId] = points;
+        traits[LEGACY_IDS[traitId] || traitId] = points;
         count += 1;
         if (count >= 4) break;
       }

@@ -57,8 +57,8 @@ end
 Classes.defs = {
 	knight = {
 		id = "knight",
-		name = "Caballero",
-		description = "Mucha vida y buena defensa. Fuerte cuerpo a cuerpo, débil a distancia.",
+		name = "Knight",
+		description = "High health and solid defense. Strong in melee, weak at range.",
 		hpMult = 1.35,
 		manaMult = 0.40,
 		manaRegenMult = 0.60,
@@ -71,8 +71,8 @@ Classes.defs = {
 	},
 	archer = {
 		id = "archer",
-		name = "Arquero",
-		description = "Rápido y preciso a distancia con arco. Frágil cuerpo a cuerpo.",
+		name = "Archer",
+		description = "Fast and precise at range with a bow. Fragile in melee.",
 		hpMult = 1.0,
 		manaMult = 0.7,
 		manaRegenMult = 0.80,
@@ -85,8 +85,8 @@ Classes.defs = {
 	},
 	mage = {
 		id = "mage",
-		name = "Mago",
-		description = "Maná abundante y hechizos poderosos. Muy frágil.",
+		name = "Mage",
+		description = "Deep mana and powerful spells. Very fragile.",
 		hpMult = 0.85,
 		manaMult = 1.4,
 		manaRegenMult = 1.50,
@@ -99,8 +99,8 @@ Classes.defs = {
 	},
 	cleric = {
 		id = "cleric",
-		name = "Clérigo",
-		description = "Magia curativa y de soporte. El corazón de toda party.",
+		name = "Cleric",
+		description = "Healing and support magic. The heart of every party.",
 		hpMult = 1.05,
 		manaMult = 1.1,
 		manaRegenMult = 1.25,
