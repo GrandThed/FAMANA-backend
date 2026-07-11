@@ -3,10 +3,10 @@
 -- involved at all. Feeds into the exact same stat hooks SynergyService
 -- (equipment traits) uses, so the two stack additively without either
 -- system knowing the other exists:
---   * Knight "Oakskin"            → EnemyService damage-taken hook
---   * Archer "Hawk Eye"           → EnemyService crit-chance hook
---   * Mage "Arcane Mastery"      → EffectService buff-duration hook
---   * Cleric "Vital Aura"         → HealthService always-on bonus regen
+--   * Knight "Valor"              → EnemyService damage-taken hook
+--   * Archer "Precision"          → EnemyService crit-chance hook
+--   * Mage "Attunement"           → EffectService buff-duration hook
+--   * Cleric "Devotion"           → HealthService always-on bonus regen
 -- Recomputes on level-up and on class switch (both change which tier is
 -- active). Replicates the active tier as the `ClassPassive` attribute (JSON:
 -- { id, name, level, nextLevel? }) so client UI can show it with no remote.

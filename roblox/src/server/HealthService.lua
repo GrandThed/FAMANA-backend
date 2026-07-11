@@ -46,6 +46,8 @@ end
 -- player, skipping their bleed timer, at `healPercent` of max HP. No-ops if
 -- they're not actually downed (SpellService should already be targeting a
 -- downed ally, but this stays safe regardless of caller).
+local enterDowned, exitDowned -- forward declarations (mutually referenced)
+
 function HealthService.reviveDowned(player, healPercent)
 	if not downed[player.UserId] then
 		return false
@@ -53,8 +55,6 @@ function HealthService.reviveDowned(player, healPercent)
 	exitDowned(player, true, healPercent)
 	return true
 end
-
-local enterDowned, exitDowned -- forward declarations (mutually referenced)
 
 function enterDowned(player, humanoid)
 	local character = player.Character
@@ -194,6 +194,43 @@ end
 -- Central damage entrypoint for anything hitting a player (currently only
 -- EnemyService's melee attacks). A hit that would drop Health to 0 or below
 -- downs instead of killing; downed players take no further damage.
+-- ---- shields (temp HP) -------------------------------------------------------
+-- One absorb pool per player (Guardian procs, Mana Shield, Minor Blessing):
+-- amounts stack, the furthest expiry wins, and damage burns the pool before
+-- real HP. Replicated as the `Shield` attribute so the HUD can render it.
+local shields = {} -- [userId] = { amount, expiresAt }
+
+local function activeShield(player)
+	local shield = shields[player.UserId]
+	if shield and os.clock() >= shield.expiresAt then
+		shields[player.UserId] = nil
+		player:SetAttribute("Shield", nil)
+		return nil
+	end
+	return shield
+end
+
+function HealthService.addShield(player, amount, duration)
+	if amount <= 0 or (duration or 0) <= 0 then
+		return
+	end
+	local shield = activeShield(player)
+	if shield then
+		shield.amount += amount
+		shield.expiresAt = math.max(shield.expiresAt, os.clock() + duration)
+	else
+		shield = { amount = amount, expiresAt = os.clock() + duration }
+		shields[player.UserId] = shield
+	end
+	player:SetAttribute("Shield", math.floor(shield.amount + 0.5))
+	-- Lazy expiry: clears the attribute once the pool lapses.
+	task.delay(duration + 0.05, function()
+		if player.Parent then
+			activeShield(player)
+		end
+	end)
+end
+
 function HealthService.damagePlayer(player, amount)
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
@@ -202,6 +239,22 @@ function HealthService.damagePlayer(player, amount)
 	end
 	if downed[player.UserId] then
 		return
+	end
+	-- Shields absorb first.
+	local shield = activeShield(player)
+	if shield then
+		local absorbed = math.min(shield.amount, amount)
+		shield.amount -= absorbed
+		amount -= absorbed
+		if shield.amount <= 0 then
+			shields[player.UserId] = nil
+			player:SetAttribute("Shield", nil)
+		else
+			player:SetAttribute("Shield", math.floor(shield.amount + 0.5))
+		end
+		if amount <= 0 then
+			return
+		end
 	end
 	if amount >= humanoid.Health then
 		humanoid.Health = 1
@@ -362,6 +415,7 @@ function HealthService.start()
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastDamage[player.UserId] = nil
+		shields[player.UserId] = nil
 		local state = downed[player.UserId]
 		if state then
 			downed[player.UserId] = nil

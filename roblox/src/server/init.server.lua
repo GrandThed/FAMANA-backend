@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local GridConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GridConfig"))
 
 local ContentService = require(script:WaitForChild("ContentService"))
+local MeshAssetService = require(script:WaitForChild("MeshAssetService"))
 local PlayerService = require(script:WaitForChild("PlayerService"))
 local HealthService = require(script:WaitForChild("HealthService"))
 local ManaService = require(script:WaitForChild("ManaService"))
@@ -32,6 +33,7 @@ local AdminSyncService = require(script:WaitForChild("AdminSyncService"))
 local role = GridConfig.currentRole()
 
 ContentService.start() -- first: overlays backend item defs onto the mirror
+MeshAssetService.start() -- loads the Style-A mesh models before the world builds; ArtKit looks are the fallback
 if role == "cell" then
 	WorldService.start()
 end

@@ -305,12 +305,26 @@ derived at read time. `sanitizeMeta` already accepts arbitrary trait ids
    grid tool's lines (first matching entry, inert-gated), SynergyService
    recomputes on equip/unequip. Still content-pending: herb nodes +
    sickle, potion recipes (hooks no-op until they exist).
-5. **Guardian** — temp-HP shields on players (HealthService) + party-scoped
-   aura; PartyService provides "ally".
-6. **Abilities pass** — the 12 school apex spells (threshold 30) + the 20
-   innate abilities; any movement actives (dash/iframe-roll) need the
-   movement/iframe system (new service + an input decision, §8.6). Biggest
-   lift, last.
+5. ~~**Guardian**~~ — SHIPPED 2026-07-11: temp-HP shield pool in
+   HealthService (`addShield`, absorbs before HP, `Shield` attribute for
+   the HUD), Guardian trait live in the armor pool (proc shields the most
+   wounded nearby party member when the guardian is hit — no proc solo —
+   plus the party armor aura, both via PartyService.getNearbyPartyMembers).
+6. **Abilities pass** — WAVES A+B1 SHIPPED 2026-07-11: the class passives
+   are unified into the innate identities (Valor/Precision/Attunement/
+   Devotion) and 11 innate abilities are castable via `Spells.innates`
+   (class-level gated knowns through the normal spell pipeline):
+   - Knight: Shield Bash (1) · Iron Roll (5 — 0.4s iframes) · Defensive
+     Stance (12)
+   - Archer: True Shot (1 — `forceCrit` vs wounded prey) · Swift Step (5) ·
+     Hunter's Mark (12 — new `mark` behavior, +20% damage from everyone)
+   - Mage: Energy Bolt (1) · Mana Shield (5 — 25% max HP absorb) ·
+     Overcharge (12)
+   - Cleric: Minor Prayer (1) · Minor Blessing (5 — ally shield + guard)
+   Movement shipped as server-validated + CLIENT-executed dashes
+   (InnateDash remote — the character is client-owned) with server-side
+   iframes in EnemyService. STILL PENDING: Sacred Circle (ally zones), the
+   20/30 capstones, and the 12 school apex spells.
 7. **Class innate traits** — confirmed (§5); SynergyService merges innate
    points into totals on the Level/Class recompute it already does.
 
@@ -330,8 +344,9 @@ derived at read time. `sanitizeMeta` already accepts arbitrary trait ids
 5. ~~**Perseverance/Inferno magnitude**~~ — DECIDED 2026-07-10: re-derived
    on the rebalanced grid (depth-16: Perseverance →40%, Inferno →50% with
    an enemy-side diminishing-returns prerequisite). TRAITS_CATALOG §5.7.
-6. **Movement-ability input** (innate dash/iframe-roll, §4) — dedicated key
-   (Space-double-tap? Q?) vs a hotbar bind like spells.
+6. ~~**Movement-ability input**~~ — DECIDED 2026-07-11: hotbar bind like
+   every other ability (zero new input code, works on all platforms); a
+   dedicated key can be added client-side later if it plays clunky.
 7. **γ = 1.5** — comfortable with how hard the early tiers get squeezed
    (Lynx Eye 1pt: 10% → 2%)? γ = 1.3 is the gentler variant.
 8. **School↔class binding** — schools are NOT class-native (confirmed

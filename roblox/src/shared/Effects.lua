@@ -23,6 +23,41 @@ Effects.defs = {
 		color = Color3.fromRGB(80, 200, 120), -- slime green: reads as its source
 	},
 
+	-- ---- innate ability buffs (see Spells.innates) ---------------------------
+	defensive_stance = {
+		id = "defensive_stance",
+		name = "Defensive Stance",
+		kind = "buff",
+		duration = 6,
+		damageTakenMult = 0.6,
+		damageMults = { melee = 0.7, physical = 0.7, magic = 0.7 },
+		color = Color3.fromRGB(150, 160, 190),
+	},
+	overcharge = {
+		id = "overcharge",
+		name = "Overcharge",
+		kind = "buff",
+		duration = 8,
+		damageMults = { magic = 1.25 },
+		color = Color3.fromRGB(150, 130, 220),
+	},
+	swift_step = {
+		id = "swift_step",
+		name = "Swift Step",
+		kind = "buff",
+		duration = 2,
+		walkSpeedMult = 1.2,
+		color = Color3.fromRGB(90, 210, 230),
+	},
+	minor_blessing = {
+		id = "minor_blessing",
+		name = "Minor Blessing",
+		kind = "buff",
+		duration = 5,
+		damageTakenMult = 0.85,
+		color = Color3.fromRGB(255, 235, 170),
+	},
+
 	-- ---- spell buffs (see shared/Spells.lua) --------------------------------
 	battle_cry = {
 		id = "battle_cry",

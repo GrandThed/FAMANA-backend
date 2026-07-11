@@ -636,6 +636,178 @@ Spells.defs = {
 		implemented = false,
 		hotbarPriority = 52,
 	},
+
+	-- ---- Innate class abilities (docs/TRAITS_CATALOG.md §3) --------------------
+	-- The class's OWN buttons, gated by CLASS LEVEL via Spells.innates below
+	-- (not school points — the one non-equipment source, like the class
+	-- passive). Wave A ships the behavior-compatible slots; Swift Step /
+	-- Iron Roll wait on the movement system, Mana Shield / Minor Blessing /
+	-- Sacred Circle on shields + ally zones, the 20/30 capstones on the
+	-- abilities pass.
+	shield_bash = {
+		id = "shield_bash",
+		name = "Shield Bash",
+		classId = "knight",
+		icon = "🛡️",
+		description = "Slam your shield into the target, briefly stunning it.",
+		behavior = "strike",
+		damageKind = "melee",
+		manaCost = 10,
+		cooldown = 8,
+		range = 12,
+		damage = 10,
+		stunDuration = 1.2,
+		hotbarPriority = 5,
+	},
+	defensive_stance = {
+		id = "defensive_stance",
+		name = "Defensive Stance",
+		classId = "knight",
+		icon = "🧱",
+		description = "Brace behind your guard: take far less damage, deal a bit less.",
+		behavior = "buff",
+		manaCost = 15,
+		cooldown = 20,
+		effectId = "defensive_stance",
+		hotbarPriority = 25,
+	},
+	true_shot = {
+		id = "true_shot",
+		name = "True Shot",
+		classId = "archer",
+		icon = "🎯",
+		description = "A careful shot that always crits against wounded prey.",
+		behavior = "projectile",
+		damageKind = "physical",
+		manaCost = 12,
+		cooldown = 6,
+		range = 45,
+		damage = 14,
+		critBelowFraction = 0.35, -- guaranteed crit vs targets under 35% HP
+		missile = { size = 0.9, color = Color3.fromRGB(90, 200, 90), speed = 90 },
+		hotbarPriority = 5,
+	},
+	hunters_mark = {
+		id = "hunters_mark",
+		name = "Hunter's Mark",
+		classId = "archer",
+		icon = "🔻",
+		description = "Mark a target: everyone's hits on it strike harder.",
+		behavior = "mark",
+		manaCost = 15,
+		cooldown = 14,
+		range = 40,
+		markAmp = 0.2,
+		markDuration = 6,
+		hotbarPriority = 25,
+	},
+	energy_bolt = {
+		id = "energy_bolt",
+		name = "Energy Bolt",
+		classId = "mage",
+		icon = "✨",
+		description = "A quick, cheap bolt of raw energy.",
+		behavior = "projectile",
+		damageKind = "magic",
+		manaCost = 8,
+		cooldown = 1.5,
+		range = 45,
+		damage = 8,
+		missile = { size = 0.9, color = Color3.fromRGB(150, 130, 220), speed = 85 },
+		hotbarPriority = 5,
+	},
+	overcharge = {
+		id = "overcharge",
+		name = "Overcharge",
+		classId = "mage",
+		icon = "⚡",
+		description = "Overload your channels: magic damage up for a few seconds.",
+		behavior = "buff",
+		manaCost = 20,
+		cooldown = 22,
+		effectId = "overcharge",
+		hotbarPriority = 25,
+	},
+	minor_prayer = {
+		id = "minor_prayer",
+		name = "Minor Prayer",
+		classId = "cleric",
+		icon = "🙏",
+		description = "A quick prayer that heals whoever nearby needs it most.",
+		behavior = "heal",
+		manaCost = 12,
+		cooldown = 5,
+		range = 30,
+		healAmount = 25,
+		hotbarPriority = 5,
+	},
+	iron_roll = {
+		id = "iron_roll",
+		name = "Iron Roll",
+		classId = "knight",
+		icon = "🌀",
+		description = "A quick combat roll — attacks miss you while you're rolling.",
+		behavior = "dash",
+		manaCost = 8,
+		cooldown = 6,
+		dashSpeed = 55,
+		dashDuration = 0.25,
+		iframes = 0.4,
+		hotbarPriority = 15,
+	},
+	swift_step = {
+		id = "swift_step",
+		name = "Swift Step",
+		classId = "archer",
+		icon = "💨",
+		description = "Dash, then keep the momentum for a moment.",
+		behavior = "dash",
+		manaCost = 10,
+		cooldown = 6,
+		dashSpeed = 70,
+		dashDuration = 0.2,
+		effectId = "swift_step",
+		hotbarPriority = 15,
+	},
+	mana_shield = {
+		id = "mana_shield",
+		name = "Mana Shield",
+		classId = "mage",
+		icon = "💠",
+		description = "A translucent screen of force that absorbs damage.",
+		behavior = "shield",
+		manaCost = 20,
+		cooldown = 16,
+		shieldPercent = 0.25,
+		shieldDuration = 6,
+		hotbarPriority = 15,
+	},
+	minor_blessing = {
+		id = "minor_blessing",
+		name = "Minor Blessing",
+		classId = "cleric",
+		icon = "📿",
+		description = "Shield an ally and harden their defenses for a moment.",
+		behavior = "shieldAlly",
+		manaCost = 15,
+		cooldown = 10,
+		range = 30,
+		shieldPercent = 0.15,
+		shieldDuration = 5,
+		effectId = "minor_blessing",
+		hotbarPriority = 15,
+	},
+}
+
+-- ---- innate ability grants ------------------------------------------------
+-- { classId = { {spellId, unlockLevel} } } — folded into knownFor for the
+-- ACTIVE class only; switching class swaps which innate buttons you know.
+-- (Cleric's level-12 Sacred Circle is wave B: it needs ally-facing zones.)
+Spells.innates = {
+	knight = { { "shield_bash", 1 }, { "iron_roll", 5 }, { "defensive_stance", 12 } },
+	archer = { { "true_shot", 1 }, { "swift_step", 5 }, { "hunters_mark", 12 } },
+	mage = { { "energy_bolt", 1 }, { "mana_shield", 5 }, { "overcharge", 12 } },
+	cleric = { { "minor_prayer", 1 }, { "minor_blessing", 5 } },
 }
 
 -- ---- lookups -------------------------------------------------------------------
@@ -666,7 +838,7 @@ end
 -- Every implemented spell the given school point totals unlock
 -- ({ [schoolId] = points }), sorted by hotbarPriority (i.e. already in
 -- recommended-loadout order).
-function Spells.knownFor(schoolPoints)
+function Spells.knownFor(schoolPoints, classId, classLevel)
 	local known = {}
 	local seen = {}
 	for _, schoolId in ipairs(Spells.schoolOrder) do
@@ -679,6 +851,18 @@ function Spells.knownFor(schoolPoints)
 					seen[spellId] = true
 					table.insert(known, spellId)
 				end
+			end
+		end
+	end
+	-- Innate class abilities: level-gated, active class only.
+	local innateGrants = classId and Spells.innates[classId]
+	if innateGrants then
+		for _, grant in ipairs(innateGrants) do
+			local spellId, unlockLevel = grant[1], grant[2]
+			local def = Spells.defs[spellId]
+			if def and def.implemented ~= false and (classLevel or 0) >= unlockLevel and not seen[spellId] then
+				seen[spellId] = true
+				table.insert(known, spellId)
 			end
 		end
 	end

@@ -31,11 +31,13 @@ local EffectService = require(script.Parent.EffectService)
 local SynergyService = require(script.Parent.SynergyService)
 local HealthService = require(script.Parent.HealthService)
 local ToolService = require(script.Parent.ToolService)
+local ClassService = require(script.Parent.ClassService)
 
 local SpellService = {}
 
 local spellsChangedRemote -- RemoteEvent, resolved in start()
 local notifyRemote -- RemoteEvent, resolved in start()
+local dashRemote -- RemoteEvent, resolved in start() — client-side dash execution
 
 -- [userId] = { set = {spellId=true}, list = {spellId} } (list is priority-sorted)
 local knownCache = {}
@@ -68,7 +70,12 @@ local function pushSpells(player)
 	if not PlayerService.get(player) then
 		return -- profile still loading; the load-time recompute re-fires this
 	end
-	local list = Spells.knownFor(SynergyService.getSchoolPoints(player))
+	local classDef = ClassService.getDef(player)
+	local list = Spells.knownFor(
+		SynergyService.getSchoolPoints(player),
+		classDef and classDef.id,
+		ClassService.getLevel(player)
+	)
 
 	local previous = knownCache[player.UserId]
 	local set, newlyUnlocked = {}, {}
@@ -211,7 +218,13 @@ function BEHAVIORS.projectile(player, root, def)
 		return nil, def.requiresFocus and "You need a focused target" or "No target in range"
 	end
 	return function()
-		local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
+		local opts
+		-- True Shot: guaranteed crit against wounded prey.
+		local enemy = ref.enemy
+		if def.critBelowFraction and enemy and enemy.maxHp and enemy.hp / enemy.maxHp <= def.critBelowFraction then
+			opts = { forceCrit = true }
+		end
+		local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind, opts)
 		fireBolt(root.Position + Vector3.new(0, 2, 0), ref.part, def.missile, function()
 			local impactPos = ref.part and ref.part.Position or nil
 			EnemyService.dealSpellDamage(ref, damage, player, isCrit)
@@ -326,6 +339,20 @@ function BEHAVIORS.strike(player, root, def)
 		end
 		if ref.part then
 			burst(ref.part.Position, Color3.fromRGB(255, 240, 200), 3, 0.25)
+		end
+	end
+end
+
+-- Marks a single target (Hunter's Mark): everyone's hits on it amplified.
+function BEHAVIORS.mark(player, root, def)
+	local ref = acquireTarget(player, root, def)
+	if not ref then
+		return nil, "No target in range"
+	end
+	return function()
+		EnemyService.mark(ref, def.markAmp or 0.2, def.markDuration or 6, player)
+		if ref.part then
+			burst(ref.part.Position, Color3.fromRGB(240, 90, 70), 3, 0.3)
 		end
 	end
 end
@@ -447,6 +474,56 @@ local function acquireDownedAlly(root, range)
 		end
 	end
 	return best
+end
+
+-- Self absorb shield (Mana Shield).
+function BEHAVIORS.shield(player, root, def)
+	return function()
+		local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if humanoid then
+			HealthService.addShield(player, humanoid.MaxHealth * (def.shieldPercent or 0.2), def.shieldDuration or 6)
+			burst(root.Position, Color3.fromRGB(120, 170, 255), 4, 0.3)
+		end
+	end
+end
+
+-- Shield + brief protection on the neediest nearby ally (Minor Blessing).
+function BEHAVIORS.shieldAlly(player, root, def)
+	local target = acquireHealTarget(player, root, def.range)
+	if not target then
+		return nil, "No wounded ally in range"
+	end
+	return function()
+		HealthService.addShield(
+			target.player,
+			target.humanoid.MaxHealth * (def.shieldPercent or 0.15),
+			def.shieldDuration or 5
+		)
+		if def.effectId then
+			EffectService.apply(target.player, def.effectId)
+		end
+		burst(target.root.Position, Color3.fromRGB(255, 235, 170), 4, 0.3)
+	end
+end
+
+-- Dash/roll (Swift Step, Iron Roll): the server validates the cast, grants
+-- iframes and applies the speed effect — the actual movement runs on the
+-- caster's CLIENT (its character, its network ownership) via InnateDash.
+function BEHAVIORS.dash(player, root, def)
+	return function()
+		if (def.iframes or 0) > 0 then
+			EnemyService.grantIframes(player, def.iframes)
+		end
+		if def.effectId then
+			EffectService.apply(player, def.effectId)
+		end
+		if dashRemote then
+			dashRemote:FireClient(player, {
+				speed = def.dashSpeed or 60,
+				duration = def.dashDuration or 0.2,
+			})
+		end
+	end
 end
 
 function BEHAVIORS.heal(player, root, def)
@@ -701,6 +778,7 @@ end
 function SpellService.start()
 	spellsChangedRemote = Remotes.get("SpellsChanged")
 	notifyRemote = Remotes.get("Notify")
+	dashRemote = Remotes.get("InnateDash")
 
 	local castRemote = Remotes.get("CastSpell")
 	castRemote.OnServerEvent:Connect(tryCast)

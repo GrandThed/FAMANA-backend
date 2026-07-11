@@ -30,6 +30,7 @@ local HealthService = require(script.Parent.HealthService)
 local ClassService = require(script.Parent.ClassService)
 local ManaService = require(script.Parent.ManaService)
 local GatheringService = require(script.Parent.GatheringService)
+local PartyService = require(script.Parent.PartyService)
 
 local SynergyService = {}
 
@@ -202,6 +203,56 @@ function SynergyService.start()
 	GatheringService.registerNoDepleteChance(function(player, toolType)
 		local keys = GATHER_KEYS[toolType]
 		return keys and (statsFor(player)[keys.noDeplete] or 0) or 0
+	end)
+
+	-- Guardian (party protector — procs, never a button): when the guardian
+	-- is hit, a chance to shield the most-wounded nearby party member (no
+	-- proc solo); the aura armors nearby party members, guardian included.
+	local GUARD_RADIUS = 20
+	local GUARD_SHIELD_FRACTION = 0.15
+	local GUARD_SHIELD_DURATION = 4
+	EnemyService.onPlayerHit(function(_source, victim)
+		local proc = statsFor(victim).guardianProc or 0
+		if proc <= 0 or math.random() >= proc then
+			return
+		end
+		local root = victim.Character and victim.Character:FindFirstChild("HumanoidRootPart")
+		if not root then
+			return
+		end
+		local best, bestFraction
+		for _, ally in ipairs(PartyService.getNearbyPartyMembers(victim, root.Position, GUARD_RADIUS)) do
+			if ally ~= victim then
+				local humanoid = ally.Character and ally.Character:FindFirstChildOfClass("Humanoid")
+				if humanoid and humanoid.Health > 0 then
+					local fraction = humanoid.Health / humanoid.MaxHealth
+					if not bestFraction or fraction < bestFraction then
+						best, bestFraction = ally, fraction
+					end
+				end
+			end
+		end
+		if not best then
+			return
+		end
+		local humanoid = best.Character:FindFirstChildOfClass("Humanoid")
+		HealthService.addShield(best, humanoid.MaxHealth * GUARD_SHIELD_FRACTION, GUARD_SHIELD_DURATION)
+		local healFraction = statsFor(victim).guardianHeal or 0
+		if healFraction > 0 then
+			HealthService.heal(best, (humanoid.MaxHealth - humanoid.Health) * healFraction)
+		end
+	end)
+	EnemyService.registerDamageTakenMult(function(player)
+		local armor = statsFor(player).guardianAura or 0
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			for _, member in ipairs(PartyService.getNearbyPartyMembers(player, root.Position, GUARD_RADIUS)) do
+				if member ~= player then
+					armor += statsFor(member).guardianAura or 0
+				end
+			end
+		end
+		return armor > 0 and 100 / (100 + armor) or 1
 	end)
 
 	-- ---- recompute triggers ----------------------------------------------------

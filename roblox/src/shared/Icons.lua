@@ -69,10 +69,10 @@ Icons.glyphFor = {
 	-- glyph rather than commissioning dedicated art (Bastion/Lynx/Scroll/etc.
 	-- are already used by unrelated equipment traits, so these pick the next
 	-- best semantic fit instead of colliding with them).
-	oakskin = "Shield", -- Knight: plain shield, distinct from Bastion (armor trait)
-	hawk_eye = "Ranger", -- Archer: the ranger glyph (Lynx is taken by Lynx Eye)
-	arcane_mastery = "Mystic", -- Mage: the arcane star
-	vital_aura = "Potion", -- Cleric: the healing potion
+	valor = "Shield", -- Knight (innate Valor): plain shield, distinct from Bastion (armor trait)
+	precision = "Ranger", -- Archer (innate Precision): the ranger glyph (Lynx is taken by Lynx Eye)
+	attunement = "Mystic", -- Mage (innate Attunement): the arcane star
+	devotion = "Potion", -- Cleric (innate Devotion): the healing potion
 }
 
 -- "rbxassetid://N" for an uploaded asset name, or nil while it's still 0.

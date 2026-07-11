@@ -22,6 +22,7 @@ local Items = require(Shared:WaitForChild("Items"))
 local MapMarkers = require(Shared:WaitForChild("MapMarkers"))
 local Recipes = require(Shared:WaitForChild("Recipes"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
+local MeshAssetService = require(script.Parent.MeshAssetService)
 local PlayerService = require(script.Parent.PlayerService)
 
 local CraftingService = {}
@@ -68,6 +69,30 @@ end
 local function buildForge(def)
 	local y = groundY(def.position.X, def.position.Z)
 	local origin = CFrame.new(def.position.X, y, def.position.Z) * CFrame.Angles(0, math.rad(def.facing or 0), 0)
+
+	-- Style-A forge mesh when its template loaded. The mesh's mouth faces -Z
+	-- while the ArtKit firebox faced +Z, so it spins 180° to keep `facing`
+	-- values meaning the same thing. An invisible anchor keeps collision and
+	-- the station position registration.
+	local mesh = MeshAssetService.place("simple_forge", origin * CFrame.Angles(0, math.rad(180), 0))
+	if mesh then
+		local model = Instance.new("Model")
+		model.Name = "Workbench_" .. def.station
+		mesh.Parent = model
+		local anchor = Instance.new("Part")
+		anchor.Name = "Anchor"
+		anchor.Size = Vector3.new(2.6, 1.8, 2.2)
+		anchor.CFrame = origin * CFrame.new(0, 0.9, 0)
+		anchor.Transparency = 1
+		anchor.Anchored = true
+		anchor.Parent = model
+		model.PrimaryPart = anchor
+		model.Parent = workbenchFolder
+
+		stationsByType[def.station] = stationsByType[def.station] or {}
+		table.insert(stationsByType[def.station], anchor.Position)
+		return
+	end
 
 	local model = ArtKit.build("Workbench_" .. def.station, origin, {
 		{ name = "Base", size = Vector3.new(2.6, 1.8, 2.2), offset = Vector3.new(0, 0.9, 0), color = "stone", primary = true },

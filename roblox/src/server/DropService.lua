@@ -15,7 +15,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
 local Traits = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Traits"))
 local Rarity = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Rarity"))
-local ArtKit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ArtKit"))
 local ItemModels = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemModels"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local PlayerService = require(script.Parent.PlayerService)
@@ -99,6 +98,39 @@ local function visualScale(itemId)
 	return scale
 end
 
+-- Welds the item's miniature model onto a drop part — whatever
+-- ItemModels.build returns: the Style-A mesh override from
+-- ReplicatedStorage.Assets when one loaded, the ArtKit spec model otherwise.
+-- Same conventions as ArtKit.weld (massless, non-colliding, no raycast hits).
+-- Returns false when the item has no model at all (generic cube fallback).
+local function attachVisual(part, itemId, mult)
+	local scale = visualScale(itemId)
+	if not scale then
+		return false
+	end
+	local model = ItemModels.build(itemId)
+	if not model then
+		return false
+	end
+	model:ScaleTo(scale * (mult or 1))
+	local bounds = model:GetBoundingBox()
+	model:PivotTo(part.CFrame * (bounds:Inverse() * model:GetPivot()))
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.Anchored = false
+			p.CanCollide = false
+			p.CanQuery = false
+			p.Massless = true
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = part
+			weld.Part1 = p
+			weld.Parent = p
+		end
+	end
+	model.Parent = part
+	return true
+end
+
 local dropFolder
 local flyFolder -- cosmetic flying pickups; kept out of dropFolder so the
 -- magnet/bob loop never touches them
@@ -120,10 +152,7 @@ local function flyToPlayer(itemId, position, player)
 	part.Transparency = 1
 	part.CFrame = CFrame.new(position)
 
-	local scale = visualScale(itemId)
-	if scale then
-		ArtKit.weld(part, ItemModels.get(itemId), scale * 0.7)
-	else
+	if not attachVisual(part, itemId, 0.7) then
 		part.Transparency = 0
 		part.Color = Color3.fromRGB(230, 200, 90)
 		part.Material = Enum.Material.Neon
@@ -315,10 +344,8 @@ local function spawnDrop(itemId, quantity, position, opts)
 		part:SetAttribute("meta", HttpService:JSONEncode(meta))
 	end
 
-	local scale = visualScale(itemId)
-	if scale then
+	if attachVisual(part, itemId, 1) then
 		part.Transparency = 1
-		ArtKit.weld(part, ItemModels.get(itemId), scale)
 	else
 		part.Color = Color3.fromRGB(230, 200, 90)
 		part.Material = Enum.Material.Neon

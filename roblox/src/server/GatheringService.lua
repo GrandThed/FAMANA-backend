@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local MeshAssetService = require(script.Parent.MeshAssetService)
 local PlayerService = require(script.Parent.PlayerService)
 local ToolService = require(script.Parent.ToolService)
 local TargetService = require(script.Parent.TargetService)
@@ -82,7 +83,79 @@ end
 
 -- ---- Node builders -------------------------------------------------------
 
+-- Mesh-first node builder: when the node's Style-A mesh template loaded
+-- (shared/MeshAssets via MeshAssetService), the mesh is the visual and
+-- gameplay keeps an invisible anchor part sized like the old ArtKit primary
+-- (collision, targeting, the Depleted attribute). Depleting hides the mesh
+-- and shows the anchor as the shrunken remnant — mirroring what the ArtKit
+-- builders below do to their primary part. Returns nil without a template,
+-- so each builder falls through to its ArtKit look.
+local function buildMeshNode(spot, def, key, look)
+	if not MeshAssetService.get(key) then
+		return nil
+	end
+	local y = groundY(spot.X, spot.Z)
+	local origin = CFrame.new(spot.X, y, spot.Z)
+
+	local model = Instance.new("Model")
+	model.Name = key
+	local visual = MeshAssetService.place(key, origin)
+	visual.Parent = model
+
+	local anchor = Instance.new("Part")
+	anchor.Name = "Anchor"
+	anchor.Size = look.anchorSize
+	anchor.CFrame = origin * CFrame.new(0, look.anchorSize.Y / 2, 0)
+	anchor.Transparency = 1
+	anchor.Anchored = true
+	anchor.Material = ArtKit.Material
+	anchor:SetAttribute("Depleted", false)
+	anchor.Parent = model
+	model.PrimaryPart = anchor
+	model.Parent = resourceFolder
+
+	local visualParts = {}
+	for _, p in ipairs(visual:GetDescendants()) do
+		if p:IsA("BasePart") then
+			table.insert(visualParts, p)
+		end
+	end
+
+	return {
+		def = def,
+		amount = def.capacity,
+		anchor = anchor,
+		deplete = function()
+			for _, p in ipairs(visualParts) do
+				p.Transparency = 1
+			end
+			anchor.Transparency = 0
+			anchor.Size = look.remnantSize
+			anchor.CFrame = origin * CFrame.new(0, look.remnantSize.Y / 2, 0)
+			anchor.Color = ArtKit.Palette[look.remnantColor]
+			anchor:SetAttribute("Depleted", true)
+		end,
+		restore = function()
+			for _, p in ipairs(visualParts) do
+				p.Transparency = 0
+			end
+			anchor.Transparency = 1
+			anchor.Size = look.anchorSize
+			anchor.CFrame = origin * CFrame.new(0, look.anchorSize.Y / 2, 0)
+			anchor:SetAttribute("Depleted", false)
+		end,
+	}
+end
+
 local function buildTree(spot, def)
+	local meshNode = buildMeshNode(spot, def, "tree", {
+		anchorSize = Vector3.new(1.8, 8, 1.8),
+		remnantSize = Vector3.new(1.8, 1.6, 1.8),
+		remnantColor = "trunkDark",
+	})
+	if meshNode then
+		return meshNode
+	end
 	local y = groundY(spot.X, spot.Z)
 	local origin = CFrame.new(spot.X, y, spot.Z)
 
@@ -173,6 +246,15 @@ local function buildHardwoodTree(spot, def)
 end
 
 local function buildRock(spot, def)
+	local meshNode = buildMeshNode(spot, def, "rock", {
+		anchorSize = Vector3.new(4.2, 2.8, 3.6),
+		remnantSize = Vector3.new(2.2, 1, 2),
+		remnantColor = "stoneDark",
+	})
+	if meshNode then
+		return meshNode
+	end
+
 	local y = groundY(spot.X, spot.Z)
 	local origin = CFrame.new(spot.X, y, spot.Z)
 
@@ -221,6 +303,15 @@ end
 -- streaks (ArtKit.Palette.rust) so it visually reads as "needs a better
 -- pick" at a glance, before the player even swings at it.
 local function buildIronRock(spot, def)
+	local meshNode = buildMeshNode(spot, def, "iron_rock", {
+		anchorSize = Vector3.new(4.2, 2.8, 3.6),
+		remnantSize = Vector3.new(2.2, 1, 2),
+		remnantColor = "stoneDark",
+	})
+	if meshNode then
+		return meshNode
+	end
+
 	local y = groundY(spot.X, spot.Z)
 	local origin = CFrame.new(spot.X, y, spot.Z)
 

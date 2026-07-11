@@ -38,9 +38,9 @@ local ClassPassives = {}
 -- "highest threshold wins" rule as Traits.activeStats).
 ClassPassives.defs = {
 	knight = {
-		id = "oakskin",
+		id = "valor",
 		classId = "knight",
-		name = "Oakskin",
+		name = "Valor",
 		icon = "🛡️",
 		color = Color3.fromRGB(150, 160, 190),
 		description = "The Knight's natural armor: reduces all incoming damage.",
@@ -53,9 +53,9 @@ ClassPassives.defs = {
 		},
 	},
 	archer = {
-		id = "hawk_eye",
+		id = "precision",
 		classId = "archer",
-		name = "Hawk Eye",
+		name = "Precision",
 		icon = "🦅",
 		color = Color3.fromRGB(240, 190, 70),
 		description = "The Archer's innate aim: bonus critical strike chance.",
@@ -68,9 +68,9 @@ ClassPassives.defs = {
 		},
 	},
 	mage = {
-		id = "arcane_mastery",
+		id = "attunement",
 		classId = "mage",
-		name = "Arcane Mastery",
+		name = "Attunement",
 		icon = "🔮",
 		color = Color3.fromRGB(150, 130, 220),
 		description = "The Mage sustains their own buffs and debuffs for longer.",
@@ -83,9 +83,9 @@ ClassPassives.defs = {
 		},
 	},
 	cleric = {
-		id = "vital_aura",
+		id = "devotion",
 		classId = "cleric",
-		name = "Vital Aura",
+		name = "Devotion",
 		icon = "✨",
 		color = Color3.fromRGB(220, 110, 90),
 		description = "The Cleric steadily regenerates health, even in combat.",

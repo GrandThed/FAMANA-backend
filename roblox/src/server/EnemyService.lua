@@ -12,6 +12,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local HealthService = require(script.Parent.HealthService)
 local ManaService = require(script.Parent.ManaService)
+local MeshAssetService = require(script.Parent.MeshAssetService)
 local ToolService = require(script.Parent.ToolService)
 local TargetService = require(script.Parent.TargetService)
 local PlayerService = require(script.Parent.PlayerService)
@@ -84,6 +85,8 @@ local ENEMY_DEFS = {
 		-- Slimes only move by hopping (parabolic jumps with squash & stretch).
 		movement = "hop",
 		hop = { distance = 6, height = 2.5, time = 0.5, pause = 0.35 },
+		-- No meshAsset on purpose: the classic translucent squash-and-stretch
+		-- cube IS the slime's look (the mesh version was tried and reverted).
 		-- Welded onto the body part; offsets from its center, front is -Z.
 		details = {
 			{ name = "Core", shape = "Ball", size = V(1.5, 1.5, 1.5), offset = V(0, -0.3, 0), color = "slime" },
@@ -113,6 +116,7 @@ local ENEMY_DEFS = {
 		size = Vector3.new(2.5, 4, 2.5),
 		color = ArtKit.Palette.goblin,
 		material = Enum.Material.SmoothPlastic,
+		meshAsset = "goblin",
 		details = {
 			{ name = "EyeL", size = V(0.32, 0.32, 0.25), offset = V(-0.5, 1.3, -1.3), color = "ink" },
 			{ name = "EyeR", size = V(0.32, 0.32, 0.25), offset = V(0.5, 1.3, -1.3), color = "ink" },
@@ -253,6 +257,16 @@ EnemyService.registerReflect, hookedReflect = additiveHook()
 EnemyService.registerDebuffDurationBonus, hookedDebuffDurationBonus = additiveHook()
 EnemyService.registerSlowPotency, hookedSlowPotency = additiveHook()
 
+-- Iframes (Iron Roll & friends): a brief window where enemy hits fully
+-- miss — checked before the dodge roll, popping the same "Dodge!" feedback.
+local iframes = {} -- [userId] = os.clock() expiry
+function EnemyService.grantIframes(player, duration)
+	local expires = os.clock() + duration
+	if (iframes[player.UserId] or 0) < expires then
+		iframes[player.UserId] = expires
+	end
+end
+
 -- Floating "Dodge!" popup over a player who just evaded a hit.
 local function dodgePopup(character)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
@@ -299,7 +313,12 @@ function EnemyService.computePlayerDamage(player, baseDamage, damageKind, opts)
 	local damage = stat * hookedDamageMult(player, damageKind)
 
 	local isCrit = false
-	if not (opts and opts.noCrit) then
+	if opts and opts.forceCrit then
+		-- Guaranteed crits (True Shot on wounded prey) skip the roll but
+		-- still enjoy Executioner's multiplier.
+		isCrit = true
+		damage *= CRIT_MULTIPLIER + hookedCritDamageBonus(player)
+	elseif not (opts and opts.noCrit) then
 		local critChance = CRIT_CHANCE + ClassService.getCritBonus(player) + hookedCritBonus(player)
 		isCrit = math.random() < critChance
 		if isCrit then
@@ -370,8 +389,13 @@ local function buildEnemy(pos, def)
 	-- same absolute-level color this file paints below as a placeholder.
 	part:SetAttribute("Level", level)
 
-	-- Face/body details ride along with the body via welds.
-	if def.details then
+	-- Style-A mesh visual when its template loaded: the body part stays the
+	-- physics/targeting object and goes invisible underneath it. Otherwise
+	-- the ArtKit face/body details ride along via welds, as before.
+	local visual = def.meshAsset and MeshAssetService.weldVisual(part, def.meshAsset, def.size.Y)
+	if visual then
+		part.Transparency = 1
+	elseif def.details then
 		ArtKit.weld(part, def.details)
 	end
 
@@ -714,7 +738,7 @@ local function updateEnemy(entry, dt)
 			if humanoid and humanoid.Health > 0 then
 				-- Evasion: a dodged hit deals nothing and applies no on-hit
 				-- effects (the enemy still spent its attack).
-				if math.random() < hookedDodgeChance(target) then
+				if (iframes[target.UserId] or 0) > now or math.random() < hookedDodgeChance(target) then
 					dodgePopup(target.Character)
 				else
 					local mitigation = Classes.mitigation(ClassService.getArmor(target))
@@ -812,6 +836,14 @@ end
 dealDamage = function(entry, enemy, damage, killer, isCrit)
 	if not enemy or enemy.dead then
 		return
+	end
+	-- Hunter's Mark: amplified damage from everyone while it lasts.
+	if enemy.markedUntil then
+		if os.clock() < enemy.markedUntil then
+			damage = math.floor(damage * (1 + (enemy.markAmp or 0)) + 0.5)
+		else
+			enemy.markedUntil, enemy.markAmp = nil, nil
+		end
 	end
 	enemy.hp -= damage
 	updateHealthBar(enemy)
@@ -947,6 +979,21 @@ function EnemyService.taunt(ref, player, duration)
 	if ref and ref.enemy and not ref.enemy.dead then
 		ref.enemy.tauntedBy = player
 		ref.enemy.tauntedUntil = os.clock() + duration
+	end
+end
+
+-- Hunter's Mark: while marked, the enemy takes `amp` extra damage from ALL
+-- sources (applied in dealDamage). Duration scales with the marker's
+-- debuff-duration bonus (Inferno) and rides the same enemy-side DR.
+function EnemyService.mark(ref, amp, duration, player)
+	if ref and ref.enemy and not ref.enemy.dead then
+		local enemy = ref.enemy
+		if player then
+			duration *= 1 + hookedDebuffDurationBonus(player)
+		end
+		duration = diminishedDuration(enemy, "mark", duration)
+		enemy.markedUntil = math.max(enemy.markedUntil or 0, os.clock() + duration)
+		enemy.markAmp = math.max(enemy.markAmp or 0, amp)
 	end
 end
 

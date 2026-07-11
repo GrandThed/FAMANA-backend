@@ -123,8 +123,17 @@ abilities + the gathering identity), sampled at levels 5/10/15/20/25/30;
 gathering identity is the exception — it's the class's PRIMARY claim on its
 niche, so it runs hot (V30 = 150%, above the gear traits' 100%). The 1/5/12
 abilities come straight off the spells board's per-class lists (the old
-"clases sin subclase" designs — they were never shipped; this is their
-home). Level 30 = ascended capstone, rebirth-only.
+"classes without subclass" designs — they were never shipped; this is
+their home). Level 30 = ascended capstone, rebirth-only.
+
+> **Waves A+B1 shipped 2026-07-11** (via `Spells.innates`,
+> class-level-gated): all 1/5/12 slots are castable — Shield Bash, Iron
+> Roll, Defensive Stance, True Shot, Swift Step, Hunter's Mark, Energy
+> Bolt, Mana Shield, Overcharge, Minor Prayer, Minor Blessing. Movement =
+> client-executed dash + server iframes; shields = the Guardian-phase
+> temp-HP pool. Still pending: Sacred Circle (cleric 12 — ally zones) and
+> all 20/30 capstones. Minor Prayer shipped as an instant heal (the HoT
+> version waits on a heal-over-time effect).
 
 **Valor (Knight)** — armor 2/7/13/20/27/36 + phys 2/5/9/15/20/27% ·
 gathering: natural resources +10/29/53/82/114/150%

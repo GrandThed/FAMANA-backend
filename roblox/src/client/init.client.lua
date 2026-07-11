@@ -29,6 +29,7 @@ local EnemyLevelUI = require(script:WaitForChild("EnemyLevelUI"))
 local PlayerNameplateUI = require(script:WaitForChild("PlayerNameplateUI"))
 local PlayerFeedbackSfx = require(script:WaitForChild("PlayerFeedbackSfx"))
 local CombatSfx = require(script:WaitForChild("CombatSfx"))
+local DashClient = require(script:WaitForChild("DashClient"))
 
 ContentSync.start() -- first: overlays backend item defs onto the mirror
 SpellsClient.start() -- seeds/auto-places spell hotbar binds (HudUI renders them)
@@ -58,3 +59,4 @@ EnemyLevelUI.start()
 PlayerNameplateUI.start()
 PlayerFeedbackSfx.start()
 CombatSfx.start()
+DashClient.start() -- executes server-validated innate dashes (Swift Step / Iron Roll)

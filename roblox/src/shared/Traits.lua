@@ -236,6 +236,24 @@ Traits.defs = {
 			{ 16, { healReceived = 0.55 } },
 		},
 	},
+	guardian = {
+		id = "guardian",
+		name = "Guardian",
+		icon = "🔰",
+		color = Color3.fromRGB(120, 190, 160),
+		description = "Party protector: getting hit can shield a wounded ally, and your presence armors the party.",
+		-- Procs, no button (passive family). Ally = party member; no proc
+		-- solo. Shield = 15% of the ally's max HP for 4s; the aura armors
+		-- party members within 20 studs.
+		thresholds = {
+			{ 2, { guardianProc = 0.02 } },
+			{ 5, { guardianProc = 0.06 } },
+			{ 8, { guardianProc = 0.13, guardianAura = 6 } },
+			{ 12, { guardianProc = 0.23, guardianAura = 8 } },
+			{ 16, { guardianProc = 0.36, guardianAura = 12 } },
+			{ 20, { guardianProc = 0.50, guardianAura = 16, guardianHeal = 0.10 } },
+		},
+	},
 	retribution = {
 		id = "retribution",
 		name = "Retribution",
@@ -310,6 +328,7 @@ Traits.order = {
 	"brawler",
 	"bastion",
 	"evasion",
+	"guardian",
 	"life_essence",
 	"retribution",
 	"clarity",
@@ -454,7 +473,7 @@ local TYPE_POOLS = {
 		"executioner",
 		"leech",
 	},
-	armor = { "brawler", "bastion", "evasion", "life_essence", "retribution" },
+	armor = { "brawler", "bastion", "evasion", "guardian", "life_essence", "retribution" },
 	ring = Traits.order,
 }
 
@@ -606,6 +625,9 @@ local STAT_ORDER = {
 	"regen",
 	"armor",
 	"dodge",
+	"guardianProc",
+	"guardianAura",
+	"guardianHeal",
 	"healReceived",
 	"reflect",
 	"manaRegen",
@@ -638,6 +660,11 @@ local STAT_LABELS = {
 		return ("+%d armor"):format(v)
 	end,
 	dodge = percentLabel("+%d%% dodge"),
+	guardianProc = percentLabel("%d%% ally-shield proc"),
+	guardianAura = function(v)
+		return ("+%d armor aura (party)"):format(v)
+	end,
+	guardianHeal = percentLabel("shields heal %d%% missing HP"),
 	healReceived = percentLabel("+%d%% healing received"),
 	reflect = percentLabel("reflect %d%% melee damage"),
 	manaRegen = percentLabel("+%d%% mana regen"),

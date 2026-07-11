@@ -1,0 +1,23 @@
+# Roblox asset ids — Style A uploads
+
+| Asset | assetId | rbxassetid |
+|---|---|---|
+| Campfire | 135244778048023 | rbxassetid://135244778048023 |
+| Chest | 115944771848024 | rbxassetid://115944771848024 |
+| LogBench | 91987596682865 | rbxassetid://91987596682865 |
+| RockCluster | 88120845538413 | rbxassetid://88120845538413 |
+| RockGold | 81960295787241 | rbxassetid://81960295787241 |
+| RockStone | 132069517897280 | rbxassetid://132069517897280 |
+| Slime | 125232030244343 | rbxassetid://125232030244343 |
+| Stump | 107975257047329 | rbxassetid://107975257047329 |
+| TreePine | 118924051252018 | rbxassetid://118924051252018 |
+| Axe | 102257619570241 | rbxassetid://102257619570241 |
+| Bow | 131363212695848 | rbxassetid://131363212695848 |
+| Forge | 138958981450463 | rbxassetid://138958981450463 |
+| Goblin | 98715900781376 | rbxassetid://98715900781376 |
+| Pickaxe | 71680183113559 | rbxassetid://71680183113559 |
+| RockCopper | 122513009887645 | rbxassetid://122513009887645 |
+| RockIron | 88791112606468 | rbxassetid://88791112606468 |
+| Staff | 87600364107340 | rbxassetid://87600364107340 |
+| Sword | 127767149272624 | rbxassetid://127767149272624 |
+| TreeOak | 96257985799628 | rbxassetid://96257985799628 |
