@@ -63,6 +63,35 @@ function PlayerService.get(player)
 	return cache[player.UserId]
 end
 
+-- Camp furniture layout persistence (see CampFurnitureService.lua). These
+-- work by ownerUserId rather than a Player instance because a camp can be
+-- torn down (expired) while its owner is offline — unlike the rest of
+-- PlayerService, which only ever touches the online cache.
+
+-- Returns the owner's saved layout ({} if they never had one). Prefers the
+-- online cache (authoritative if they're connected); falls back to a direct
+-- backend read for offline owners.
+function PlayerService.getCampLayout(ownerUserId)
+	local profile = cache[ownerUserId]
+	if profile then
+		return profile.campLayout or {}
+	end
+	local data = BackendService.getPlayer(ownerUserId)
+	return (data and typeof(data.campLayout) == "table") and data.campLayout or {}
+end
+
+-- Persists a new layout for ownerUserId, online or not: updates the cache
+-- (so a same-session replant sees it immediately, with no backend round
+-- trip) AND always writes through to the backend (so it survives the owner
+-- reconnecting, or the server restarting).
+function PlayerService.setCampLayout(ownerUserId, layoutData)
+	local profile = cache[ownerUserId]
+	if profile then
+		profile.campLayout = layoutData
+	end
+	BackendService.savePlayer(ownerUserId, { campLayout = layoutData })
+end
+
 -- Server-side listeners notified whenever a player's inventory changes
 -- (e.g. ToolService rebuilding hotbar tools). Decouples PlayerService from
 -- the systems that react to inventory changes.
@@ -183,6 +212,10 @@ local function loadProfile(player)
 	-- JSONEncode/the backend save — a nil table field just vanishes instead
 	-- of clearing the stored value.
 	data.trackedQuestId = typeof(data.trackedQuestId) == "string" and data.trackedQuestId or ""
+
+	-- Saved camp furniture layout (see CampFurnitureService.lua). Profiles
+	-- saved before this existed come back without it.
+	data.campLayout = typeof(data.campLayout) == "table" and data.campLayout or {}
 
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
@@ -479,6 +512,7 @@ local function buildSaveFields(player)
 		settings = profile.settings,
 		questProgress = profile.questProgress,
 		trackedQuestId = profile.trackedQuestId,
+		campLayout = profile.campLayout,
 		cell = profile.cell,
 		position = profile.position,
 	}

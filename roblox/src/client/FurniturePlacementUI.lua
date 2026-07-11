@@ -1,12 +1,13 @@
 -- Ground preview + placement for camp furniture ("cofre_campamento",
--- "carpa_campamento", ... — see server/CampFurnitureService.lua). Same
--- pattern as client/CampPlacementUI.lua for the acampada itself: the item is
--- `type = "placeable"`, ToolService turns it into a held Tool, this shows a
--- translucent square following the mouse while it's equipped and fires
--- PlaceFurniture with the ground point on click. The server re-validates
--- everything (camp access, zone bounds, distance, spacing, ownership) and
--- never trusts this preview. Success/error feedback comes back as a toast
--- via the existing "Notify" remote.
+-- "carpa_campamento", "crafting_table", "simple_forge", ... — see server/
+-- CampFurnitureService.lua). Same pattern as client/CampPlacementUI.lua for
+-- the acampada itself: the item is `type = "placeable"`, ToolService turns
+-- it into a held Tool, this shows a translucent square following the mouse
+-- while it's equipped and fires PlaceFurniture with the ground point on
+-- click. The server re-validates everything (camp access, zone bounds,
+-- distance, spacing, ownership) and never trusts this preview.
+-- Success/error feedback comes back as a toast via the existing "Notify"
+-- remote.
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -25,6 +26,8 @@ local FurniturePlacementUI = {}
 local FURNITURE_ITEMS = {
 	cofre_campamento = { size = 3 },
 	carpa_campamento = { size = 4 },
+	crafting_table = { size = 4 },
+	simple_forge = { size = 3 },
 }
 
 local MAX_DISTANCE = Config.Camp.maxPlacementDistance
