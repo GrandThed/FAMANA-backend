@@ -22,6 +22,8 @@ local DropService = require(script:WaitForChild("DropService"))
 local ItemStandService = require(script:WaitForChild("ItemStandService"))
 local VendorService = require(script:WaitForChild("VendorService"))
 local CraftingService = require(script:WaitForChild("CraftingService"))
+local CampService = require(script:WaitForChild("CampService"))
+local CampFurnitureService = require(script:WaitForChild("CampFurnitureService"))
 local QuestService = require(script:WaitForChild("QuestService"))
 local BorderService = require(script:WaitForChild("BorderService"))
 local WorldService = require(script:WaitForChild("WorldService"))
@@ -52,6 +54,8 @@ DropService.start()
 ItemStandService.start() -- after DropService: stands spawn drops
 VendorService.start()
 CraftingService.start()
+CampService.start() -- después de CraftingService: consume el item "acampada" que esta produce
+CampFurnitureService.start() -- después de CampService: mobiliario solo se planta dentro de una acampada activa
 QuestService.start() -- after EnemyService/GatheringService: hooks their onKilled/onGathered
 if role == "cell" then
 	BorderService.start()

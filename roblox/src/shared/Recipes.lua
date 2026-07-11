@@ -90,6 +90,35 @@ Recipes.defs = {
 		},
 		station = "simple_forge",
 	},
+	acampada = {
+		id = "acampada",
+		name = "Acampada",
+		result = { itemId = "acampada", quantity = 1 },
+		ingredients = {
+			{ itemId = "stone", quantity = 30 },
+			{ itemId = "wood", quantity = 20 },
+		},
+		-- sin station: crafteable desde cualquier lado, como torch/arrow
+	},
+	cofre_campamento = {
+		id = "cofre_campamento",
+		name = "Cofre de Campamento",
+		result = { itemId = "cofre_campamento", quantity = 1 },
+		ingredients = {
+			{ itemId = "wood", quantity = 25 },
+			{ itemId = "stone", quantity = 10 },
+		},
+		-- sin station, mismo criterio que acampada
+	},
+	carpa_campamento = {
+		id = "carpa_campamento",
+		name = "Carpa de Campamento",
+		result = { itemId = "carpa_campamento", quantity = 1 },
+		ingredients = {
+			{ itemId = "wood", quantity = 15 },
+		},
+		-- sin station, mismo criterio que acampada
+	},
 }
 
 function Recipes.get(recipeId)
@@ -97,7 +126,20 @@ function Recipes.get(recipeId)
 end
 
 -- lista de recetas en el orden que se muestran en la UI de crafting
-local order = { "crafting_table", "simple_forge", "torch", "arrow", "copper_ingot", "pickaxe_copper", "axe_copper", "iron_ingot" }
+local order =
+	{
+		"crafting_table",
+		"simple_forge",
+		"torch",
+		"arrow",
+		"copper_ingot",
+		"pickaxe_copper",
+		"axe_copper",
+		"iron_ingot",
+		"acampada",
+		"cofre_campamento",
+		"carpa_campamento",
+	}
 
 function Recipes.list()
 	local list = {}

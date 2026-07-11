@@ -71,4 +71,23 @@ return {
 		inviteTimeout = 30, -- las invitaciones sn validas por 30 segs
 		xpShareRadius = 60, -- radio para compartir xp entre miembros de party
 	},
+
+	-- Acampada: zona segura + respawn craftable por el jugador (ver
+	-- shared/Recipes.lua y server/CampService.lua). Solo en memoria del
+	-- server, no se persiste al backend — mismo criterio que Party.
+	Camp = {
+		duration = 60 * 60, -- la acampada dura 1 hora
+		cooldown = 30 * 60, -- 30 min de cooldown tras expirar, por dueño
+		zoneSize = 30, -- cuadrado de N x N studs, centrado en la fogata
+		maxPlacementDistance = 20, -- distancia jugador -> punto de colocación (anti-exploit)
+	},
+
+	-- Muebles de campamento (cofre, carpa, ...): solo plantables dentro de
+	-- una Acampada activa. Sin persistencia (misma filosofía que Camp) — ver
+	-- server/CampFurnitureService.lua.
+	CampFurniture = {
+		minSpacing = 4, -- studs mínimos entre dos muebles del mismo campamento
+		chestColumns = 6, -- ancho de la grilla del cofre (mismo componente ItemGrid)
+		chestRows = 6,
+	},
 }

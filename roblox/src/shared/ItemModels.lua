@@ -263,6 +263,23 @@ ItemModels.defs = {
 		{ name = "Shaft", size = V(0.08, 1.4, 0.08), color = "trunk" },
 		{ name = "Head", shape = "Wedge", size = V(0.1, 0.28, 0.1), offset = V(0, 0.84, 0), color = "steel" },
 	},
+
+	acampada = {
+		{ name = "Grip", size = V(0.3, 1.0, 0.3), color = "trunkDark" },
+		{ name = "Bundle", shape = "Cylinder", size = V(1.0, 0.55, 0.55), offset = V(0, 0.7, 0), rot = V(0, 0, 90), color = "trunk" },
+		{ name = "Strap", size = V(1.06, 0.14, 0.6), offset = V(0, 0.7, 0), color = "leatherDark" },
+	},
+	cofre_campamento = {
+		{ name = "Grip", size = V(0.9, 0.7, 0.6), color = "trunk" },
+		{ name = "Lid", size = V(0.94, 0.18, 0.64), offset = V(0, 0.44, 0), color = "trunkDark" },
+		{ name = "Band", size = V(0.98, 0.1, 0.68), offset = V(0, 0.1, 0), color = "steelDark" },
+		{ name = "Lock", size = V(0.14, 0.14, 0.1), offset = V(0, 0.36, -0.34), color = "gold" },
+	},
+	carpa_campamento = {
+		{ name = "Grip", size = V(0.3, 1.0, 0.3), color = "trunkDark" },
+		{ name = "PoleTop", shape = "Cylinder", size = V(0.9, 0.12, 0.12), offset = V(0, 0.65, 0), rot = V(0, 0, 90), color = "trunk" },
+		{ name = "Canvas", shape = "Wedge", size = V(0.8, 0.6, 0.9), offset = V(0, 0.35, 0), rot = V(0, 90, 0), color = "leather" },
+	},
 }
 
 function ItemModels.get(itemId)

@@ -1460,6 +1460,9 @@ function InventoryUI.start()
 			if ClientState.storeOpen and ClientState.closeStore then
 				ClientState.closeStore()
 			end
+			if ClientState.chestOpen and ClientState.closeChest then
+				ClientState.closeChest()
+			end
 			refreshEffects()
 			refreshDoll()
 		else

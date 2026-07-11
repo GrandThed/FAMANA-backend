@@ -191,10 +191,31 @@ function exitDowned(player, revived, healPercentOverride)
 	end
 end
 
+-- registerDamageImmunity: fn(player) -> true if this hit should be ignored
+-- entirely (e.g. CampService's safe zone). Checked before the downed guard
+-- so a protected player can't even be downed by a stray hit.
+local damageImmunityHooks = {}
+function HealthService.registerDamageImmunity(fn)
+	table.insert(damageImmunityHooks, fn)
+end
+
+local function isDamageImmune(player)
+	for _, fn in ipairs(damageImmunityHooks) do
+		local ok, value = pcall(fn, player)
+		if ok and value then
+			return true
+		end
+	end
+	return false
+end
+
 -- Central damage entrypoint for anything hitting a player (currently only
 -- EnemyService's melee attacks). A hit that would drop Health to 0 or below
 -- downs instead of killing; downed players take no further damage.
 function HealthService.damagePlayer(player, amount)
+	if isDamageImmune(player) then
+		return
+	end
 	local character = player.Character
 	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
 	if not humanoid or humanoid.Health <= 0 then
@@ -289,6 +310,25 @@ function HealthService.refreshMaxHealth(player)
 	end
 end
 
+-- registerSpawnPositionOverride: fn(player) -> Vector3 | nil. The first hook
+-- to return a Vector3 wins (checked in registration order). Used by
+-- CampService so death respawns party members at their active camp instead
+-- of the saved backend position, for as long as that camp is alive.
+local spawnPositionOverrideHooks = {}
+function HealthService.registerSpawnPositionOverride(fn)
+	table.insert(spawnPositionOverrideHooks, fn)
+end
+
+local function hookedSpawnPosition(player)
+	for _, fn in ipairs(spawnPositionOverrideHooks) do
+		local ok, value = pcall(fn, player)
+		if ok and typeof(value) == "Vector3" then
+			return value
+		end
+	end
+	return nil
+end
+
 local function onCharacterAdded(player, character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local profile = PlayerService.get(player)
@@ -308,8 +348,13 @@ local function onCharacterAdded(player, character)
 	end
 	humanoid.Health = math.clamp(savedHealth, 1, maxHealth)
 
-	-- Restore saved position within this cell (skip the default origin).
-	if profile and profile.position then
+	-- Restore saved position within this cell (skip the default origin) —
+	-- unless a hook (e.g. an active camp) claims this spawn instead.
+	local overridePosition = hookedSpawnPosition(player)
+	if overridePosition then
+		local root = character:WaitForChild("HumanoidRootPart")
+		root.CFrame = CFrame.new(overridePosition)
+	elseif profile and profile.position then
 		local p = profile.position
 		if not (p.x == 0 and p.y == 0 and p.z == 0) then
 			local root = character:WaitForChild("HumanoidRootPart")

@@ -930,6 +930,9 @@ function StoreUI.start()
 		if ClientState.inventoryOpen and ClientState.closeInventory then
 			ClientState.closeInventory() -- the panes overlap; one screen at a time
 		end
+		if ClientState.chestOpen and ClientState.closeChest then
+			ClientState.closeChest()
+		end
 		current = info
 		dealLines = {}
 		title.Text = info.storeName or "Store"

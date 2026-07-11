@@ -19,8 +19,9 @@ local PlayerService = require(script.Parent.PlayerService)
 
 local ToolService = {}
 
--- Item types that become held Tools.
-local EQUIPPABLE = { weapon = true, tool = true }
+-- Item types that become held Tools. "placeable" covers world-placed
+-- deployables (Acampada) — equip it, aim, click to place; see CampService.
+local EQUIPPABLE = { weapon = true, tool = true, placeable = true }
 
 local SWING_COOLDOWN = 0.4
 
@@ -61,6 +62,8 @@ local SWING_STYLES = {
 local function swingStyleFor(def)
 	if def.type == "tool" then
 		return SWING_STYLES.chop
+	elseif def.type == "placeable" then
+		return SWING_STYLES.cast
 	elseif def.weaponType == "ranged" then
 		if def.damageKind == "physical" then
 			return SWING_STYLES.draw
@@ -93,6 +96,8 @@ local function playSwing(player, def)
 	local styleName = "slash"
 	if def.type == "tool" then
 		styleName = "chop"
+	elseif def.type == "placeable" then
+		styleName = "cast"
 	elseif def.weaponType == "ranged" then
 		if def.damageKind == "physical" then
 			styleName = "draw"
