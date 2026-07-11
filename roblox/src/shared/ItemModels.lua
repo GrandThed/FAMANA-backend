@@ -248,7 +248,7 @@ ItemModels.defs = {
 
 	torch = {
 		{ name = "Handle", size = V(0.16, 1.0, 0.16), color = "trunkDark" },
-		{ name = "Flame", shape = "Ball", size = V(0.34, 0.34, 0.34), offset = V(0, 0.6, 0), color = "gold", material = Enum.Material.Neon },
+		{ name = "Orb", shape = "Ball", size = V(0.34, 0.34, 0.34), offset = V(0, 0.6, 0), color = "gold", material = Enum.Material.Neon },
 	},
 
 	arrow = {

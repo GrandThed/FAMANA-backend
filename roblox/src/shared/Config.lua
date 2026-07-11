@@ -80,6 +80,10 @@ return {
 		cooldown = 30 * 60, -- 30 min de cooldown tras expirar, por dueño
 		zoneSize = 30, -- cuadrado de N x N studs, centrado en la fogata
 		maxPlacementDistance = 20, -- distancia jugador -> punto de colocación (anti-exploit)
+		-- Bonus de regen (HP/seg) por estar dentro de la zona segura DE NOCHE
+		-- — la fogata siempre está prendida, pero solo importa cuando afuera
+		-- es peligroso. Placeholder, calibrar jugado.
+		nightRegenBonus = 3,
 	},
 
 	-- Muebles de campamento (cofre, carpa, ...): solo plantables dentro de

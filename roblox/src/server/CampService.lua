@@ -30,6 +30,7 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 
 local PlayerService = require(script.Parent.PlayerService)
 local HealthService = require(script.Parent.HealthService)
+local DayNightService = require(script.Parent.DayNightService)
 
 local CampService = {}
 
@@ -312,6 +313,22 @@ function CampService.start()
 		end
 		-- Spawn just off the fire, not inside the embers.
 		return camp.center + Vector3.new(0, 3, ZONE_HALF / 2)
+	end)
+
+	-- The ember's PointLight is always on (buildCampModel), but the warmth
+	-- only matters when it's actually dark out — during the day the safe
+	-- zone's damage immunity is already the whole reward. Same
+	-- isPositionSafeForPlayer check as the immunity hook above.
+	HealthService.registerBonusRegen(function(player)
+		if not DayNightService.isNight() then
+			return 0
+		end
+		local character = player.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if not root or not CampService.isPositionSafeForPlayer(player, root.Position) then
+			return 0
+		end
+		return CAMP.nightRegenBonus
 	end)
 
 	local placeAcampada = Remotes.getFunction("PlaceAcampada")

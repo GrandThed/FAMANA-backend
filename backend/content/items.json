@@ -305,13 +305,16 @@
     "torch": {
       "id": "torch",
       "name": "Torch",
-      "type": "misc",
-      "stackable": true,
-      "maxStack": 50,
+      "flavor": "Sube la persiana de la noche, aunque sea unos metros a la redonda.",
+      "type": "tool",
+      "stackable": false,
+      "maxStack": 1,
       "size": [
         1,
         1
-      ]
+      ],
+      "orbLightRange": 18,
+      "orbLightBrightness": 3
     },
     "arrow": {
       "id": "arrow",

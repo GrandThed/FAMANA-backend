@@ -13,11 +13,13 @@ local MeshAssetService = require(script.Parent.MeshAssetService)
 local PlayerService = require(script.Parent.PlayerService)
 local ToolService = require(script.Parent.ToolService)
 local TargetService = require(script.Parent.TargetService)
+local DayNightService = require(script.Parent.DayNightService)
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local ArtKit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ArtKit"))
 local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
 local MapMarkers = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("MapMarkers"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
+local DayNight = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("DayNight"))
 
 local GatheringService = {}
 
@@ -627,6 +629,14 @@ local function onToolSwing(player, tool, def)
 end
 
 function GatheringService.start()
+	-- Night gathering bonus rides the exact same extensibility point as the
+	-- Prospector/Woodsman gear traits (SynergyService) and the class
+	-- gathering passives (ClassPassiveService) — harvest() doesn't need to
+	-- know this exists, it just sums whatever's registered.
+	GatheringService.registerYieldBonus(function(_player, _toolType)
+		return DayNightService.isNight() and DayNight.nightGatherYieldBonus or 0
+	end)
+
 	-- Pre-create remote so client doesn't warn/yield infinitely at startup
 	Remotes.get("GatherFeedback")
 

@@ -18,6 +18,7 @@ local TargetService = require(script.Parent.TargetService)
 local PlayerService = require(script.Parent.PlayerService)
 local ClassService = require(script.Parent.ClassService)
 local PartyService = require(script.Parent.PartyService)
+local DayNightService = require(script.Parent.DayNightService)
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
@@ -72,6 +73,7 @@ local ENEMY_DEFS = {
 		damage = 5,
 		minLevel = 1,
 		maxLevel = 3,
+		nightLevelBonus = 1, -- placeholder; added to the rolled level while it's night (see DayNightService)
 		xpReward = 15,
 		attackCooldown = 1.5,
 		aggroRange = 30,
@@ -106,6 +108,7 @@ local ENEMY_DEFS = {
 		damage = 10,
 		minLevel = 2,
 		maxLevel = 5,
+		nightLevelBonus = 2, -- placeholder; goblins get meaner faster at night than slimes
 		xpReward = 35,
 		attackCooldown = 1.2,
 		walkSpeed = 12,
@@ -373,6 +376,13 @@ local function buildEnemy(pos, def)
 	local y = groundY(pos.X, pos.Z)
 
 	local level = math.random(def.minLevel or 1, def.maxLevel or 1)
+	if DayNightService.isNight() then
+		-- Flat bump on top of the roll, not a wider range: keeps day spawns
+		-- exactly as they are today and makes the night difference legible
+		-- (same enemy, visibly higher level tag) rather than folding it into
+		-- the min/max roll where it'd be invisible.
+		level += def.nightLevelBonus or 0
+	end
 	local maxHp = math.floor(def.hp * (1 + (level - 1) * HP_PER_LEVEL) + 0.5)
 	local damage = math.floor(def.damage * (1 + (level - 1) * DAMAGE_PER_LEVEL) + 0.5)
 
