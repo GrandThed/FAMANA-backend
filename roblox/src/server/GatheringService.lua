@@ -133,6 +133,53 @@ local function buildRock(spot, def)
 	}
 end
 
+-- Iron vein: same silhouette as the regular rock, but darker with rust-red
+-- streaks (ArtKit.Palette.rust) so it visually reads as "needs a better
+-- pick" at a glance, before the player even swings at it.
+local function buildIronRock(spot, def)
+	local y = groundY(spot.X, spot.Z)
+	local origin = CFrame.new(spot.X, y, spot.Z)
+
+	local model = ArtKit.build("IronRock", origin, {
+		{ name = "Boulder", size = Vector3.new(4.2, 2.8, 3.6), offset = Vector3.new(0, 1.3, 0), rot = Vector3.new(6, 25, -4), color = "stoneDark", primary = true },
+		{ name = "Chunk1", size = Vector3.new(2.6, 2, 2.4), offset = Vector3.new(1.7, 0.9, -1), rot = Vector3.new(-10, -35, 8), color = "rust" },
+		{ name = "Chunk2", size = Vector3.new(1.7, 1.3, 1.7), offset = Vector3.new(-1.8, 0.6, 1.2), rot = Vector3.new(0, 50, 12), color = "rust" },
+	})
+
+	local boulder = model.PrimaryPart
+	local chunks = { model.Chunk1, model.Chunk2 }
+	local boulderCFrame, boulderSize = boulder.CFrame, boulder.Size
+
+	boulder:SetAttribute("Depleted", false)
+	model.Parent = resourceFolder
+
+	return {
+		def = def,
+		amount = def.capacity,
+		anchor = boulder,
+		deplete = function()
+			for _, chunk in ipairs(chunks) do
+				chunk.Transparency = 1
+				chunk.CanCollide = false
+			end
+			boulder.Size = Vector3.new(2.2, 1, 2)
+			boulder.CFrame = origin * CFrame.new(0, 0.5, 0) * CFrame.Angles(0, math.rad(25), 0)
+			boulder.Color = ArtKit.Palette.stoneDark
+			boulder:SetAttribute("Depleted", true)
+		end,
+		restore = function()
+			for _, chunk in ipairs(chunks) do
+				chunk.Transparency = 0
+				chunk.CanCollide = true
+			end
+			boulder.Size = boulderSize
+			boulder.CFrame = boulderCFrame
+			boulder.Color = ArtKit.Palette.stoneDark
+			boulder:SetAttribute("Depleted", false)
+		end,
+	}
+end
+
 -- ---- Node type definitions ----------------------------------------------
 
 local NODE_DEFS = {
@@ -158,11 +205,33 @@ local NODE_DEFS = {
 		respawn = 60,
 		build = buildRock,
 		particleColors = { "stoneLight", "stoneDark" }, -- rock shards
+		-- Drop extra, chance-based (no consume node capacity, no cuenta
+		-- para el depleted/respawn — es puro bonus arriba del yield fijo).
+		-- Genérico a propósito: cualquier node type puede sumar el suyo
+		-- (ej: un árbol con semillas raras) con solo esta misma tabla.
+		bonusYield = { itemId = "copper_ore", chance = 0.12 },
 		spots = {
 			Vector3.new(22, 0, -12),
 			Vector3.new(30, 0, -18),
 			Vector3.new(18, 0, -26),
 			Vector3.new(36, 0, -14),
+		},
+	},
+	iron_rock = {
+		toolType = "pickaxe",
+		-- Sólo un pico con toolTier >= 2 puede minar esto (ver toolMatches).
+		-- pickaxe_basic es tier 1; pickaxe_copper (crafteado en la mesa con
+		-- lingotes de cobre) es el primero en tier 2.
+		minToolTier = 2,
+		yield = "iron_ore",
+		capacity = 4,
+		respawn = 90,
+		build = buildIronRock,
+		particleColors = { "rust", "stoneDark" },
+		spots = {
+			Vector3.new(44, 0, -8),
+			Vector3.new(50, 0, -18),
+			Vector3.new(46, 0, -30),
 		},
 	},
 }
@@ -205,14 +274,21 @@ local function burstParticles(node)
 	end)
 end
 
-local function findNearbyNode(character, toolType, reach)
+-- Whether a tool (its Items.lua def) is strong enough to work a node: same
+-- toolType, and the tool's toolTier (nil = 1, i.e. a basic tool) must meet
+-- the node's minToolTier (nil = 1, i.e. any tool of that type works).
+local function toolMatches(nodeDef, toolDef)
+	return nodeDef.toolType == toolDef.toolType and (toolDef.toolTier or 1) >= (nodeDef.minToolTier or 1)
+end
+
+local function findNearbyNode(character, toolDef, reach)
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then
 		return nil
 	end
 	local closest, closestDist
 	for _, node in ipairs(nodes) do
-		if node.def.toolType == toolType and node.amount > 0 then
+		if toolMatches(node.def, toolDef) and node.amount > 0 then
 			local dist = (node.anchor.Position - root.Position).Magnitude
 			if dist <= reach and (not closestDist or dist < closestDist) then
 				closest, closestDist = node, dist
@@ -247,7 +323,7 @@ local function onToolSwing(player, tool, def)
 			if n.anchor == focusPart then
 				if
 					root
-					and n.def.toolType == def.toolType
+					and toolMatches(n.def, def)
 					and n.amount > 0
 					and (n.anchor.Position - root.Position).Magnitude <= reach
 				then
@@ -258,7 +334,26 @@ local function onToolSwing(player, tool, def)
 		end
 	end
 	if not node then
-		node = findNearbyNode(player.Character, def.toolType, reach)
+		node = findNearbyNode(player.Character, def, reach)
+	end
+	if not node then
+		-- No node this tool can harvest is in range — but if there's one in
+		-- range that just needs a stronger tool of the same type, let the
+		-- player know instead of the swing silently doing nothing.
+		local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		if root then
+			for _, n in ipairs(nodes) do
+				if
+					n.def.toolType == def.toolType
+					and n.amount > 0
+					and (n.def.minToolTier or 1) > (def.toolTier or 1)
+					and (n.anchor.Position - root.Position).Magnitude <= reach
+				then
+					Remotes.get("Notify"):FireClient(player, "Necesitás una herramienta mejor para esto")
+					return
+				end
+			end
+		end
 	end
 	if not node then
 		return
@@ -288,6 +383,26 @@ local function onToolSwing(player, tool, def)
 	end
 	for _, fn in ipairs(GatheringService.gatheredHandlers) do
 		task.spawn(fn, player, node.def.yield, amount, node.anchor.Position)
+	end
+
+	-- Bonus chance-based, aparte del yield fijo de arriba: no consume
+	-- capacidad del nodo (no cuenta para el deplete/respawn), y si el
+	-- inventario está lleno simplemente no cae (no vale la pena bloquear
+	-- el yield principal, que ya se acreditó, por esto).
+	local bonus = node.def.bonusYield
+	if bonus and math.random() < bonus.chance then
+		if PlayerService.addItem(player, bonus.itemId, 1) then
+			local bonusDef = Items.get(bonus.itemId)
+			local bonusTotal = PlayerService.getItemCount(player, bonus.itemId)
+			Remotes.get("GatherFeedback"):FireClient(player, bonus.itemId, 1, node.anchor.Position)
+			Remotes.get("Notify"):FireClient(
+				player,
+				string.format("+%d %s (%d)", 1, bonusDef and bonusDef.name or bonus.itemId, bonusTotal)
+			)
+			for _, fn in ipairs(GatheringService.gatheredHandlers) do
+				task.spawn(fn, player, bonus.itemId, 1, node.anchor.Position)
+			end
+		end
 	end
 
 	node.amount -= amount

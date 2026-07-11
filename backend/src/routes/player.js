@@ -56,8 +56,8 @@ export default async function playerRoutes(fastify) {
     const id = parseId(request, reply);
     if (id === null) return;
 
-    const { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, cell, position } = request.body || {};
-    const ok = await savePlayer(id, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, cell, position });
+    const { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, trackedQuestId, cell, position } = request.body || {};
+    const ok = await savePlayer(id, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, trackedQuestId, cell, position });
     if (!ok) {
       reply.code(404);
       return { error: "not_found" };

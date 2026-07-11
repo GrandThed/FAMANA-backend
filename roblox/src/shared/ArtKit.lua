@@ -20,6 +20,7 @@ ArtKit.Palette = {
 	stoneDark = Color3.fromRGB(98, 100, 106),
 	stoneLight = Color3.fromRGB(158, 160, 166),
 	dirt = Color3.fromRGB(124, 92, 60),
+	rust = Color3.fromRGB(150, 80, 54), -- iron ore veins
 	-- metal / magic (tools, weapons)
 	steel = Color3.fromRGB(188, 192, 202),
 	steelDark = Color3.fromRGB(136, 140, 150),

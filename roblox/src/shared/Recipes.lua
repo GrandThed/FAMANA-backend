@@ -44,6 +44,43 @@ Recipes.defs = {
 		},
 		station = "crafting_table",
 	},
+	simple_forge = {
+		id = "simple_forge",
+		name = "Forja Sencilla",
+		result = { itemId = "simple_forge", quantity = 1 },
+		ingredients = {
+			{ itemId = "stone", quantity = 15 },
+			{ itemId = "wood", quantity = 5 },
+		},
+	},
+	copper_ingot = {
+		id = "copper_ingot",
+		name = "Copper Ingot",
+		result = { itemId = "copper_ingot", quantity = 1 },
+		ingredients = {
+			{ itemId = "copper_ore", quantity = 2 },
+		},
+		station = "simple_forge",
+	},
+	pickaxe_copper = {
+		id = "pickaxe_copper",
+		name = "Copper Pickaxe",
+		result = { itemId = "pickaxe_copper", quantity = 1 },
+		ingredients = {
+			{ itemId = "copper_ingot", quantity = 3 },
+			{ itemId = "wood", quantity = 2 },
+		},
+		station = "crafting_table",
+	},
+	iron_ingot = {
+		id = "iron_ingot",
+		name = "Iron Ingot",
+		result = { itemId = "iron_ingot", quantity = 1 },
+		ingredients = {
+			{ itemId = "iron_ore", quantity = 2 },
+		},
+		station = "simple_forge",
+	},
 }
 
 function Recipes.get(recipeId)
@@ -51,7 +88,7 @@ function Recipes.get(recipeId)
 end
 
 -- lista de recetas en el orden que se muestran en la UI de crafting
-local order = { "crafting_table", "torch", "arrow" }
+local order = { "crafting_table", "simple_forge", "torch", "arrow", "copper_ingot", "pickaxe_copper", "iron_ingot" }
 
 function Recipes.list()
 	local list = {}

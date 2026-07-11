@@ -1,3 +1,11 @@
+-- Sonidos cortos de feedback (2D, sin posición en el mundo): moneda, ding de
+-- XP, level up, click de UI. Mismo espíritu que GatherFeedbackUI's
+-- playImpactSound, pero centralizado para que cualquier módulo pueda pedir
+-- "Sfx.play('coin')" sin reinventar el Instance.new("Sound") cada vez.
+--
+-- los sonidos los sacas de la tienda de roblox studio (Toolbox > Audio) —
+-- estos ids son placeholders, reemplazalos por los que elijan.
+
 local SoundService = game:GetService("SoundService")
 
 local Sfx = {}
@@ -18,6 +26,12 @@ local SOUNDS = {
 	swingMagic = { id = "rbxassetid://81276928984693", volume = 0.5 }, -- varitas/staffs (styleName "cast") — placeholder
 	hit = { id = "rbxassetid://139520673393967", volume = 0.5 },
 	critHit = { id = "rbxassetid://137392628136734", volume = 0.65 },
+	
+	-- Muertes de enemigo, por lootSource (mismo id que EnemyService.lua)
+	-- ver ENEMY_TYPE_SOUND en CombatSfx.lua) para el bicho que sea
+	slimeDeath = { id = "rbxassetid://9119990528", volume = 0.5 },
+	goblinDeath = { id = "rbxassetid://83502215419926", volume = 0.6 }, -- <- este me causa mucha gracia pq es "AHHH"
+	enemyDeath = { id = "rbxassetid://7099132141", volume = 0.5 }, -- <- este está zarpado pq es el sonido de morir en terrariaxd
 }
 
 -- Cache de instancias reutilizables por nombre: para sonidos que pueden

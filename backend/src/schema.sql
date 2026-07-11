@@ -34,6 +34,11 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS granted_starter_items JSONB NOT NUL
 -- Quest progress: { [questId]: { status: "active"|"completed", objectives: { [objectiveId]: count } } }.
 -- Same shape as the old in-memory QuestService.progress table.
 ALTER TABLE players ADD COLUMN IF NOT EXISTS quest_progress JSONB NOT NULL DEFAULT '{}'::jsonb;
+-- Which quest the quest log panel has marked as "tracked" (drives the HUD
+-- tracker). '' = none — TEXT with an empty-string default, not nullable, so
+-- we never have to distinguish JSON null from "field omitted" over the wire
+-- (see savePlayer's `!== undefined` convention in playerService.js).
+ALTER TABLE players ADD COLUMN IF NOT EXISTS tracked_quest_id TEXT NOT NULL DEFAULT '';
 
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper

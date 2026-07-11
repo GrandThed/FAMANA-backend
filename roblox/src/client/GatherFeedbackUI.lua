@@ -15,6 +15,8 @@ local GatherFeedbackUI = {}
 local SOUND_IDS = {
 	wood = "rbxassetid://1911987235",
 	stone = "rbxassetid://9118617342",
+	copper_ore = "rbxassetid://9118617342", -- placeholder, reusa el de stone (mismo tipo de golpe/material)
+	iron_ore = "rbxassetid://9118617342", -- placeholder, reusa el de stone (mismo tipo de golpe/material)
 }
 
 local FLOAT_RISE = 3 -- studs the text rises before fading out

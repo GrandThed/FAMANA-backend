@@ -27,9 +27,23 @@ local SOUND_BY_STYLE = {
 	chop = "swing",
 }
 
+-- lootSource llega de EnemyService (enemy.def.lootSource) — el mismo id que
+-- ya usan para drops y objetivos de quest "kill", así que cualquier
+-- enemigo nuevo que agreguen ya trae su lootSource de fábrica sin tocar
+-- este archivo; solo hace falta sumarle una entrada acá (y su sonido en
+-- Sfx.lua) para que deje de sonar con el fallback genérico.
+local DEATH_SOUND_BY_LOOT_SOURCE = {
+	slime = "slimeDeath",
+	goblin = "goblinDeath",
+}
+
 function CombatSfx.start()
 	Remotes.get("SwingRemote").OnClientEvent:Connect(function(styleName)
 		Sfx.play(SOUND_BY_STYLE[styleName] or "swing")
+	end)
+
+	Remotes.get("EnemyDied").OnClientEvent:Connect(function(lootSource)
+		Sfx.play(DEATH_SOUND_BY_LOOT_SOURCE[lootSource] or "enemyDeath")
 	end)
 end
 

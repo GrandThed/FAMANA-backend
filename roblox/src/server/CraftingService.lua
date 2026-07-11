@@ -29,12 +29,9 @@ local CraftingService = {}
 local STATION_RANGE = 16 -- studs; matches VendorService's MAX_TRADE_DISTANCE
 local PROXIMITY_INTERVAL = 1 -- seconds between nearby-station rechecks
 
--- { station, name, position, facing? (degrees yaw) }. Position is a
+-- { station, name, position, facing? (degrees yaw), build? }. Position is a
 -- placeholder spot near the vendor/stand cluster — move it once there's a
--- real town layout.
-local WORKBENCH_DEFS = {
-	{ station = "crafting_table", name = "Crafting Table", position = Vector3.new(22, 0, -28), facing = 200 },
-}
+-- real town layout. Declared further down, once its builder functions exist.
 
 local workbenchFolder
 local stationsByType = {} -- [station] = { Vector3 positions, ... }
@@ -48,7 +45,7 @@ local function groundY(x, z)
 	return result and result.Position.Y or 0
 end
 
-local function buildWorkbench(def)
+local function buildTable(def)
 	local y = groundY(def.position.X, def.position.Z)
 	local origin = CFrame.new(def.position.X, y, def.position.Z) * CFrame.Angles(0, math.rad(def.facing or 0), 0)
 
@@ -65,6 +62,37 @@ local function buildWorkbench(def)
 	stationsByType[def.station] = stationsByType[def.station] or {}
 	table.insert(stationsByType[def.station], model.PrimaryPart.Position)
 end
+
+-- Forja Sencilla: stone furnace with a dark firebox opening and a steel
+-- chimney, so it reads as "metalworking" next to the wooden crafting_table.
+local function buildForge(def)
+	local y = groundY(def.position.X, def.position.Z)
+	local origin = CFrame.new(def.position.X, y, def.position.Z) * CFrame.Angles(0, math.rad(def.facing or 0), 0)
+
+	local model = ArtKit.build("Workbench_" .. def.station, origin, {
+		{ name = "Base", size = Vector3.new(2.6, 1.8, 2.2), offset = Vector3.new(0, 0.9, 0), color = "stone", primary = true },
+		{ name = "Firebox", size = Vector3.new(1.2, 0.9, 0.4), offset = Vector3.new(0, 0.65, 1.1), color = "stoneDark" },
+		{ name = "Ember", size = Vector3.new(0.7, 0.5, 0.1), offset = Vector3.new(0, 0.6, 1.32), color = "gold" },
+		{ name = "Chimney", size = Vector3.new(0.7, 1.4, 0.7), offset = Vector3.new(0, 2.5, -0.4), color = "steelDark" },
+		{ name = "ChimneyCap", size = Vector3.new(0.9, 0.2, 0.9), offset = Vector3.new(0, 3.3, -0.4), color = "steel" },
+	})
+	model.Parent = workbenchFolder
+
+	stationsByType[def.station] = stationsByType[def.station] or {}
+	table.insert(stationsByType[def.station], model.PrimaryPart.Position)
+end
+
+-- Dispatches to the station's own builder (defaults to the table shape, so
+-- new stations that don't care about their look still work out of the box).
+local function buildWorkbench(def)
+	local build = def.build or buildTable
+	build(def)
+end
+
+local WORKBENCH_DEFS = {
+	{ station = "crafting_table", name = "Crafting Table", position = Vector3.new(22, 0, -28), facing = 200, build = buildTable },
+	{ station = "simple_forge", name = "Forja Sencilla", position = Vector3.new(28, 0, -34), facing = 160, build = buildForge },
+}
 
 -- Whether `player` currently stands within range of any workbench running
 -- `station`. Used both for the live attribute and to re-validate a craft.
@@ -179,6 +207,7 @@ function CraftingService.start()
 					name = def.name,
 					position = marker.cframe.Position,
 					facing = MapMarkers.facing(marker),
+					build = def.build,
 				})
 			end
 		end

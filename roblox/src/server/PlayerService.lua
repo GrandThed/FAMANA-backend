@@ -178,6 +178,12 @@ local function loadProfile(player)
 	-- this existed come back without it.
 	data.questProgress = typeof(data.questProgress) == "table" and data.questProgress or {}
 
+	-- Which quest the quest log has marked as tracked ("" = none). Kept as
+	-- an empty string rather than nil so it always round-trips through
+	-- JSONEncode/the backend save — a nil table field just vanishes instead
+	-- of clearing the stored value.
+	data.trackedQuestId = typeof(data.trackedQuestId) == "string" and data.trackedQuestId or ""
+
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
 
@@ -472,6 +478,7 @@ local function buildSaveFields(player)
 		hotbarBinds = profile.hotbarBinds,
 		settings = profile.settings,
 		questProgress = profile.questProgress,
+		trackedQuestId = profile.trackedQuestId,
 		cell = profile.cell,
 		position = profile.position,
 	}

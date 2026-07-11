@@ -100,7 +100,7 @@ function PartyUI.start()
 	-- ---- botón de la interfaz
 	local toggleBtn = makeButton(gui, "Party", Color3.fromRGB(60, 90, 160), 14)
 	toggleBtn.Size = UDim2.new(0, 90, 0, 34)
-	toggleBtn.Position = UDim2.new(0, 16, 0, 16)
+	toggleBtn.Position = UDim2.new(0, 16, 0, 68)
 
 	-- ---- panel principallll
 	local panel = Instance.new("Frame")

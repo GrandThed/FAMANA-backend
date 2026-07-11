@@ -41,10 +41,14 @@ local function notify(player, message)
 	end
 end
 
-local function pushUpdate(player, questId)
+-- eventType: "started" | "completed" | "progress" (default). Puramente
+-- informativo para el cliente (QuestSfx.lua elige el sonido según esto);
+-- el estado real de la quest sigue viviendo en `entry`, esto no cambia
+-- nada de la lógica de servidor.
+local function pushUpdate(player, questId, eventType)
 	if questUpdatedRemote then
 		local entry = QuestService.getProgress(player, questId)
-		questUpdatedRemote:FireClient(player, questId, entry)
+		questUpdatedRemote:FireClient(player, questId, entry, eventType or "progress")
 	end
 end
 
@@ -66,6 +70,17 @@ end
 -- gold/XP en PlayerService).
 local function saveNow(player)
 	PlayerService.save(player)
+end
+
+-- Espera a que el profile termine de cargar (misma espera con timeout que
+-- requestInventory en PlayerService — el cliente puede pedir esto antes de
+-- que el HTTP de carga del profile haya vuelto).
+local function waitForProfile(player)
+	local deadline = os.clock() + 10
+	while not PlayerService.get(player) and os.clock() < deadline do
+		task.wait(0.1)
+	end
+	return PlayerService.get(player)
 end
 
 -- ---- Consultas -------------------------------------------------------
@@ -120,6 +135,151 @@ function QuestService.listActive(player)
 	return list
 end
 
+-- Texto + progreso actual de un objetivo, para la UI. Los "deliver" leen el
+-- inventario en vivo (mismo criterio que canComplete); kill/gather leen el
+-- contador guardado. Definida acá arriba (en vez de junto al NPC dador,
+-- donde vivía originalmente) porque buildQuestLogPayload también la usa.
+local function describeObjective(player, objective, entry)
+	local current
+	if objective.type == "deliver" then
+		current = math.min(PlayerService.getItemCount(player, objective.target), objective.amount)
+	else
+		current = entry and (entry.objectives[objective.id] or 0) or 0
+	end
+	return {
+		label = objective.label or objective.target,
+		current = current,
+		amount = objective.amount,
+	}
+end
+
+-- ---- Quest log + tracked quest -----------------------------------------
+-- "Tracked" = la única quest activa que se muestra en el HUD (QuestTrackerUI).
+-- Se elige a mano desde el quest log panel (QuestLogUI, botón "Track"), pero
+-- SIEMPRE hay un fallback: si la trackeada se completa/deja de ser válida y
+-- el jugador tiene otra activa, se re-trackea sola en vez de dejar el HUD
+-- vacío con quests pendientes. profile.trackedQuestId persiste como el resto
+-- del profile (autosave/leave), "" = ninguna.
+
+-- Payload liviano para el HUD: no necesita el def completo, solo lo que
+-- muestra. nil si no hay nada trackeado.
+local function buildTrackedPayload(questId, entry)
+	if not questId or not entry then
+		return nil
+	end
+	local def = Quests.get(questId)
+	if not def then
+		return nil
+	end
+	local objectives = {}
+	for _, objective in ipairs(def.objectives) do
+		table.insert(objectives, {
+			label = objective.label or objective.target,
+			current = entry.objectives[objective.id] or 0,
+			amount = objective.amount,
+		})
+	end
+	return { questId = questId, name = def.name, objectives = objectives }
+end
+
+local trackedChangedRemote -- RemoteEvent, resolved in start()
+
+local function pushTracked(player, questId, entry)
+	if trackedChangedRemote then
+		trackedChangedRemote:FireClient(player, buildTrackedPayload(questId, entry))
+	end
+end
+
+-- Devuelve (questId, entry) de la quest trackeada actual, resolviendo el
+-- fallback si hace falta: si profile.trackedQuestId no apunta a algo activo
+-- (nunca se eligió una, se completó, etc.), cae en la primera quest activa
+-- del catálogo (orden de Quests.list()) — nunca deja al jugador con quests
+-- activas y el tracker vacío. El fallback se persiste (rides el próximo
+-- autosave, no hace falta saveNow) pero SÍ empuja el cambio al cliente ya,
+-- así el HUD no queda mostrando algo viejo/completado.
+function QuestService.getTrackedQuest(player)
+	local profile = PlayerService.get(player)
+	local playerQuests = questTable(player)
+	if not profile or not playerQuests then
+		return nil
+	end
+
+	local trackedId = profile.trackedQuestId
+	if trackedId ~= "" then
+		local entry = playerQuests[trackedId]
+		if entry and entry.status == "active" then
+			return trackedId, entry
+		end
+	end
+
+	for _, def in ipairs(Quests.list()) do
+		local entry = playerQuests[def.id]
+		if entry and entry.status == "active" then
+			if profile.trackedQuestId ~= def.id then
+				profile.trackedQuestId = def.id
+				pushTracked(player, def.id, entry)
+			end
+			return def.id, entry
+		end
+	end
+
+	if profile.trackedQuestId ~= "" then
+		profile.trackedQuestId = ""
+		pushTracked(player, nil, nil)
+	end
+	return nil
+end
+
+-- Verbo del quest log panel: marcar `questId` como la trackeada. Solo válido
+-- si el jugador la tiene activa (no completada, no inexistente).
+function QuestService.setTrackedQuest(player, questId)
+	local playerQuests = questTable(player)
+	local profile = PlayerService.get(player)
+	if not playerQuests or not profile then
+		return false
+	end
+	local entry = playerQuests[questId]
+	if not entry or entry.status ~= "active" then
+		return false
+	end
+
+	profile.trackedQuestId = questId
+	pushTracked(player, questId, entry)
+	return true
+end
+
+-- Todas las quests que el jugador tiene (activas + completadas), en el
+-- orden del catálogo, con la misma forma de objectives que buildGiverPayload
+-- — pensado para el quest log panel (QuestLogUI).
+local function buildQuestLogPayload(player)
+	local playerQuests = questTable(player)
+	local list = {}
+	if not playerQuests then
+		return list
+	end
+
+	local trackedId = select(1, QuestService.getTrackedQuest(player))
+
+	for _, def in ipairs(Quests.list()) do
+		local entry = playerQuests[def.id]
+		if entry then
+			local objectives = {}
+			for _, objective in ipairs(def.objectives) do
+				table.insert(objectives, describeObjective(player, objective, entry))
+			end
+			table.insert(list, {
+				id = def.id,
+				name = def.name,
+				description = def.description,
+				status = entry.status,
+				objectives = objectives,
+				tracked = def.id == trackedId,
+			})
+		end
+	end
+	return list
+end
+
 -- ---- Empezar / completar ----------------------------------------------
 
 function QuestService.startQuest(player, questId)
@@ -142,8 +302,11 @@ function QuestService.startQuest(player, questId)
 	playerQuests[questId] = { status = "active", objectives = objectives }
 
 	notify(player, "Nueva misión: " .. def.name)
-	pushUpdate(player, questId)
+	pushUpdate(player, questId, "started")
 	saveNow(player)
+	-- Si el jugador no tenía nada trackeado, esta pasa a serlo (fallback de
+	-- getTrackedQuest); si ya tenía otra trackeada, no se la pisa.
+	QuestService.getTrackedQuest(player)
 	return true
 end
 
@@ -206,8 +369,12 @@ function QuestService.completeQuest(player, questId)
 	local playerQuests = questTable(player)
 	playerQuests[questId].status = "completed"
 	notify(player, "Misión completada: " .. def.name)
-	pushUpdate(player, questId)
+	pushUpdate(player, questId, "completed")
 	saveNow(player)
+	-- Si `questId` era la trackeada, esto la reemplaza por otra activa (si
+	-- hay) o limpia el tracker (si no) — nunca deja el HUD mostrando una
+	-- quest ya completada.
+	QuestService.getTrackedQuest(player)
 	return true
 end
 
@@ -236,6 +403,10 @@ local function bumpObjectives(player, objectiveType, target)
 								string.format("%s: %d/%d", def.name, current, objective.amount)
 							)
 							pushUpdate(player, questId)
+							local profile = PlayerService.get(player)
+							if profile and profile.trackedQuestId == questId then
+								pushTracked(player, questId, entry)
+							end
 						end
 					end
 				end
@@ -281,19 +452,6 @@ end
 -- Texto + progreso actual de un objetivo, para la UI. Los "deliver" leen el
 -- inventario en vivo (mismo criterio que canComplete); kill/gather leen el
 -- contador guardado.
-local function describeObjective(player, objective, entry)
-	local current
-	if objective.type == "deliver" then
-		current = math.min(PlayerService.getItemCount(player, objective.target), objective.amount)
-	else
-		current = entry and (entry.objectives[objective.id] or 0) or 0
-	end
-	return {
-		label = objective.label or objective.target,
-		current = current,
-		amount = objective.amount,
-	}
-end
 
 -- Arma el payload que ve el cliente al hablar con `giverId`: cada quest del
 -- catálogo que ese NPC da, con su estado desde la perspectiva de este
@@ -421,6 +579,7 @@ function QuestService.start()
 	notifyRemote = Remotes.get("Notify")
 	questUpdatedRemote = Remotes.get("QuestUpdated")
 	openGiverRemote = Remotes.get("OpenQuestGiver")
+	trackedChangedRemote = Remotes.get("TrackedQuestChanged")
 
 	EnemyService.onKilled(onEnemyKilled)
 	GatheringService.onGathered(onGathered)
@@ -453,6 +612,35 @@ function QuestService.start()
 
 	local questAction = Remotes.getFunction("QuestAction")
 	questAction.OnServerInvoke = handleQuestAction
+
+	-- Quest log panel (QuestLogUI): toda la lista del jugador.
+	local requestQuestLog = Remotes.getFunction("RequestQuestLog")
+	requestQuestLog.OnServerInvoke = function(player)
+		waitForProfile(player)
+		return buildQuestLogPayload(player)
+	end
+
+	-- Quest log panel: botón "Track". Devuelve el log ya refrescado, mismo
+	-- patrón que QuestAction (evita un segundo viaje al server).
+	local setTrackedQuest = Remotes.getFunction("SetTrackedQuest")
+	setTrackedQuest.OnServerInvoke = function(player, questId)
+		if typeof(questId) ~= "string" then
+			return { ok = false }
+		end
+		local ok = QuestService.setTrackedQuest(player, questId)
+		return { ok = ok, log = buildQuestLogPayload(player) }
+	end
+
+	-- HUD tracker (QuestTrackerUI): pedido único al arrancar, para no
+	-- depender de haber estado conectado cuando se disparó el último
+	-- TrackedQuestChanged (por ejemplo, si el jugador recién está cargando).
+	local requestTrackedQuest = Remotes.getFunction("RequestTrackedQuest")
+	requestTrackedQuest.OnServerInvoke = function(player)
+		waitForProfile(player)
+		local questId, entry = QuestService.getTrackedQuest(player)
+		return buildTrackedPayload(questId, entry)
+	end
+
 	-- No cleanup needed on PlayerRemoving: questProgress vive dentro del
 	-- profile de PlayerService, que ya se guarda y limpia solo (save() +
 	-- cache[userId] = nil en su propio handler de PlayerRemoving).

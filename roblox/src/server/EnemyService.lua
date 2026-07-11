@@ -55,6 +55,7 @@ local function levelColor(level)
 end
 
 local damageIndicatorRemote -- RemoteEvent, resolved in start()
+local enemyDiedRemote -- RemoteEvent, resolved in start() — client death SFX (CombatSfx.lua), keyed by lootSource
 
 local notifyRemote -- RemoteEvent, resolved in start()
 
@@ -648,6 +649,14 @@ local function killEnemy(entry, enemy, killer)
 	enemy.part:Destroy()
 	entry.enemy = nil
 
+	-- Solo al killer, no a todos: el resto del audio de combate (swing,
+	-- hit/crit) ya es 2D-solo-para-el-atacante (Sfx.lua no tiene sonido
+	-- posicional todavía), así que un muerte "audible para todo el mundo"
+	-- desentonaría siendo la única excepción.
+	if killer and enemyDiedRemote then
+		enemyDiedRemote:FireClient(killer, lootSource)
+	end
+
 	if killer and enemy.def.xpReward then
 		local xp = math.floor(enemy.def.xpReward * (1 + (level - 1) * XP_PER_LEVEL) + 0.5)
 		PlayerService.addXp(killer, xp)
@@ -901,6 +910,7 @@ end
 function EnemyService.start()
 	notifyRemote = Remotes.get("Notify")
 	damageIndicatorRemote = Remotes.get("DamageIndicator")
+	enemyDiedRemote = Remotes.get("EnemyDied")
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastManaWarn[player.UserId] = nil
