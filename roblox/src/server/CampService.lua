@@ -44,6 +44,10 @@ local cooldownUntil = {}
 -- or otherwise) — CampFurnitureService uses this to clean up/return
 -- furniture planted inside it. See CampService.onTeardown.
 local teardownListeners = {}
+-- Called with (ownerUserId, camp, player) right after a camp is placed —
+-- CampFurnitureService uses this to restore that owner's saved furniture
+-- layout. See CampService.onPlace.
+local placeListeners = {}
 
 local campFolder
 local notifyRemote
@@ -73,6 +77,29 @@ local function campFor(player)
 	return nil
 end
 
+-- Public: the camp instance for a given owner (nil if they don't have one
+-- active right now). Used by CampFurnitureService for periodic layout
+-- autosave and by the client-facing timer (CampService.getTimer).
+function CampService.getCamp(ownerUserId)
+	return camps[ownerUserId]
+end
+
+-- Public: { active, remaining, duration } for the camp campFor(player) sees
+-- (their own, or their party's). Poll-based by design — remaining is
+-- "seconds left as of this call", no client/server clock sync needed; the
+-- client re-polls periodically and extrapolates locally between polls.
+function CampService.getTimer(player)
+	local camp = campFor(player)
+	if not camp then
+		return { active = false }
+	end
+	local remaining = camp.expiresAt - os.clock()
+	if remaining <= 0 then
+		return { active = false }
+	end
+	return { active = true, remaining = remaining, duration = CAMP.duration }
+end
+
 -- Public: the camp (if any) this player can plant furniture / access shared
 -- storage in — same reach as CampService.isPositionSafeForPlayer (own camp,
 -- or their current party's). CampFurnitureService uses this instead of
@@ -92,6 +119,13 @@ CampService.ZONE_HALF = ZONE_HALF
 -- chest contents at camp.center before it's gone for good.
 function CampService.onTeardown(fn)
 	table.insert(teardownListeners, fn)
+end
+
+-- Public: register a callback fired right after a camp is successfully
+-- placed, with (ownerUserId, camp, player) — see CampService.onTeardown for
+-- the symmetric teardown hook.
+function CampService.onPlace(fn)
+	table.insert(placeListeners, fn)
 end
 
 -- Public: used by combat systems that want to short-circuit their own damage
@@ -243,6 +277,15 @@ local function handlePlace(player, x, z)
 	end)
 
 	notify(player, "Camp placed — safe zone for " .. math.floor(CAMP.duration / 60) .. " min.")
+
+	local camp = camps[userId]
+	for _, listener in ipairs(placeListeners) do
+		local ok, err = pcall(listener, userId, camp, player)
+		if not ok then
+			warn("[CampService] place listener error: " .. tostring(err))
+		end
+	end
+
 	return { ok = true }
 end
 
@@ -273,6 +316,9 @@ function CampService.start()
 
 	local placeAcampada = Remotes.getFunction("PlaceAcampada")
 	placeAcampada.OnServerInvoke = handlePlace
+
+	local getCampTimer = Remotes.getFunction("GetCampTimer")
+	getCampTimer.OnServerInvoke = CampService.getTimer
 end
 
 return CampService

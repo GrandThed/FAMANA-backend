@@ -209,23 +209,14 @@ Items.defs = {
 	},
 
 	-- ---- crafting outputs (placeholders — see shared/Recipes.lua) ---------
-	crafting_table = {
-		id = "crafting_table",
-		name = "Crafting Table",
-		flavor = "Placeholder crafting-system output — no world placement yet.",
-		type = "misc",
-		stackable = true,
-		maxStack = 5,
-		size = { 1, 1 },
-	},
 	simple_forge = {
 		id = "simple_forge",
 		name = "Forja Sencilla",
-		flavor = "Placeholder crafting-station label — see roblox/src/server/CraftingService.lua.",
-		type = "misc",
-		stackable = true,
-		maxStack = 5,
-		size = { 1, 1 },
+		flavor = "Una estación de fundición portátil. Solo se puede plantar dentro de una Acampada activa — ver roblox/src/server/CampFurnitureService.lua.",
+		type = "placeable",
+		stackable = false,
+		maxStack = 1,
+		size = { 2, 2 },
 	},
 	acampada = {
 		id = "acampada",
@@ -456,10 +447,10 @@ Items.defs = {
 	crafting_table = {
 		id = "crafting_table",
 		name = "Crafting Table",
-		flavor = "Placeholder, todavía no se puede poner en el mundo.",
-		type = "misc",
-		stackable = true,
-		maxStack = 5,
+		flavor = "Solo se puede plantar dentro de una Acampada activa — ver roblox/src/server/CampFurnitureService.lua.",
+		type = "placeable",
+		stackable = false,
+		maxStack = 1,
 		size = { 2, 2 },
 	},
 	torch = {

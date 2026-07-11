@@ -1,11 +1,15 @@
 -- Crafting: Terraria-style — recipes without a `station` (shared/Recipes)
 -- can be crafted anywhere; recipes that need one only unlock near a matching
--- workbench placed in the world (Workbench_<station> markers in authored
--- maps — see shared/MapMarkers — with WORKBENCH_DEFS positions as the
--- no-map fallback). Proximity is recomputed on a slow loop into a `NearbyStations`
--- Player attribute (comma-joined station ids) so the client can show/hide
--- recipes live; the actual craft request re-validates distance server-side,
--- never trusting the attribute.
+-- workbench. Workbenches come from two places: fixed ones placed in the
+-- world (Workbench_<station> markers in authored maps — see shared/
+-- MapMarkers — with WORKBENCH_DEFS positions as the no-map fallback), and
+-- player-placed camp furniture ("crafting_table"/"simple_forge" — see
+-- server/CampFurnitureService.lua — registered/moved/unregistered live via
+-- registerStation/moveStation/unregisterStation below). Proximity to either
+-- kind is recomputed on a slow loop into a `NearbyStations` Player attribute
+-- (comma-joined station ids) so the client can show/hide recipes live; the
+-- actual craft request re-validates distance server-side, never trusting
+-- the attribute.
 --
 -- CraftItem (RemoteFunction) does the ingredient math: checks the player
 -- owns every ingredient (PlayerService.getItemCount), removes them, then
@@ -34,7 +38,7 @@ local PROXIMITY_INTERVAL = 1 -- seconds between nearby-station rechecks
 -- real town layout. Declared further down, once its builder functions exist.
 
 local workbenchFolder
-local stationsByType = {} -- [station] = { Vector3 positions, ... }
+local stationsByType = {} -- [station] = { { position = Vector3 }, ... }
 local notifyRemote
 
 local function groundY(x, z)
@@ -60,9 +64,8 @@ local function buildTable(def)
 	model.Parent = workbenchFolder
 
 	stationsByType[def.station] = stationsByType[def.station] or {}
-	table.insert(stationsByType[def.station], model.PrimaryPart.Position)
+	table.insert(stationsByType[def.station], { position = model.PrimaryPart.Position })
 end
-
 -- Forja Sencilla: stone furnace with a dark firebox opening and a steel
 -- chimney, so it reads as "metalworking" next to the wooden crafting_table.
 local function buildForge(def)
@@ -79,7 +82,7 @@ local function buildForge(def)
 	model.Parent = workbenchFolder
 
 	stationsByType[def.station] = stationsByType[def.station] or {}
-	table.insert(stationsByType[def.station], model.PrimaryPart.Position)
+	table.insert(stationsByType[def.station], { position = model.PrimaryPart.Position })
 end
 
 -- Dispatches to the station's own builder (defaults to the table shape, so
@@ -103,12 +106,46 @@ local function nearStation(player, station)
 	if not positions or not root then
 		return false
 	end
-	for _, position in ipairs(positions) do
-		if (root.Position - position).Magnitude <= STATION_RANGE then
+	for _, entry in ipairs(positions) do
+		if (root.Position - entry.position).Magnitude <= STATION_RANGE then
 			return true
 		end
 	end
 	return false
+end
+
+-- Public: registers a live station at `position` — used for player-placed
+-- crafting_table/simple_forge furniture (server/CampFurnitureService.lua),
+-- on top of the fixed WORKBENCH_DEFS ones built at startup. Returns a handle:
+-- pass it to CraftingService.moveStation when the furniture is repositioned,
+-- and to CraftingService.unregisterStation when it's picked up or the camp
+-- it's in is torn down.
+function CraftingService.registerStation(station, position)
+	stationsByType[station] = stationsByType[station] or {}
+	local handle = { position = position }
+	table.insert(stationsByType[station], handle)
+	return handle
+end
+
+-- Public: updates a registered station's position in place (the furniture
+-- piece was moved, not re-placed).
+function CraftingService.moveStation(handle, newPosition)
+	handle.position = newPosition
+end
+
+-- Public: removes a previously-registered station (furniture picked up, or
+-- its camp was torn down).
+function CraftingService.unregisterStation(station, handle)
+	local list = stationsByType[station]
+	if not list then
+		return
+	end
+	for i, entry in ipairs(list) do
+		if entry == handle then
+			table.remove(list, i)
+			return
+		end
+	end
 end
 
 -- Recomputes every online player's nearby stations and republishes the

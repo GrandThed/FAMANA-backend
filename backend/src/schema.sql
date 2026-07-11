@@ -39,6 +39,13 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS quest_progress JSONB NOT NULL DEFAU
 -- we never have to distinguish JSON null from "field omitted" over the wire
 -- (see savePlayer's `!== undefined` convention in playerService.js).
 ALTER TABLE players ADD COLUMN IF NOT EXISTS tracked_quest_id TEXT NOT NULL DEFAULT '';
+-- Saved camp furniture layout, keyed to the owner (not the live camp
+-- instance, which is in-memory/session-only — see CampService.lua). Rebuilt
+-- exactly when the owner plants a new Acampada; written whenever their camp
+-- is torn down (expired or otherwise) so nothing is lost between camps.
+-- Shape: { pieces: [ { itemId, dx, dz, chestItems? } ] } — dx/dz are offsets
+-- from the camp center so they replay correctly at a new location.
+ALTER TABLE players ADD COLUMN IF NOT EXISTS camp_layout JSONB NOT NULL DEFAULT '{}'::jsonb;
 
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper

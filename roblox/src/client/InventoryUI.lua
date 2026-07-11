@@ -1545,9 +1545,9 @@ function InventoryUI.start()
 		local bindSlot = BIND_KEYS[input.KeyCode]
 		if bindSlot and hovered then
 			local def = Items.get(hovered.itemId)
-			-- Decided rule: only tools and consumables are quick-bindable
-			-- (weapons live on the reserved 1/2 keys).
-			if def and (def.type == "tool" or def.type == "consumable") then
+			-- Decided rule: tools, consumables, and placeables are
+			-- quick-bindable (weapons live on the reserved 1/2 keys).
+			if def and (def.type == "tool" or def.type == "consumable" or def.type == "placeable") then
 				HotbarBinds.set(bindSlot, hovered.itemId)
 			end
 		end
