@@ -14,6 +14,7 @@ local GatherFeedbackUI = {}
 -- los sonidos los sacas de la tienda de roblox studio
 local SOUND_IDS = {
 	wood = "rbxassetid://1911987235",
+	hardwood = "rbxassetid://1911987235", -- placeholder, reusa el de wood (mismo tipo de golpe/material)
 	stone = "rbxassetid://9118617342",
 	copper_ore = "rbxassetid://9118617342", -- placeholder, reusa el de stone (mismo tipo de golpe/material)
 	iron_ore = "rbxassetid://9118617342", -- placeholder, reusa el de stone (mismo tipo de golpe/material)

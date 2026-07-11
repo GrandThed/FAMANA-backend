@@ -1,51 +1,96 @@
 -- frames de party que muestran la salud y mana de los miembros del party
--- además de los nombres de cada uno y la clase 
+-- además de los nombres de cada uno y la clase
 -- el botón de "open" o "closed" significa que todos pueden invitar a otros miembros o solo el líder puede hacerlo
--- son rectangulos simples como placeholder para cuando tengamos un diseño de interfaz fijo
--- en teoría los colores, las fuentes y qsio deberían poder modificarse desde acá cuando la interfaz nueva se arme
+-- sigue el sistema de diseño Aethelgard (Theme/UIKit) — mismo tratamiento que
+-- la barra de vida de los enemigos y el panel de target: shell de panel,
+-- barras con degradé + borde + ghost bar en HP y maná.
 -- *importante* la lista de jugadores para invitar solo muestran jugadores disponibles, si ya hay uno en una party no va a aparecer ahí
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Classes = require(Shared:WaitForChild("Classes"))
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 
 local PartyFramesUI = {}
 
-local COLORS = {
-	frame = Color3.fromRGB(25, 25, 28),
-	good = Color3.fromRGB(80, 180, 90),
-	mana = Color3.fromRGB(70, 130, 220),
-	barBack = Color3.fromRGB(15, 15, 18),
-	text = Color3.fromRGB(235, 235, 240),
-	textDim = Color3.fromRGB(165, 165, 175),
-}
-
 local FRAME_WIDTH = 230
-local FRAME_HEIGHT = 60
+local FRAME_HEIGHT = 64
 local FRAME_GAP = 6
 local LEFT_MARGIN = 16
 
-local function makeBar(parent, position, size, fillColor)
+local FILL_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local GHOST_TWEEN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+local GHOST_DELAY = 0.25
+
+-- Themed bar: Ink background, Stone border, a top→bottom gradient fill, and a
+-- trailing "ghost" afterimage that lags behind on a drop and eases down a
+-- beat later (same trick as the enemy overhead bar / target panel).
+-- `zIndex` lets the caller lift the whole bar above the panel's forge-light
+-- strip (see UIKit.stylePanel). Returns an updater: update(current, max).
+local function makeBar(parent, position, size, topColor, bottomColor, ghostColor, zIndex)
 	local back = Instance.new("Frame")
-	back.BackgroundColor3 = COLORS.barBack
+	back.BackgroundColor3 = Theme.Color.Ink900
 	back.BorderSizePixel = 0
+	back.ClipsDescendants = true
 	back.Position = position
 	back.Size = size
+	back.ZIndex = zIndex
 	back.Parent = parent
 
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 2)
+	corner.Parent = back
+
+	local border = Instance.new("UIStroke")
+	border.Thickness = 1
+	border.Color = Theme.Semantic.BorderPanel
+	border.Parent = back
+
+	local ghost = Instance.new("Frame")
+	ghost.Name = "Ghost"
+	ghost.BackgroundColor3 = ghostColor
+	ghost.BorderSizePixel = 0
+	ghost.Size = UDim2.new(1, 0, 1, 0)
+	ghost.ZIndex = back.ZIndex + 1
+	ghost.Parent = back
+
 	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = fillColor
+	fill.Name = "Fill"
+	fill.BackgroundColor3 = topColor
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.ZIndex = ghost.ZIndex + 1
 	fill.Parent = back
+
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new(topColor, bottomColor)
+	gradient.Parent = fill
+
+	local lastFrac = 1
+	local ghostToken = 0
 
 	return function(current, max)
 		local ratio = max > 0 and math.clamp(current / max, 0, 1) or 0
-		fill.Size = UDim2.new(ratio, 0, 1, 0)
+		if math.abs(ratio - lastFrac) < 0.001 then
+			return
+		end
+		lastFrac = ratio
+		TweenService:Create(fill, FILL_TWEEN, { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
+		ghostToken += 1
+		local token = ghostToken
+		task.delay(GHOST_DELAY, function()
+			if ghostToken ~= token then
+				return -- a newer update landed before this catch-down fired
+			end
+			TweenService:Create(ghost, GHOST_TWEEN, { Size = UDim2.new(ratio, 0, 1, 0) }):Play()
+		end)
 	end
 end
 
@@ -90,48 +135,38 @@ function PartyFramesUI.start()
 
 	local function buildRow(memberPlayer, layoutOrder)
 		local frame = Instance.new("Frame")
-		frame.BackgroundColor3 = COLORS.frame
-		frame.BackgroundTransparency = 0.15
-		frame.BorderSizePixel = 0
 		frame.Size = UDim2.new(1, 0, 0, FRAME_HEIGHT)
 		frame.LayoutOrder = layoutOrder
 		frame.Parent = container
+		UIKit.stylePanel(frame) -- Aethelgard shell: Ink gradient, Stone border, ember forge-light
+		local contentZ = frame.ZIndex + 1 -- above the forge-light strip stylePanel adds
 
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Font = Enum.Font.GothamBold
-		nameLabel.TextSize = 14
-		nameLabel.TextColor3 = COLORS.text
+		local nameLabel = UIKit.label(frame, memberPlayer.Name, Theme.Text.Sm, Theme.Semantic.TextStrong, Theme.Font.BodyBold)
 		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 		nameLabel.Size = UDim2.new(0.6, -8, 0, 18)
-		nameLabel.Position = UDim2.new(0, 8, 0, 4)
-		nameLabel.Text = memberPlayer.Name
-		nameLabel.Parent = frame
+		nameLabel.Position = UDim2.new(0, 8, 0, 6)
+		nameLabel.ZIndex = contentZ
 
-		local classLabel = Instance.new("TextLabel")
-		classLabel.BackgroundTransparency = 1
-		classLabel.Font = Enum.Font.Gotham
-		classLabel.TextSize = 12
-		classLabel.TextColor3 = COLORS.textDim
+		local classLabel = UIKit.label(frame, "", Theme.Text.Xs, Theme.Semantic.TextSecondary, Theme.Font.Body)
 		classLabel.TextXAlignment = Enum.TextXAlignment.Right
 		classLabel.Size = UDim2.new(0.4, -8, 0, 18)
-		classLabel.Position = UDim2.new(0.6, 0, 0, 4)
-		classLabel.Parent = frame
+		classLabel.Position = UDim2.new(0.6, 0, 0, 6)
+		classLabel.ZIndex = contentZ
 
-		local setHp = makeBar(frame, UDim2.new(0, 8, 0, 26), UDim2.new(1, -16, 0, 10), COLORS.good)
-		local setMana = makeBar(frame, UDim2.new(0, 8, 0, 40), UDim2.new(1, -16, 0, 10), COLORS.mana)
+		local setHp = makeBar(frame, UDim2.new(0, 8, 0, 28), UDim2.new(1, -16, 0, 11), Theme.Orb.HpTop, Theme.Orb.HpBottom, Theme.Color.Gold300, contentZ)
+		local setMana = makeBar(frame, UDim2.new(0, 8, 0, 45), UDim2.new(1, -16, 0, 11), Theme.Orb.ManaTop, Theme.Orb.ManaBottom, Theme.Color.Steel400, contentZ)
 
 		local connections = {}
 
 		local function refreshClass()
 			if memberPlayer:GetAttribute("Downed") then
 				classLabel.Text = "Caído"
-				classLabel.TextColor3 = Color3.fromRGB(255, 110, 110)
+				classLabel.TextColor3 = Theme.Semantic.Danger
 				return
 			end
 			local def = Classes.get(memberPlayer:GetAttribute("Class"))
-			classLabel.TextColor3 = COLORS.textDim
+			classLabel.TextColor3 = Theme.Semantic.TextSecondary
 			classLabel.Text = def and def.name or ""
 		end
 		table.insert(connections, memberPlayer:GetAttributeChangedSignal("Class"):Connect(refreshClass))

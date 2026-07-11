@@ -88,6 +88,52 @@ local function buildTree(spot, def)
 	}
 end
 
+-- Old-growth tree: thicker, darker trunk and a denser, darker canopy than
+-- the regular Tree, so it visually reads as "needs a better axe" up front —
+-- same idea as IronRock vs. Rock.
+local function buildHardwoodTree(spot, def)
+	local y = groundY(spot.X, spot.Z)
+	local origin = CFrame.new(spot.X, y, spot.Z)
+
+	local model = ArtKit.build("HardwoodTree", origin, {
+		{ name = "Trunk", size = Vector3.new(2.6, 9, 2.6), offset = Vector3.new(0, 4.5, 0), rot = Vector3.new(0, 15, 0), color = "trunkDark", primary = true },
+		{ name = "Canopy1", size = Vector3.new(9.6, 3.4, 9.6), offset = Vector3.new(0, 9.6, 0), rot = Vector3.new(0, 10, 0), color = "leafDark", canCollide = false },
+		{ name = "Canopy2", size = Vector3.new(7.4, 3, 7.4), offset = Vector3.new(0, 12.4, 0), rot = Vector3.new(0, 40, 0), color = "leafDark", canCollide = false },
+		{ name = "Canopy3", size = Vector3.new(4.6, 2.6, 4.6), offset = Vector3.new(0, 14.8, 0), rot = Vector3.new(0, 70, 0), color = "leaf", canCollide = false },
+	})
+
+	local trunk = model.PrimaryPart
+	local canopy = { model.Canopy1, model.Canopy2, model.Canopy3 }
+	local trunkCFrame, trunkSize = trunk.CFrame, trunk.Size
+
+	trunk:SetAttribute("Depleted", false)
+	model.Parent = resourceFolder
+
+	return {
+		def = def,
+		amount = def.capacity,
+		anchor = trunk,
+		deplete = function()
+			for _, slab in ipairs(canopy) do
+				slab.Transparency = 1
+			end
+			trunk.Size = Vector3.new(2.6, 1.8, 2.6)
+			trunk.CFrame = origin * CFrame.new(0, 0.9, 0) * CFrame.Angles(0, math.rad(15), 0)
+			trunk.Color = ArtKit.Palette.stoneDark
+			trunk:SetAttribute("Depleted", true)
+		end,
+		restore = function()
+			for _, slab in ipairs(canopy) do
+				slab.Transparency = 0
+			end
+			trunk.Size = trunkSize
+			trunk.CFrame = trunkCFrame
+			trunk.Color = ArtKit.Palette.trunkDark
+			trunk:SetAttribute("Depleted", false)
+		end,
+	}
+end
+
 local function buildRock(spot, def)
 	local y = groundY(spot.X, spot.Z)
 	local origin = CFrame.new(spot.X, y, spot.Z)
@@ -196,6 +242,23 @@ local NODE_DEFS = {
 			Vector3.new(16, 0, 24),
 			Vector3.new(34, 0, 8),
 			Vector3.new(24, 0, 30),
+		},
+	},
+	hardwood_tree = {
+		toolType = "axe",
+		-- Sólo un hacha con toolTier >= 2 puede talar esto (ver toolMatches).
+		-- axe_basic es tier 1; axe_copper (crafteada en la mesa con lingotes
+		-- de cobre) es la primera en tier 2.
+		minToolTier = 2,
+		yield = "hardwood",
+		capacity = 5,
+		respawn = 90,
+		build = buildHardwoodTree,
+		particleColors = { "trunkDark", "leafDark" },
+		spots = {
+			Vector3.new(6, 0, 22),
+			Vector3.new(10, 0, 34),
+			Vector3.new(2, 0, 40),
 		},
 	},
 	rock = {

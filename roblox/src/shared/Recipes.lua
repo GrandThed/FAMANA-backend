@@ -32,7 +32,6 @@ Recipes.defs = {
 			{ itemId = "wood", quantity = 3 },
 			{ itemId = "slime_goo", quantity = 1 },
 		},
-		station = "crafting_table",
 	},
 	arrow = {
 		id = "arrow",
@@ -42,7 +41,6 @@ Recipes.defs = {
 			{ itemId = "wood", quantity = 1 },
 			{ itemId = "stone", quantity = 1 },
 		},
-		station = "crafting_table",
 	},
 	simple_forge = {
 		id = "simple_forge",
@@ -52,6 +50,7 @@ Recipes.defs = {
 			{ itemId = "stone", quantity = 15 },
 			{ itemId = "wood", quantity = 5 },
 		},
+		station = "crafting_table",
 	},
 	copper_ingot = {
 		id = "copper_ingot",
@@ -66,6 +65,16 @@ Recipes.defs = {
 		id = "pickaxe_copper",
 		name = "Copper Pickaxe",
 		result = { itemId = "pickaxe_copper", quantity = 1 },
+		ingredients = {
+			{ itemId = "copper_ingot", quantity = 3 },
+			{ itemId = "wood", quantity = 2 },
+		},
+		station = "crafting_table",
+	},
+	axe_copper = {
+		id = "axe_copper",
+		name = "Copper Axe",
+		result = { itemId = "axe_copper", quantity = 1 },
 		ingredients = {
 			{ itemId = "copper_ingot", quantity = 3 },
 			{ itemId = "wood", quantity = 2 },
@@ -88,7 +97,7 @@ function Recipes.get(recipeId)
 end
 
 -- lista de recetas en el orden que se muestran en la UI de crafting
-local order = { "crafting_table", "simple_forge", "torch", "arrow", "copper_ingot", "pickaxe_copper", "iron_ingot" }
+local order = { "crafting_table", "simple_forge", "torch", "arrow", "copper_ingot", "pickaxe_copper", "axe_copper", "iron_ingot" }
 
 function Recipes.list()
 	local list = {}

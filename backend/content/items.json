@@ -27,6 +27,23 @@
       "stackable": false,
       "maxStack": 1,
       "toolType": "axe",
+      "toolTier": 1,
+      "gatherPower": 1,
+      "reach": 8,
+      "size": [
+        2,
+        3
+      ]
+    },
+    "axe_copper": {
+      "id": "axe_copper",
+      "name": "Copper Axe",
+      "flavor": "A keener edge — enough to bite into old, hardened trunks.",
+      "type": "tool",
+      "stackable": false,
+      "maxStack": 1,
+      "toolType": "axe",
+      "toolTier": 2,
       "gatherPower": 1,
       "reach": 8,
       "size": [
@@ -124,6 +141,18 @@
     "wood": {
       "id": "wood",
       "name": "Wood",
+      "type": "resource",
+      "stackable": true,
+      "maxStack": 50,
+      "size": [
+        1,
+        1
+      ]
+    },
+    "hardwood": {
+      "id": "hardwood",
+      "name": "Hardwood",
+      "flavor": "Dense, old-growth timber — a basic axe just bounces off it.",
       "type": "resource",
       "stackable": true,
       "maxStack": 50,

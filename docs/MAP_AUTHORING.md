@@ -39,7 +39,7 @@ code. The map just says *where*, using **marker parts**:
 
 | Tag | Places | Key comes from |
 | --- | --- | --- |
-| `Node_tree`, `Node_rock`, `Node_iron_rock` | Gathering node | `NODE_DEFS` key (GatheringService) |
+| `Node_tree`, `Node_rock`, `Node_iron_rock`, `Node_hardwood_tree` | Gathering node | `NODE_DEFS` key (GatheringService) |
 | `Enemy_slime`, `Enemy_goblin` | Enemy spawn point | `ENEMY_DEFS` key (EnemyService) |
 | `Vendor_general_goods` | Vendor NPC | `VENDOR_DEFS` storeId (VendorService) |
 | `Workbench_crafting_table`, `Workbench_simple_forge` | Crafting station | `WORKBENCH_DEFS` station (CraftingService) |

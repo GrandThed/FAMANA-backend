@@ -281,8 +281,36 @@ local function groundY(x, z)
 	return result and result.Position.Y or 0
 end
 
+-- Colors mirror client/Theme.lua's Orb ramp (HpTop/HpBottom/HpRing) so the
+-- overhead bar reads as the same "liquid HP" chrome as the player's health
+-- orb. Hardcoded rather than required: Theme lives under StarterPlayerScripts
+-- (client-only by convention) and this is server code. Keep these in sync by
+-- hand if the Orb ramp in Theme.lua ever changes.
+local BAR_INK = Color3.fromRGB(8, 5, 5) -- Theme.Color.Ink900
+local BAR_BORDER = Color3.fromRGB(61, 42, 34) -- Theme.Semantic.BorderPanel (Stone600)
+local BAR_HP_TOP = Color3.fromRGB(214, 74, 58) -- Theme.Orb.HpTop
+local BAR_HP_BOTTOM = Color3.fromRGB(122, 24, 16) -- Theme.Orb.HpBottom
+local BAR_GHOST = Color3.fromRGB(232, 206, 172) -- Theme.Color.Gold300, the "damage taken" afterimage
+
+local FILL_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local GHOST_DELAY = 0.25
+local GHOST_TWEEN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+
 local function updateHealthBar(enemy)
-	enemy.fill.Size = UDim2.new(math.clamp(enemy.hp / enemy.maxHp, 0, 1), 0, 1, 0)
+	local frac = math.clamp(enemy.hp / enemy.maxHp, 0, 1)
+	TweenService:Create(enemy.fill, FILL_TWEEN, { Size = UDim2.new(frac, 0, 1, 0) }):Play()
+
+	-- Ghost bar: a pale afterimage that lags behind on damage and catches
+	-- down to the real value a beat later, so a hit reads as "chipping into"
+	-- the bar instead of the whole thing just snapping smaller.
+	enemy.ghostToken = (enemy.ghostToken or 0) + 1
+	local token = enemy.ghostToken
+	task.delay(GHOST_DELAY, function()
+		if enemy.dead or enemy.ghostToken ~= token then
+			return -- a newer hit landed before this catch-down fired; let it win
+		end
+		TweenService:Create(enemy.ghost, GHOST_TWEEN, { Size = UDim2.new(frac, 0, 1, 0) }):Play()
+	end)
 end
 
 local function buildEnemy(pos, def)
@@ -348,29 +376,56 @@ local function buildEnemy(pos, def)
 
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "HealthBar"
-	billboard.Size = UDim2.new(0, 60, 0, 8)
+	billboard.Size = UDim2.new(0, 64, 0, 10)
 	billboard.StudsOffsetWorldSpace = Vector3.new(0, def.size.Y / 2 + 1, 0)
 	billboard.AlwaysOnTop = true
 	billboard.Parent = part
 
 	local bg = Instance.new("Frame")
 	bg.Size = UDim2.new(1, 0, 1, 0)
-	bg.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	bg.BackgroundColor3 = BAR_INK
 	bg.BorderSizePixel = 0
+	bg.ClipsDescendants = true
 	bg.Parent = billboard
+
+	local bgCorner = Instance.new("UICorner")
+	bgCorner.CornerRadius = UDim.new(0, 2)
+	bgCorner.Parent = bg
+
+	local border = Instance.new("UIStroke")
+	border.Thickness = 1
+	border.Color = BAR_BORDER
+	border.Parent = bg
+
+	-- Ghost afterimage sits BELOW the real fill and only shows through the
+	-- sliver the real fill just vacated, then eases down to match it.
+	local ghost = Instance.new("Frame")
+	ghost.Name = "Ghost"
+	ghost.Size = UDim2.new(1, 0, 1, 0)
+	ghost.BackgroundColor3 = BAR_GHOST
+	ghost.BorderSizePixel = 0
+	ghost.ZIndex = bg.ZIndex + 1
+	ghost.Parent = bg
 
 	local fill = Instance.new("Frame")
 	fill.Name = "Fill"
 	fill.Size = UDim2.new(1, 0, 1, 0)
-	fill.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+	fill.BackgroundColor3 = BAR_HP_TOP
 	fill.BorderSizePixel = 0
+	fill.ZIndex = ghost.ZIndex + 1
 	fill.Parent = bg
+
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new(BAR_HP_TOP, BAR_HP_BOTTOM)
+	gradient.Parent = fill
 
 	part.Parent = enemyFolder
 
 	return {
 		part = part,
 		fill = fill,
+		ghost = ghost,
 		hp = maxHp,
 		maxHp = maxHp,
 		damage = damage,

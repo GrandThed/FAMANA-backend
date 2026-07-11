@@ -11,12 +11,15 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Items = require(Shared:WaitForChild("Items"))
 local Config = require(Shared:WaitForChild("Config"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local ClientState = require(script.Parent.ClientState)
+local Theme = require(script.Parent.Theme)
+local UIKit = require(script.Parent.UIKit)
 
 local player = Players.LocalPlayer
 
@@ -61,10 +64,10 @@ local function candidates(category)
 		local folder = Workspace:FindFirstChild("Resources")
 		if folder then
 			for _, m in ipairs(folder:GetChildren()) do
-				if m:IsA("Model") and m.Name == "Tree" then
+				if m:IsA("Model") and (m.Name == "Tree" or m.Name == "HardwoodTree") then
 					local trunk = m.PrimaryPart or m:FindFirstChild("Trunk")
 					if trunk and not trunk:GetAttribute("Depleted") then
-						table.insert(out, { adornee = m, anchor = trunk, name = "Tree", hasHp = false })
+						table.insert(out, { adornee = m, anchor = trunk, name = m.Name == "HardwoodTree" and "Old Tree" or "Tree", hasHp = false })
 					end
 				end
 			end
@@ -101,40 +104,81 @@ function TargetingController.start()
 	gui.Parent = player:WaitForChild("PlayerGui")
 
 	local panel = Instance.new("Frame")
-	panel.Size = UDim2.new(0, 320, 0, 44)
+	panel.Size = UDim2.new(0, 320, 0, 50)
 	panel.Position = UDim2.new(0.5, 0, 0, 14)
 	panel.AnchorPoint = Vector2.new(0.5, 0)
-	panel.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
-	panel.BackgroundTransparency = 0.2
-	panel.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 8)
-	corner.Parent = panel
 	panel.Parent = gui
+	UIKit.stylePanel(panel) -- Aethelgard shell: Ink gradient, Stone border, ember forge-light
+	UIKit.autoScale(panel)
 
-	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -16, 0, 18)
-	nameLabel.Position = UDim2.new(0, 8, 0, 4)
-	nameLabel.BackgroundTransparency = 1
-	nameLabel.Font = Enum.Font.GothamBold
-	nameLabel.TextSize = 14
-	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	local nameLabel = UIKit.label(panel, "", Theme.Text.Lg, Theme.Semantic.TextHero, Theme.Font.DisplayBold)
+	nameLabel.Size = UDim2.new(1, -20, 0, 20)
+	nameLabel.Position = UDim2.new(0, 10, 0, 5)
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-	nameLabel.Text = ""
-	nameLabel.Parent = panel
+	nameLabel.ZIndex = panel.ZIndex + 1
 
 	local barBg = Instance.new("Frame")
-	barBg.Size = UDim2.new(1, -16, 0, 12)
-	barBg.Position = UDim2.new(0, 8, 0, 26)
-	barBg.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	barBg.Size = UDim2.new(1, -20, 0, 14)
+	barBg.Position = UDim2.new(0, 10, 0, 28)
+	barBg.BackgroundColor3 = Theme.Color.Ink900
 	barBg.BorderSizePixel = 0
+	barBg.ClipsDescendants = true
+	barBg.ZIndex = panel.ZIndex + 1
 	barBg.Parent = panel
+
+	local barBorder = Instance.new("UIStroke")
+	barBorder.Thickness = 1
+	barBorder.Color = Theme.Semantic.BorderPanel
+	barBorder.Parent = barBg
+
+	-- Ghost afterimage, same trick as the enemy overhead bar: lags behind on
+	-- damage and eases down a beat later so hits read as "chipping" the bar.
+	local barGhost = Instance.new("Frame")
+	barGhost.Name = "Ghost"
+	barGhost.Size = UDim2.new(1, 0, 1, 0)
+	barGhost.BackgroundColor3 = Theme.Color.Gold300
+	barGhost.BorderSizePixel = 0
+	barGhost.ZIndex = barBg.ZIndex + 1
+	barGhost.Parent = barBg
 
 	local barFill = Instance.new("Frame")
 	barFill.Size = UDim2.new(1, 0, 1, 0)
-	barFill.BackgroundColor3 = Color3.fromRGB(220, 70, 70)
+	barFill.BackgroundColor3 = Theme.Orb.HpTop
 	barFill.BorderSizePixel = 0
+	barFill.ZIndex = barGhost.ZIndex + 1
 	barFill.Parent = barBg
+
+	local barGradient = Instance.new("UIGradient")
+	barGradient.Rotation = 90
+	barGradient.Color = ColorSequence.new(Theme.Orb.HpTop, Theme.Orb.HpBottom)
+	barGradient.Parent = barFill
+
+	local FILL_TWEEN = TweenInfo.new(0.15, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local GHOST_TWEEN = TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+	local GHOST_DELAY = 0.25
+	local ghostToken = 0
+	local lastFrac = 1
+
+	-- Applies a new HP fraction with the tween + delayed-ghost treatment.
+	-- Kept local to setupPanel-scope so both the initial acquire and the
+	-- per-frame poll below share one code path. No-ops if the fraction
+	-- hasn't actually moved — this is polled every RenderStepped, so a fresh
+	-- tween per frame would be both wasteful and visually mushy.
+	local function setBarFraction(frac)
+		if math.abs(frac - lastFrac) < 0.001 then
+			return
+		end
+		lastFrac = frac
+		TweenService:Create(barFill, FILL_TWEEN, { Size = UDim2.new(frac, 0, 1, 0) }):Play()
+		ghostToken += 1
+		local token = ghostToken
+		task.delay(GHOST_DELAY, function()
+			if ghostToken ~= token then
+				return
+			end
+			TweenService:Create(barGhost, GHOST_TWEEN, { Size = UDim2.new(frac, 0, 1, 0) }):Play()
+		end)
+	end
 
 	-- ---- highlight ----
 	local highlight = Instance.new("Highlight")
@@ -169,6 +213,15 @@ function TargetingController.start()
 		nameLabel.Text = cand.name
 		barBg.Visible = cand.hasHp
 		gui.Enabled = true
+		if cand.hasHp then
+			-- Snap instantly to the new target's HP — a fresh target's bar
+			-- must never visibly tween in from the previous target's value.
+			ghostToken += 1
+			local frac = hpFraction(cand.anchor) or 1
+			lastFrac = frac
+			barFill.Size = UDim2.new(frac, 0, 1, 0)
+			barGhost.Size = UDim2.new(frac, 0, 1, 0)
+		end
 		-- Send the anchor part so the server can match + validate it.
 		setTargetRemote:FireServer(cand.anchor)
 	end
@@ -229,7 +282,7 @@ function TargetingController.start()
 		if lock and lock.hasHp then
 			local frac = hpFraction(lock.anchor)
 			if frac then
-				barFill.Size = UDim2.new(frac, 0, 1, 0)
+				setBarFraction(frac)
 			end
 		end
 	end)
