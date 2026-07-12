@@ -6,6 +6,7 @@ local GridConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild
 
 local ContentService = require(script:WaitForChild("ContentService"))
 local MeshAssetService = require(script:WaitForChild("MeshAssetService"))
+local DayNightService = require(script:WaitForChild("DayNightService"))
 local PlayerService = require(script:WaitForChild("PlayerService"))
 local HealthService = require(script:WaitForChild("HealthService"))
 local ManaService = require(script:WaitForChild("ManaService"))
@@ -36,6 +37,7 @@ local role = GridConfig.currentRole()
 
 ContentService.start() -- first: overlays backend item defs onto the mirror
 MeshAssetService.start() -- loads the Style-A mesh models before the world builds; ArtKit looks are the fallback
+DayNightService.start() -- ticks Lighting.ClockTime; runs everywhere (not gated by role) so isNight() is always meaningful
 if role == "cell" then
 	WorldService.start()
 end

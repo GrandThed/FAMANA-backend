@@ -254,13 +254,16 @@ local function buildTool(player, itemId)
 		tool.Grip = gripAttachment.CFrame
 	end
 
-	-- Any "Orb" part in the model glows (e.g. the magic staff's head).
+	-- Any "Orb" part in the model glows (e.g. the magic staff's head, the
+	-- torch's flame). Range/brightness default to the staff's subtle glow;
+	-- an item can override them (see torch's orbLightRange/orbLightBrightness
+	-- in Items.lua) to shine brighter/further without touching this shared path.
 	local orb = handle:FindFirstChild("Orb")
 	if orb then
 		local light = Instance.new("PointLight")
 		light.Color = orb.Color
-		light.Range = 8
-		light.Brightness = 2
+		light.Range = def.orbLightRange or 8
+		light.Brightness = def.orbLightBrightness or 2
 		light.Parent = orb
 	end
 

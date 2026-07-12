@@ -246,7 +246,7 @@
       "id": "crafting_table",
       "name": "Crafting Table",
       "flavor": "Placeholder — cannot be placed in the world yet.",
-      "type": "misc",
+      "type": "placeable",
       "stackable": true,
       "maxStack": 5,
       "size": [
@@ -258,7 +258,7 @@
       "id": "simple_forge",
       "name": "Simple Forge",
       "flavor": "Name placeholder for the station — see roblox/src/server/CraftingService.lua.",
-      "type": "misc",
+      "type": "placeable",
       "stackable": true,
       "maxStack": 5,
       "size": [
@@ -305,13 +305,16 @@
     "torch": {
       "id": "torch",
       "name": "Torch",
-      "type": "misc",
-      "stackable": true,
-      "maxStack": 50,
+      "flavor": "Sube la persiana de la noche, aunque sea unos metros a la redonda.",
+      "type": "tool",
+      "stackable": false,
+      "maxStack": 1,
       "size": [
         1,
         1
-      ]
+      ],
+      "orbLightRange": 18,
+      "orbLightBrightness": 3
     },
     "arrow": {
       "id": "arrow",
