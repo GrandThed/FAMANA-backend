@@ -639,12 +639,33 @@ function PlayerService.start()
 	-- Load data BEFORE the character spawns so HealthService can restore HP/pos.
 	Players.CharacterAutoLoads = false
 
-	Players.PlayerAdded:Connect(function(player)
+	local loading = {} -- [userId] = true while loadProfile is in flight
+	local function onPlayerAdded(player)
+		if loading[player.UserId] then
+			return
+		end
+		loading[player.UserId] = true
 		loadProfile(player)
+		loading[player.UserId] = nil
 		-- Push the freshly-loaded inventory in case the client already asked.
 		PlayerService.pushInventory(player)
-		player:LoadCharacter()
-	end)
+		if player.Parent then
+			player:LoadCharacter()
+		end
+	end
+
+	Players.PlayerAdded:Connect(onPlayerAdded)
+
+	-- Anyone already connected joined while the server was still booting
+	-- (MeshAssetService holds init for up to LOAD_TIMEOUT seconds, and the
+	-- first player usually connects during that window on a fresh server —
+	-- servers spin up BECAUSE someone is joining). Their PlayerAdded fired
+	-- before the connect above, so sweep them here or they play the whole
+	-- session with no profile: empty inventory, silent pickup failures, no
+	-- backend traffic and nothing in the client console.
+	for _, player in ipairs(Players:GetPlayers()) do
+		task.spawn(onPlayerAdded, player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
 		PlayerService.save(player)
