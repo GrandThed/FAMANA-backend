@@ -581,7 +581,7 @@ function Items.slotAccepts(slotName, def)
 		return false
 	end
 	if slotName == "weapon" or slotName == "offhand" then
-		return def.type == "weapon" or def.type == "tool"
+		return def.type == "weapon" or def.type == "tool" or def.type == "placeable"
 	end
 	if slotName == "ring1" or slotName == "ring2" then
 		return def.type == "ring"

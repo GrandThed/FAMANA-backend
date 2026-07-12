@@ -245,10 +245,10 @@
     "crafting_table": {
       "id": "crafting_table",
       "name": "Crafting Table",
-      "flavor": "Placeholder — cannot be placed in the world yet.",
+      "flavor": "Solo se puede plantar dentro de una Acampada activa — ver roblox/src/server/CampFurnitureService.lua.",
       "type": "placeable",
-      "stackable": true,
-      "maxStack": 5,
+      "stackable": false,
+      "maxStack": 1,
       "size": [
         2,
         2
@@ -257,10 +257,10 @@
     "simple_forge": {
       "id": "simple_forge",
       "name": "Simple Forge",
-      "flavor": "Name placeholder for the station — see roblox/src/server/CraftingService.lua.",
+      "flavor": "Una estación de fundición portátil. Solo se puede plantar dentro de una Acampada activa — ver roblox/src/server/CampFurnitureService.lua.",
       "type": "placeable",
-      "stackable": true,
-      "maxStack": 5,
+      "stackable": false,
+      "maxStack": 1,
       "size": [
         2,
         2

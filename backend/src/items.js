@@ -98,7 +98,7 @@ export const EQUIPMENT_SLOTS = [
 export function slotAccepts(slotName, def) {
   if (!def) return false;
   if (slotName === "weapon" || slotName === "offhand") {
-    return def.type === "weapon" || def.type === "tool";
+    return def.type === "weapon" || def.type === "tool" || def.type === "placeable";
   }
   if (slotName === "ring1" || slotName === "ring2") return def.type === "ring";
   if (slotName === "back") return def.type === "backpack";
