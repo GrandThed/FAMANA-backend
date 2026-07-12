@@ -35,7 +35,94 @@ local DayNightService = require(script.Parent.DayNightService)
 local CampService = {}
 
 local CAMP = Config.Camp
-local ZONE_HALF = CAMP.zoneSize / 2
+local CAMP_TIERS = CAMP.tiers
+
+-- Returns the tier's data table, falling back to tier 0 for a nil/unknown
+-- tier (e.g. a profile that predates the tier system — see
+-- PlayerService.getCampTier, which already defaults to 0 the same way).
+local function tierData(tier)
+	return CAMP_TIERS[tier] or CAMP_TIERS[0]
+end
+
+-- Public: half the zone's side length in studs for a given tier, without
+-- needing a live camp instance — e.g. a future "here's how big tier 2 is"
+-- preview UI. Live camps should prefer camp.zoneHalf (set at placement).
+function CampService.zoneHalfForTier(tier)
+	return tierData(tier).zoneSize / 2
+end
+
+-- Per-tier campfire dressing at the center of the zone (see
+-- docs/CAMP_TIERS.md §6) — everything EXCEPT the perimeter (Zone floor +
+-- posts/rails), which scales directly off the tier's zoneSize instead (see
+-- buildCampModel). Every tier must keep a part named "Ember": buildCampModel
+-- attaches the PointLight to it by name, tier-agnostic. Placeholder
+-- proportions — a visual pass in Studio, not final art.
+local CAMPFIRE_TIERS = {
+	[0] = {
+		lightRange = 20,
+		lightBrightness = 2,
+		parts = {
+			{ name = "LogA", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, 35, 0), color = "trunk", canCollide = false },
+			{ name = "LogB", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, -35, 0), color = "trunk", canCollide = false },
+			{ name = "Ember", shape = "Ball", size = Vector3.new(1, 0.6, 1), offset = Vector3.new(0, 0.7, 0), color = "gold", canCollide = false },
+		},
+	},
+	[1] = {
+		-- Adds a ring of stones + a third log. Slightly bigger/brighter ember.
+		lightRange = 23,
+		lightBrightness = 2.3,
+		parts = {
+			{ name = "StoneA", shape = "Ball", size = Vector3.new(0.9, 0.7, 0.9), offset = Vector3.new(1.7, 0.3, 0.6), color = "stone", canCollide = false },
+			{ name = "StoneB", shape = "Ball", size = Vector3.new(0.9, 0.7, 0.9), offset = Vector3.new(-1.7, 0.3, 0.6), color = "stone", canCollide = false },
+			{ name = "StoneC", shape = "Ball", size = Vector3.new(0.9, 0.7, 0.9), offset = Vector3.new(0.6, 0.3, -1.7), color = "stone", canCollide = false },
+			{ name = "StoneD", shape = "Ball", size = Vector3.new(0.9, 0.7, 0.9), offset = Vector3.new(-0.6, 0.3, -1.7), color = "stone", canCollide = false },
+			{ name = "LogA", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, 35, 0), color = "trunk", canCollide = false },
+			{ name = "LogB", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, -35, 0), color = "trunk", canCollide = false },
+			{ name = "LogC", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, 90, 0), color = "trunk", canCollide = false },
+			{ name = "Ember", shape = "Ball", size = Vector3.new(1.2, 0.7, 1.2), offset = Vector3.new(0, 0.75, 0), color = "gold", canCollide = false },
+		},
+	},
+	[2] = {
+		-- Iron tripod over the fire, dressed like the forge (steelDark) —
+		-- purely visual, NOT the cooking station (that's the craftable
+		-- olla_campamento furniture piece, see docs/CAMP_TIERS.md §7).
+		lightRange = 25,
+		lightBrightness = 2.6,
+		parts = {
+			{ name = "StoneA", shape = "Ball", size = Vector3.new(1, 0.75, 1), offset = Vector3.new(1.8, 0.3, 0.7), color = "stone", canCollide = false },
+			{ name = "StoneB", shape = "Ball", size = Vector3.new(1, 0.75, 1), offset = Vector3.new(-1.8, 0.3, 0.7), color = "stone", canCollide = false },
+			{ name = "StoneC", shape = "Ball", size = Vector3.new(1, 0.75, 1), offset = Vector3.new(0.7, 0.3, -1.8), color = "stone", canCollide = false },
+			{ name = "StoneD", shape = "Ball", size = Vector3.new(1, 0.75, 1), offset = Vector3.new(-0.7, 0.3, -1.8), color = "stone", canCollide = false },
+			{ name = "LogA", size = Vector3.new(2.2, 0.55, 0.55), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, 35, 0), color = "trunk", canCollide = false },
+			{ name = "LogB", size = Vector3.new(2.2, 0.55, 0.55), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, -35, 0), color = "trunk", canCollide = false },
+			{ name = "TripodA", size = Vector3.new(0.2, 2.6, 0.2), offset = Vector3.new(1.1, 1.3, 0.9), rot = Vector3.new(0, 0, -20), color = "steelDark", canCollide = false },
+			{ name = "TripodB", size = Vector3.new(0.2, 2.6, 0.2), offset = Vector3.new(-1.1, 1.3, 0.9), rot = Vector3.new(0, 0, 20), color = "steelDark", canCollide = false },
+			{ name = "TripodC", size = Vector3.new(0.2, 2.6, 0.2), offset = Vector3.new(0, 1.3, -1.4), rot = Vector3.new(20, 0, 0), color = "steelDark", canCollide = false },
+			{ name = "TripodRing", shape = "Cylinder", size = Vector3.new(0.15, 1.4, 1.4), offset = Vector3.new(0, 2.3, 0), rot = Vector3.new(0, 0, 90), color = "steelDark", canCollide = false },
+			{ name = "Ember", shape = "Ball", size = Vector3.new(1.4, 0.8, 1.4), offset = Vector3.new(0, 0.8, 0), color = "gold", canCollide = false },
+		},
+	},
+	[3] = {
+		-- "Clan fire" — biggest dressing, carved posts to the sides, warmest
+		-- and widest light.
+		lightRange = 30,
+		lightBrightness = 3,
+		parts = {
+			{ name = "StoneA", shape = "Ball", size = Vector3.new(1.1, 0.8, 1.1), offset = Vector3.new(2, 0.3, 0.8), color = "stone", canCollide = false },
+			{ name = "StoneB", shape = "Ball", size = Vector3.new(1.1, 0.8, 1.1), offset = Vector3.new(-2, 0.3, 0.8), color = "stone", canCollide = false },
+			{ name = "StoneC", shape = "Ball", size = Vector3.new(1.1, 0.8, 1.1), offset = Vector3.new(0.8, 0.3, -2), color = "stone", canCollide = false },
+			{ name = "StoneD", shape = "Ball", size = Vector3.new(1.1, 0.8, 1.1), offset = Vector3.new(-0.8, 0.3, -2), color = "stone", canCollide = false },
+			{ name = "LogA", size = Vector3.new(2.5, 0.6, 0.6), offset = Vector3.new(0, 0.45, 0), rot = Vector3.new(0, 35, 0), color = "trunk", canCollide = false },
+			{ name = "LogB", size = Vector3.new(2.5, 0.6, 0.6), offset = Vector3.new(0, 0.45, 0), rot = Vector3.new(0, -35, 0), color = "trunk", canCollide = false },
+			{ name = "LogC", size = Vector3.new(2.5, 0.6, 0.6), offset = Vector3.new(0, 0.45, 0), rot = Vector3.new(0, 90, 0), color = "trunk", canCollide = false },
+			{ name = "BannerPostA", size = Vector3.new(0.35, 3.5, 0.35), offset = Vector3.new(3.2, 1.75, 0), color = "trunkDark", canCollide = false },
+			{ name = "BannerPostB", size = Vector3.new(0.35, 3.5, 0.35), offset = Vector3.new(-3.2, 1.75, 0), color = "trunkDark", canCollide = false },
+			{ name = "BannerA", size = Vector3.new(0.1, 1.4, 0.9), offset = Vector3.new(3.2, 3, 0), color = "steelDark", canCollide = false },
+			{ name = "BannerB", size = Vector3.new(0.1, 1.4, 0.9), offset = Vector3.new(-3.2, 3, 0), color = "steelDark", canCollide = false },
+			{ name = "Ember", shape = "Ball", size = Vector3.new(1.6, 0.9, 1.6), offset = Vector3.new(0, 0.85, 0), color = "gold", canCollide = false },
+		},
+	},
+}
 
 -- [ownerUserId] = { center = Vector3, model = Model, partyId = number|nil, expiresAt = os.clock() }
 local camps = {}
@@ -110,8 +197,14 @@ function CampService.campFor(player)
 end
 
 -- Public: half the zone's side length in studs (a camp's safe/buildable area
--- is a `zoneSize` x `zoneSize` square centered on `camp.center`).
-CampService.ZONE_HALF = ZONE_HALF
+-- is a `zoneSize` x `zoneSize` square centered on `camp.center`) — read from
+-- the LIVE camp instance, since it's fixed to whatever tier the owner had
+-- when they planted it (see zoneHalfForTier for a tier without a live camp).
+local function withinZone(camp, position)
+	local dx = math.abs(position.X - camp.center.X)
+	local dz = math.abs(position.Z - camp.center.Z)
+	return dx <= camp.zoneHalf and dz <= camp.zoneHalf
+end
 
 -- Public: register a callback fired right after ANY camp is torn down
 -- (expired, or a future manual teardown), with (ownerUserId, camp) — the
@@ -133,12 +226,7 @@ end
 -- math too (most should just rely on the HealthService hook below instead).
 function CampService.isPositionSafeForPlayer(player, position)
 	local camp = campFor(player)
-	if not camp then
-		return false
-	end
-	local dx = math.abs(position.X - camp.center.X)
-	local dz = math.abs(position.Z - camp.center.Z)
-	return dx <= ZONE_HALF and dz <= ZONE_HALF
+	return camp ~= nil and withinZone(camp, position)
 end
 
 local function findGroundY(x, z)
@@ -151,15 +239,19 @@ end
 
 -- Translucent floor marking the zone + four fence posts/rails at the
 -- corners (visual only — safety is enforced by isPositionSafeForPlayer, not
--- collision, so none of this blocks movement) + a small campfire at center.
-local function buildCampModel(center)
+-- collision, so none of this blocks movement), sized to the tier's zone —
+-- plus the tier's campfire dressing at center (CAMPFIRE_TIERS, §6 of
+-- docs/CAMP_TIERS.md).
+local function buildCampModel(center, tier)
 	local origin = CFrame.new(center)
-	local edge = ZONE_HALF - 0.5
+	local zoneSize = tierData(tier).zoneSize
+	local zoneHalf = zoneSize / 2
+	local edge = zoneHalf - 0.5
 
-	local model = ArtKit.build("Acampada", origin, {
+	local parts = {
 		{
 			name = "Zone",
-			size = Vector3.new(CAMP.zoneSize, 0.2, CAMP.zoneSize),
+			size = Vector3.new(zoneSize, 0.2, zoneSize),
 			offset = Vector3.new(0, 0.1, 0),
 			color = "leafLight",
 			transparency = 0.65,
@@ -170,21 +262,25 @@ local function buildCampModel(center)
 		{ name = "PostB", size = Vector3.new(0.6, 4, 0.6), offset = Vector3.new(-edge, 2, edge), color = "trunkDark", canCollide = false },
 		{ name = "PostC", size = Vector3.new(0.6, 4, 0.6), offset = Vector3.new(edge, 2, -edge), color = "trunkDark", canCollide = false },
 		{ name = "PostD", size = Vector3.new(0.6, 4, 0.6), offset = Vector3.new(-edge, 2, -edge), color = "trunkDark", canCollide = false },
-		{ name = "RailN", size = Vector3.new(CAMP.zoneSize - 1, 0.3, 0.3), offset = Vector3.new(0, 2.5, edge), color = "trunkDark", canCollide = false },
-		{ name = "RailS", size = Vector3.new(CAMP.zoneSize - 1, 0.3, 0.3), offset = Vector3.new(0, 2.5, -edge), color = "trunkDark", canCollide = false },
-		{ name = "RailE", size = Vector3.new(0.3, 0.3, CAMP.zoneSize - 1), offset = Vector3.new(edge, 2.5, 0), color = "trunkDark", canCollide = false },
-		{ name = "RailW", size = Vector3.new(0.3, 0.3, CAMP.zoneSize - 1), offset = Vector3.new(-edge, 2.5, 0), color = "trunkDark", canCollide = false },
-		{ name = "LogA", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, 35, 0), color = "trunk", canCollide = false },
-		{ name = "LogB", size = Vector3.new(2, 0.5, 0.5), offset = Vector3.new(0, 0.4, 0), rot = Vector3.new(0, -35, 0), color = "trunk", canCollide = false },
-		{ name = "Ember", shape = "Ball", size = Vector3.new(1, 0.6, 1), offset = Vector3.new(0, 0.7, 0), color = "gold", canCollide = false },
-	})
+		{ name = "RailN", size = Vector3.new(zoneSize - 1, 0.3, 0.3), offset = Vector3.new(0, 2.5, edge), color = "trunkDark", canCollide = false },
+		{ name = "RailS", size = Vector3.new(zoneSize - 1, 0.3, 0.3), offset = Vector3.new(0, 2.5, -edge), color = "trunkDark", canCollide = false },
+		{ name = "RailE", size = Vector3.new(0.3, 0.3, zoneSize - 1), offset = Vector3.new(edge, 2.5, 0), color = "trunkDark", canCollide = false },
+		{ name = "RailW", size = Vector3.new(0.3, 0.3, zoneSize - 1), offset = Vector3.new(-edge, 2.5, 0), color = "trunkDark", canCollide = false },
+	}
+
+	local fire = CAMPFIRE_TIERS[tier] or CAMPFIRE_TIERS[0]
+	for _, part in ipairs(fire.parts) do
+		table.insert(parts, part)
+	end
+
+	local model = ArtKit.build("Acampada", origin, parts)
 
 	local ember = model:FindFirstChild("Ember")
 	if ember then
 		local light = Instance.new("PointLight")
 		light.Color = ArtKit.Palette.gold
-		light.Range = 20
-		light.Brightness = 2
+		light.Range = fire.lightRange
+		light.Brightness = fire.lightBrightness
 		light.Parent = ember
 	end
 
@@ -257,7 +353,8 @@ local function handlePlace(player, x, z)
 	end
 
 	local center = Vector3.new(x, findGroundY(x, z), z)
-	local model = buildCampModel(center)
+	local tier = PlayerService.getCampTier(player)
+	local model = buildCampModel(center, tier)
 	local expiresAt = os.clock() + CAMP.duration
 
 	camps[userId] = {
@@ -266,6 +363,11 @@ local function handlePlace(player, x, z)
 		partyId = player:GetAttribute("PartyId"),
 		expiresAt = expiresAt,
 		ownerUserId = userId,
+		-- Fixed for the lifetime of this camp instance — upgrading tier
+		-- mid-session does NOT resize/rebuild a standing camp, only the
+		-- NEXT one placed (docs/CAMP_TIERS.md §1).
+		tier = tier,
+		zoneHalf = tierData(tier).zoneSize / 2,
 	}
 
 	task.delay(CAMP.duration, function()
@@ -312,23 +414,32 @@ function CampService.start()
 			return nil
 		end
 		-- Spawn just off the fire, not inside the embers.
-		return camp.center + Vector3.new(0, 3, ZONE_HALF / 2)
+		return camp.center + Vector3.new(0, 3, camp.zoneHalf / 2)
 	end)
 
 	-- The ember's PointLight is always on (buildCampModel), but the warmth
 	-- only matters when it's actually dark out — during the day the safe
-	-- zone's damage immunity is already the whole reward. Same
-	-- isPositionSafeForPlayer check as the immunity hook above.
+	-- zone's damage immunity is already the whole reward. Same zone check
+	-- as the immunity hook above.
+	--
+	-- Uses nightRegenBonusMin (the tier's floor, zero decoration) — scaling
+	-- up to nightRegenBonusMax based on how decorated the camp is
+	-- ("coziness", docs/CAMP_TIERS.md §3) is wired in a later step, once
+	-- cosmetic furniture exists to count.
 	HealthService.registerBonusRegen(function(player)
 		if not DayNightService.isNight() then
 			return 0
 		end
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if not root or not CampService.isPositionSafeForPlayer(player, root.Position) then
+		if not root then
 			return 0
 		end
-		return CAMP.nightRegenBonus
+		local camp = campFor(player)
+		if not camp or not withinZone(camp, root.Position) then
+			return 0
+		end
+		return tierData(camp.tier).nightRegenBonusMin
 	end)
 
 	local placeAcampada = Remotes.getFunction("PlaceAcampada")

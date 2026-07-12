@@ -34,4 +34,24 @@ function DayNight.isNightAt(clockTime)
 	return clockTime >= DayNight.nightStart or clockTime < DayNight.dawn
 end
 
+-- Continuous 0-1 blend for anything that wants a smooth transition instead
+-- of isNightAt's hard cutover — e.g. AmbientSfx crossfading day/night beds,
+-- or a future sun/moon UI fading in. 1 = full day, 0 = full night, ramping
+-- linearly across [dusk, nightStart] going down and a mirrored-width ramp
+-- coming back up into dawn.
+function DayNight.dayWeight(clockTime)
+	local rampWidth = DayNight.nightStart - DayNight.dusk
+	local dawnRampStart = DayNight.dawn - rampWidth
+
+	if clockTime >= DayNight.dawn and clockTime < DayNight.dusk then
+		return 1
+	elseif clockTime >= DayNight.dusk and clockTime < DayNight.nightStart then
+		return 1 - (clockTime - DayNight.dusk) / rampWidth
+	elseif clockTime >= dawnRampStart and clockTime < DayNight.dawn then
+		return (clockTime - dawnRampStart) / rampWidth
+	else
+		return 0 -- deep night: [nightStart, 24) and [0, dawnRampStart)
+	end
+end
+
 return DayNight

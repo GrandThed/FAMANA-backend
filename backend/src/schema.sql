@@ -47,6 +47,14 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS tracked_quest_id TEXT NOT NULL DEFA
 -- from the camp center so they replay correctly at a new location.
 ALTER TABLE players ADD COLUMN IF NOT EXISTS camp_layout JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Camp tier (0-3): a persistent, one-time-purchased upgrade to the owner's
+-- Acampada — bigger zone, more furniture slots, a more elaborate campfire
+-- model. Unlike camp_layout (the live furniture arrangement), this is a
+-- flat player stat, same shape as gold/level — see docs/CAMP_TIERS.md.
+-- Applied the next time the owner (re)plants a camp, not retroactively to
+-- an already-standing one.
+ALTER TABLE players ADD COLUMN IF NOT EXISTS camp_tier INT NOT NULL DEFAULT 0;
+
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper
 -- doll; x = slot index, y = 0). Legacy rows (pre-grid) have x/y NULL and are

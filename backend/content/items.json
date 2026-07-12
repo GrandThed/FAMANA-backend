@@ -302,6 +302,54 @@
         3
       ]
     },
+    "olla_campamento": {
+      "id": "olla_campamento",
+      "name": "Olla de Campamento",
+      "flavor": "Un trípode de hierro para cocinar. Requiere Acampada tier 1 o superior para plantarse.",
+      "type": "placeable",
+      "stackable": false,
+      "maxStack": 1,
+      "size": [
+        2,
+        2
+      ]
+    },
+    "alfombra_campamento": {
+      "id": "alfombra_campamento",
+      "name": "Alfombra de Campamento",
+      "flavor": "Puramente decorativa. Requiere Acampada tier 1 o superior para plantarse.",
+      "type": "placeable",
+      "stackable": false,
+      "maxStack": 1,
+      "size": [
+        2,
+        2
+      ]
+    },
+    "farol_campamento": {
+      "id": "farol_campamento",
+      "name": "Farol de Campamento",
+      "flavor": "Alumbra un poco más allá de la fogata. Requiere Acampada tier 1 o superior para plantarse.",
+      "type": "placeable",
+      "stackable": false,
+      "maxStack": 1,
+      "size": [
+        1,
+        1
+      ]
+    },
+    "trofeo_campamento": {
+      "id": "trofeo_campamento",
+      "name": "Trofeo de Campamento",
+      "flavor": "Orejas de goblin montadas sobre una placa de madera. Requiere Acampada tier 2 o superior para plantarse.",
+      "type": "placeable",
+      "stackable": false,
+      "maxStack": 1,
+      "size": [
+        1,
+        2
+      ]
+    },
     "torch": {
       "id": "torch",
       "name": "Torch",

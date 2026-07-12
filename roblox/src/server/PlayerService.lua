@@ -217,6 +217,12 @@ local function loadProfile(player)
 	-- saved before this existed come back without it.
 	data.campLayout = typeof(data.campLayout) == "table" and data.campLayout or {}
 
+	-- Camp tier (see docs/CAMP_TIERS.md): a persistent, one-time-purchased
+	-- upgrade, same shape as gold/level. Profiles saved before this existed
+	-- come back without it — default to 0 (current behavior, unchanged).
+	data.campTier = data.campTier or 0
+	player:SetAttribute("CampTier", data.campTier)
+
 	-- This Place represents a specific cell; record it so saves reflect reality.
 	data.cell = GridConfig.currentCell()
 
@@ -395,6 +401,26 @@ function PlayerService.spendGold(player, amount)
 	return true
 end
 
+function PlayerService.getCampTier(player)
+	local profile = cache[player.UserId]
+	return profile and profile.campTier or 0
+end
+
+-- Sets the camp tier directly (no cost validation here — that lives in the
+-- future purchase flow, docs/CAMP_TIERS.md §5). Mirrors gold/level: mutate
+-- the cache + attribute now, autosave/leave persists it. Takes effect for
+-- CampService/CampFurnitureService the next time this owner (re)plants a
+-- camp — never retroactively resizes an already-standing one.
+function PlayerService.setCampTier(player, tier)
+	local profile = cache[player.UserId]
+	if not profile or typeof(tier) ~= "number" then
+		return false
+	end
+	profile.campTier = math.clamp(math.floor(tier), 0, 3)
+	player:SetAttribute("CampTier", profile.campTier)
+	return true
+end
+
 -- Grants XP (e.g. from an enemy kill or, later, a quest reward), rolling
 -- over into as many level-ups as the amount covers. Each level-up re-derives
 -- HP/Mana caps (see shared/Classes.lua statsAtLevel, wired via
@@ -513,6 +539,7 @@ local function buildSaveFields(player)
 		questProgress = profile.questProgress,
 		trackedQuestId = profile.trackedQuestId,
 		campLayout = profile.campLayout,
+		campTier = profile.campTier,
 		cell = profile.cell,
 		position = profile.position,
 	}

@@ -14,6 +14,7 @@ local PlayerService = require(script.Parent.PlayerService)
 local ToolService = require(script.Parent.ToolService)
 local TargetService = require(script.Parent.TargetService)
 local DayNightService = require(script.Parent.DayNightService)
+local RestedService = require(script.Parent.RestedService)
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 local ArtKit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ArtKit"))
 local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
@@ -635,6 +636,15 @@ function GatheringService.start()
 	-- know this exists, it just sums whatever's registered.
 	GatheringService.registerYieldBonus(function(_player, _toolType)
 		return DayNightService.isNight() and DayNight.nightGatherYieldBonus or 0
+	end)
+
+	-- The "Rested" buff (RestedService) — banked by resting in a decorated
+	-- camp at night, spent while out in the world. Same extensibility
+	-- point, additive with the night bonus above: staying out gathering all
+	-- night gets you more from the environment itself, coming back Rested
+	-- gets you a flat bonus on top wherever/whenever you use it.
+	GatheringService.registerYieldBonus(function(player, _toolType)
+		return RestedService.isRested(player) and Config.Camp.rested.yieldBonus or 0
 	end)
 
 	-- Pre-create remote so client doesn't warn/yield infinitely at startup

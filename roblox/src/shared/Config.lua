@@ -78,12 +78,98 @@ return {
 	Camp = {
 		duration = 60 * 60, -- la acampada dura 1 hora
 		cooldown = 30 * 60, -- 30 min de cooldown tras expirar, por dueño
-		zoneSize = 30, -- cuadrado de N x N studs, centrado en la fogata
+		zoneSize = 30, -- cuadrado de N x N studs, centrado en la fogata (tier 0 — ver tiers abajo)
 		maxPlacementDistance = 20, -- distancia jugador -> punto de colocación (anti-exploit)
 		-- Bonus de regen (HP/seg) por estar dentro de la zona segura DE NOCHE
 		-- — la fogata siempre está prendida, pero solo importa cuando afuera
-		-- es peligroso. Placeholder, calibrar jugado.
+		-- es peligroso. Placeholder, calibrar jugado. (tier 0 — ver tiers abajo)
 		nightRegenBonus = 3,
+
+		-- Camp tiers (docs/CAMP_TIERS.md): mejora persistente por jugador
+		-- (PlayerService.getCampTier/setCampTier), comprada una sola vez,
+		-- separada del ciclo de craftear/plantar la Acampada en sí (que no
+		-- cambia con el tier). Puro dato por ahora — CampService y
+		-- CampFurnitureService todavía leen los campos planos de arriba;
+		-- pasan a leer tiers[ownerTier] en el próximo paso.
+		--
+		-- zoneSize/nightRegenBonusMin duplican tier 0 arriba a propósito
+		-- (mismo valor, dos lugares) para que la tabla sea autocontenida y
+		-- CampService pueda indexar tiers[0..3] uniformemente sin un caso
+		-- especial para "sin mejora". nightRegenBonusMin/Max son el piso y
+		-- techo de coziness (§3 del doc): el piso es el bonus con la zona
+		-- vacía, el techo el bonus con el máximo de piezas cosméticas
+		-- plantadas para ese tier.
+		maxTier = 3,
+		tiers = {
+			[0] = {
+				zoneSize = 30,
+				maxFurniture = 4,
+				nightRegenBonusMin = 3,
+				nightRegenBonusMax = 3,
+				cozinessTarget = 0, -- min == max, no cosmetics unlock this early anyway
+				cost = nil, -- tier inicial, no se compra
+			},
+			[1] = {
+				zoneSize = 40,
+				maxFurniture = 6,
+				nightRegenBonusMin = 3,
+				nightRegenBonusMax = 5,
+				cozinessTarget = 3, -- plantar 3 piezas cosméticas ya toca el techo
+				-- TODO: calibrar cantidad jugado (docs/CAMP_TIERS.md §8).
+				cost = { copper_ingot = 15 },
+			},
+			[2] = {
+				zoneSize = 50,
+				maxFurniture = 8,
+				nightRegenBonusMin = 4,
+				nightRegenBonusMax = 7,
+				cozinessTarget = 4,
+				-- TODO: calibrar cantidad jugado (docs/CAMP_TIERS.md §8).
+				cost = { iron_ingot = 20, copper_ingot = 10 },
+			},
+			[3] = {
+				zoneSize = 65,
+				maxFurniture = 10,
+				nightRegenBonusMin = 5,
+				nightRegenBonusMax = 10,
+				cozinessTarget = 5,
+				-- Bloqueado hasta que exista un material de mena tier 3
+				-- (docs/CAMP_TIERS.md §8) — nil a propósito, no inventar
+				-- un item que no existe en content/items.json todavía.
+				cost = nil,
+			},
+		},
+
+		-- Radio (studs) reservado alrededor del centro de la Acampada donde
+		-- NUNCA se puede plantar un mueble, en NINGÚN tier — mide el
+		-- footprint de la fogata más grande (tier 3), reservado desde tier 0
+		-- para que subir de tier nunca puje/clipee muebles ya plantados
+		-- (docs/CAMP_TIERS.md §6.1). Placeholder hasta tener el modelo de
+		-- fogata tier 3 real.
+		firePitRadius = 6,
+
+		-- "Rested" (RestedService.lua): reworked coziness reward — banks
+		-- while resting in a safe camp at night, converts to a temporary
+		-- gathering yield buff on leaving. Replaces the old decoration-
+		-- scaled HP regen bonus (see the comment where it used to live in
+		-- CampFurnitureService.start()). Placeholders, calibrate jugado.
+		rested = {
+			-- Segundos de "banco" acumulados por cada segundo real quieto en
+			-- zona segura de noche, ANTES del multiplicador de coziness.
+			baseAccrualPerSecond = 1,
+			-- Con coziness al máximo (cozinessRatio == 1) el banco crece
+			-- accrualMultAtMaxCoziness veces más rápido que vacío — o sea,
+			-- decorar sigue valiendo la pena: menos tiempo parado para la
+			-- misma duración de buff eventual.
+			accrualMultAtMaxCoziness = 2,
+			-- Tope de cuánto tiempo de buff podés bankear de una sentada
+			-- (evita el AFK-toda-la-noche = buff infinito).
+			chargeCapSeconds = 20 * 60,
+			-- Bonus de yield de gathering mientras el buff "Descansado" está
+			-- activo (mismo hook que el bonus nocturno, GatheringService.
+			-- registerYieldBonus).
+			yieldBonus = 0.15,
+		},
 	},
 
 	-- Muebles de campamento (cofre, carpa, ...): solo plantables dentro de

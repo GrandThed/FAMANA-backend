@@ -26,6 +26,8 @@ local VendorService = require(script:WaitForChild("VendorService"))
 local CraftingService = require(script:WaitForChild("CraftingService"))
 local CampService = require(script:WaitForChild("CampService"))
 local CampFurnitureService = require(script:WaitForChild("CampFurnitureService"))
+local RestedService = require(script:WaitForChild("RestedService"))
+local CampArchitectService = require(script:WaitForChild("CampArchitectService"))
 local QuestService = require(script:WaitForChild("QuestService"))
 local BorderService = require(script:WaitForChild("BorderService"))
 local WorldService = require(script:WaitForChild("WorldService"))
@@ -60,6 +62,8 @@ VendorService.start()
 CraftingService.start()
 CampService.start() -- después de CraftingService: consume el item "acampada" que esta produce
 CampFurnitureService.start() -- después de CampService: mobiliario solo se planta dentro de una acampada activa
+RestedService.start() -- banca el buff "Descansado" mientras estás en un camp seguro de noche (reemplaza el viejo bonus de regen por coziness)
+CampArchitectService.start() -- independiente de los otros dos: solo lee/escribe PlayerService.campTier
 QuestService.start() -- after EnemyService/GatheringService: hooks their onKilled/onGathered
 if role == "cell" then
 	BorderService.start()

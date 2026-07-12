@@ -61,6 +61,7 @@ function rowToPlayer(row, inventory) {
     questProgress: row.quest_progress || {},
     trackedQuestId: row.tracked_quest_id || "",
     campLayout: row.camp_layout || {},
+    campTier: row.camp_tier || 0,
 
     cell: row.cell,
     position: { x: row.pos_x, y: row.pos_y, z: row.pos_z },
@@ -110,7 +111,7 @@ export async function createPlayer(playerId, username) {
 
 // Saves the coarse mutable fields. Only provided fields are updated.
 // Returns false if the player doesn't exist.
-export async function savePlayer(playerId, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, trackedQuestId, cell, position, campLayout }) {
+export async function savePlayer(playerId, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, trackedQuestId, cell, position, campLayout, campTier }) {
   const sets = [];
   const params = [];
   let i = 1;
@@ -154,6 +155,7 @@ export async function savePlayer(playerId, { health, gold, level, xp, currentCla
     sets.push(`camp_layout = $${i++}::jsonb`);
     params.push(JSON.stringify(campLayout ?? {}));
   }
+  if (campTier !== undefined) { sets.push(`camp_tier = $${i++}`); params.push(campTier); }
   if (cell !== undefined) { sets.push(`cell = $${i++}`); params.push(cell); }
   if (position !== undefined) {
     sets.push(`pos_x = $${i++}`); params.push(position.x);

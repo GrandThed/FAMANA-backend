@@ -108,7 +108,7 @@ Recipes.defs = {
 			{ itemId = "wood", quantity = 25 },
 			{ itemId = "stone", quantity = 10 },
 		},
-		-- sin station, mismo criterio que acampada
+		station = "crafting_table"
 	},
 	carpa_campamento = {
 		id = "carpa_campamento",
@@ -117,7 +117,52 @@ Recipes.defs = {
 		ingredients = {
 			{ itemId = "wood", quantity = 15 },
 		},
-		-- sin station, mismo criterio que acampada
+		station = "crafting_table"
+	},
+	olla_campamento = {
+		id = "olla_campamento",
+		name = "Olla de Campamento",
+		result = { itemId = "olla_campamento", quantity = 1 },
+		ingredients = {
+			{ itemId = "iron_ingot", quantity = 5 },
+			{ itemId = "wood", quantity = 10 },
+		},
+		station = "crafting_table"
+		-- (el requisito de tier 1 se valida al PLANTARLA, no al craftearla —
+		-- ver FURNITURE_DEFS.olla_campamento.minCampTier en
+		-- CampFurnitureService.lua, docs/CAMP_TIERS.md §7)
+	},
+	-- Cosméticos de campamento (docs/CAMP_TIERS.md §4) — sin station, mismo
+	-- criterio que el resto; el requisito de tier se valida al plantarlos
+	-- (FURNITURE_DEFS.*.minCampTier en CampFurnitureService.lua), no acá.
+	alfombra_campamento = {
+		id = "alfombra_campamento",
+		name = "Alfombra de Campamento",
+		result = { itemId = "alfombra_campamento", quantity = 1 },
+		ingredients = {
+			{ itemId = "wood", quantity = 12 },
+		},
+		station = "crafting_table"
+	},
+	farol_campamento = {
+		id = "farol_campamento",
+		name = "Farol de Campamento",
+		result = { itemId = "farol_campamento", quantity = 1 },
+		ingredients = {
+			{ itemId = "iron_ingot", quantity = 3 },
+			{ itemId = "slime_goo", quantity = 2 },
+		},
+		station = "crafting_table"
+	},
+	trofeo_campamento = {
+		id = "trofeo_campamento",
+		name = "Trofeo de Campamento",
+		result = { itemId = "trofeo_campamento", quantity = 1 },
+		ingredients = {
+			{ itemId = "goblin_ear", quantity = 5 },
+			{ itemId = "wood", quantity = 5 },
+		},
+		station = "crafting_table"
 	},
 }
 
@@ -139,6 +184,10 @@ local order =
 		"acampada",
 		"cofre_campamento",
 		"carpa_campamento",
+		"olla_campamento",
+		"alfombra_campamento",
+		"farol_campamento",
+		"trofeo_campamento",
 	}
 
 function Recipes.list()

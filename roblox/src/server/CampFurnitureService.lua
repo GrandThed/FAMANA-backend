@@ -1,9 +1,9 @@
 -- Camp furniture: crafting "cofre_campamento", "carpa_campamento",
 -- "crafting_table", or "simple_forge" (shared/Recipes.lua) lets a player
 -- plant them, but ONLY inside the zone of an Acampada they can currently
--- access (their own, or their party's — see CampService.campFor). No count
--- limit per camp, the zone's own footprint (30x30 studs) is the only
--- budget, same spirit as the request.
+-- access (their own, or their party's — see CampService.campFor). Budget is
+-- the zone's footprint (tier-dependent) AND a max piece count per tier
+-- (Config.Camp.tiers[tier].maxFurniture, docs/CAMP_TIERS.md §2).
 --
 -- crafting_table/simple_forge are real workbenches while planted: they
 -- register with CraftingService (registerStation/moveStation/
@@ -66,9 +66,29 @@ local AUTOSAVE_INTERVAL = 120 -- seconds; see the loop in start() below
 -- the town's or a camp-planted one.
 local FURNITURE_DEFS = {
 	cofre_campamento = { kind = "chest" },
-	carpa_campamento = { kind = "tent" },
+	-- Purely decorative, no station — the first "cosmetic" piece, predates
+	-- the tier system so it's not gated (minCampTier absent = tier 0 ok).
+	-- Counts toward coziness (§3) like the newer cosmetics below.
+	carpa_campamento = { kind = "tent", cosmetic = true },
 	crafting_table = { kind = "crafting_table", station = "crafting_table" },
 	simple_forge = { kind = "forge", station = "simple_forge" },
+	-- Plantable from camp tier 1 onward (docs/CAMP_TIERS.md §7) —
+	-- deliberately early so cooking is testable well before endgame, not
+	-- gated behind the same tier as the tripod campfire dressing.
+	-- station == itemId, same convention as crafting_table/simple_forge
+	-- above (CraftUI.lua's station label assumes this to look up a
+	-- friendly name via Items.get(def.station)).
+	olla_campamento = { kind = "cauldron", station = "olla_campamento", minCampTier = 1 },
+
+	-- Cosmetics (docs/CAMP_TIERS.md §4): no station, `cosmetic = true` so
+	-- they count toward coziness (§3 — see the regen hook in start() below).
+	-- Gated by minCampTier same as the cauldron. This is a starter set, not
+	-- the full catalog from the doc (banner/watchtower/statue/garden are
+	-- future content, same "ships functional but not fully populated"
+	-- pattern as the cauldron's still-empty recipe list).
+	alfombra_campamento = { kind = "rug", cosmetic = true, minCampTier = 1 },
+	farol_campamento = { kind = "lantern", cosmetic = true, minCampTier = 1 },
+	trofeo_campamento = { kind = "trophy", cosmetic = true, minCampTier = 2 },
 }
 
 local CHEST_SPECS = {
@@ -106,6 +126,42 @@ local FORGE_SPECS = {
 	{ name = "Ember", size = Vector3.new(0.7, 0.5, 0.1), offset = Vector3.new(0, 0.6, 1.32), color = "gold" },
 	{ name = "Chimney", size = Vector3.new(0.7, 1.4, 0.7), offset = Vector3.new(0, 2.5, -0.4), color = "steelDark" },
 	{ name = "ChimneyCap", size = Vector3.new(0.9, 0.2, 0.9), offset = Vector3.new(0, 3.3, -0.4), color = "steel" },
+}
+
+-- Cooking station (docs/CAMP_TIERS.md §7) — iron tripod holding a pot over
+-- embers. Purely its own furniture piece, separate from the campfire
+-- dressing CampService draws at the zone's center (that one is cosmetic
+-- only, tier-scaled, and never has a cauldron baked into it — see
+-- CampService.CAMPFIRE_TIERS[2]).
+local CAULDRON_SPECS = {
+	{ name = "Base", shape = "Cylinder", size = Vector3.new(0.3, 1.4, 1.4), offset = Vector3.new(0, 0.15, 0), rot = Vector3.new(0, 0, 90), color = "stoneDark", primary = true },
+	{ name = "LegA", size = Vector3.new(0.15, 1.6, 0.15), offset = Vector3.new(0.7, 0.8, 0.5), rot = Vector3.new(0, 0, -15), color = "steelDark" },
+	{ name = "LegB", size = Vector3.new(0.15, 1.6, 0.15), offset = Vector3.new(-0.7, 0.8, 0.5), rot = Vector3.new(0, 0, 15), color = "steelDark" },
+	{ name = "LegC", size = Vector3.new(0.15, 1.6, 0.15), offset = Vector3.new(0, 0.8, -0.8), rot = Vector3.new(15, 0, 0), color = "steelDark" },
+	{ name = "Pot", shape = "Ball", size = Vector3.new(1.6, 1.1, 1.6), offset = Vector3.new(0, 1.7, 0), color = "steelDark" },
+	{ name = "Ember", size = Vector3.new(0.9, 0.3, 0.9), offset = Vector3.new(0, 0.32, 0), color = "gold" },
+}
+
+-- Cosmetics (docs/CAMP_TIERS.md §4) — purely decorative, no station, no
+-- gameplay function beyond feeding the coziness bonus (§3). Placeholder
+-- proportions like everything else in this file — a visual pass in Studio,
+-- not final art.
+local RUG_SPECS = {
+	{ name = "Base", size = Vector3.new(2.6, 0.1, 1.8), offset = Vector3.new(0, 0.05, 0), color = "ruby", canCollide = false, primary = true },
+	{ name = "Trim", size = Vector3.new(2.8, 0.06, 2), offset = Vector3.new(0, 0.02, 0), color = "leatherDark", canCollide = false },
+}
+
+local LANTERN_SPECS = {
+	{ name = "Post", size = Vector3.new(0.2, 2, 0.2), offset = Vector3.new(0, 1, 0), color = "trunkDark", primary = true },
+	{ name = "Hook", size = Vector3.new(0.5, 0.1, 0.1), offset = Vector3.new(0, 1.95, 0), color = "steelDark" },
+	{ name = "Ember", shape = "Ball", size = Vector3.new(0.5, 0.5, 0.5), offset = Vector3.new(0, 1.65, 0), color = "slime", canCollide = false },
+}
+
+local TROPHY_SPECS = {
+	{ name = "Plaque", size = Vector3.new(1.2, 1.6, 0.15), offset = Vector3.new(0, 0.8, 0), color = "trunk", primary = true },
+	{ name = "EarL", size = Vector3.new(0.5, 0.35, 0.1), offset = Vector3.new(-0.3, 1.15, 0.1), rot = Vector3.new(0, 0, 20), color = "goblin" },
+	{ name = "EarR", size = Vector3.new(0.5, 0.35, 0.1), offset = Vector3.new(0.3, 1.15, 0.1), rot = Vector3.new(0, 0, -20), color = "goblinDark" },
+	{ name = "Trim", size = Vector3.new(1.3, 0.15, 0.2), offset = Vector3.new(0, 0.1, 0.1), color = "gold" },
 }
 
 local furnitureFolder
@@ -328,9 +384,16 @@ local function buildPiece(kind, itemId, center, ownerId)
 		piece.model = model
 
 		attachManagePrompt(piece, model)
-	elseif kind == "crafting_table" or kind == "forge" then
-		local specs = kind == "crafting_table" and CRAFTING_TABLE_SPECS or FORGE_SPECS
-		local artName = kind == "crafting_table" and "MesaCrafteo" or "Forja"
+	elseif kind == "crafting_table" or kind == "forge" or kind == "cauldron" then
+		local specs = CRAFTING_TABLE_SPECS
+		local artName = "MesaCrafteo"
+		if kind == "forge" then
+			specs = FORGE_SPECS
+			artName = "Forja"
+		elseif kind == "cauldron" then
+			specs = CAULDRON_SPECS
+			artName = "Olla"
+		end
 		local model = ArtKit.build(artName, origin, specs)
 		model.Parent = furnitureFolder
 		piece.model = model
@@ -341,6 +404,32 @@ local function buildPiece(kind, itemId, center, ownerId)
 		-- doesn't distinguish the two).
 		piece.station = FURNITURE_DEFS[itemId].station
 		piece.stationHandle = CraftingService.registerStation(piece.station, model.PrimaryPart.Position)
+
+		attachManagePrompt(piece, model)
+	elseif kind == "rug" or kind == "lantern" or kind == "trophy" then
+		local specs = RUG_SPECS
+		local artName = "Alfombra"
+		if kind == "lantern" then
+			specs = LANTERN_SPECS
+			artName = "Farol"
+		elseif kind == "trophy" then
+			specs = TROPHY_SPECS
+			artName = "Trofeo"
+		end
+		local model = ArtKit.build(artName, origin, specs)
+		model.Parent = furnitureFolder
+		piece.model = model
+
+		if kind == "lantern" then
+			local ember = model:FindFirstChild("Ember")
+			if ember then
+				local light = Instance.new("PointLight")
+				light.Color = ArtKit.Palette.slime
+				light.Range = 12
+				light.Brightness = 1.5
+				light.Parent = ember
+			end
+		end
 
 		attachManagePrompt(piece, model)
 	end
@@ -427,6 +516,11 @@ local function handlePlaceFurniture(player, itemId, x, z)
 		return { ok = false, error = "no_camp" }
 	end
 
+	if def.minCampTier and (camp.tier or 0) < def.minCampTier then
+		notify(player, "Your camp needs a higher tier to place that.")
+		return { ok = false, error = "tier_too_low" }
+	end
+
 	local character = player.Character
 	local root = character and character:FindFirstChild("HumanoidRootPart")
 	if not root then
@@ -441,13 +535,38 @@ local function handlePlaceFurniture(player, itemId, x, z)
 		return { ok = false, error = "too_far" }
 	end
 
-	local half = CampService.ZONE_HALF
+	local half = camp.zoneHalf
 	if math.abs(x - camp.center.X) > half or math.abs(z - camp.center.Z) > half then
 		notify(player, "Furniture has to go inside the camp's zone.")
 		return { ok = false, error = "outside_zone" }
 	end
 
+	-- Reserved fire-pit radius (docs/CAMP_TIERS.md §6.1): sized to the
+	-- BIGGEST tier's campfire footprint and enforced from tier 0 onward, so
+	-- upgrading tiers later never clips/pushes a piece already sitting near
+	-- the fire — nothing could ever be planted there in the first place.
+	do
+		local dx, dz = x - camp.center.X, z - camp.center.Z
+		if math.sqrt(dx * dx + dz * dz) < CAMP.firePitRadius then
+			notify(player, "Too close to the campfire.")
+			return { ok = false, error = "too_close_to_fire" }
+		end
+	end
+
 	local pieces = piecesByCamp[camp.ownerUserId]
+
+	local maxFurniture = (CAMP.tiers[camp.tier] or CAMP.tiers[0]).maxFurniture
+	local currentCount = 0
+	if pieces then
+		for _ in pairs(pieces) do
+			currentCount += 1
+		end
+	end
+	if currentCount >= maxFurniture then
+		notify(player, "This camp can't hold any more furniture — upgrade its tier for more room.")
+		return { ok = false, error = "camp_full" }
+	end
+
 	if pieces then
 		for _, piece in pairs(pieces) do
 			local dx, dz = piece.center.X - x, piece.center.Z - z
@@ -534,10 +653,20 @@ local function handleMoveFurniture(player, pieceId, x, z)
 		return { ok = false, error = "too_far" }
 	end
 
-	local half = CampService.ZONE_HALF
+	local half = camp.zoneHalf
 	if math.abs(x - camp.center.X) > half or math.abs(z - camp.center.Z) > half then
 		notify(player, "Furniture has to go inside the camp's zone.")
 		return { ok = false, error = "outside_zone" }
+	end
+
+	-- Same reserved fire-pit radius as PlaceFurniture (docs/CAMP_TIERS.md
+	-- §6.1) — moving a piece into it is just as invalid as planting it there.
+	do
+		local dx, dz = x - camp.center.X, z - camp.center.Z
+		if math.sqrt(dx * dx + dz * dz) < CAMP.firePitRadius then
+			notify(player, "Too close to the campfire.")
+			return { ok = false, error = "too_close_to_fire" }
+		end
 	end
 
 	local pieces = piecesByCamp[ownerId]
@@ -685,6 +814,31 @@ local function handleChestWithdraw(player, chestId, localId)
 	return { ok = true, added = added }
 end
 
+-- Public: 0-1 ratio of how "cozy" ownerId's camp currently is right now —
+-- currently-planted cosmetic pieces (FURNITURE_DEFS[x].cosmetic, e.g. rug/
+-- lantern/trophy) versus the tier's cozinessTarget, capped at 1. Used by
+-- RestedService to scale how fast the Rested buff banks while resting in a
+-- decorated camp (docs/CAMP_TIERS.md §3) — this module stays the only place
+-- that iterates FURNITURE_DEFS/piecesByCamp, RestedService just asks for
+-- the number.
+function CampFurnitureService.cozinessRatio(ownerId)
+	local camp = CampService.getCamp(ownerId)
+	local tier = CAMP.tiers[camp and camp.tier or 0] or CAMP.tiers[0]
+	if (tier.cozinessTarget or 0) <= 0 then
+		return 0
+	end
+
+	local cosmeticCount = 0
+	for _, piece in pairs(piecesByCamp[ownerId] or {}) do
+		local def = FURNITURE_DEFS[piece.itemId]
+		if def and def.cosmetic then
+			cosmeticCount += 1
+		end
+	end
+
+	return math.min(cosmeticCount / tier.cozinessTarget, 1)
+end
+
 function CampFurnitureService.start()
 	notifyRemote = Remotes.get("Notify")
 	chestUpdatedRemote = Remotes.get("ChestUpdated")
@@ -722,6 +876,18 @@ function CampFurnitureService.start()
 	CampService.onPlace(function(ownerId, camp)
 		restoreLayout(ownerId, camp)
 	end)
+
+	-- Coziness (docs/CAMP_TIERS.md §3) used to grant extra HP regen directly
+	-- here — reworked: HP regen already has too many hands in the pot
+	-- (Cleric's Devotion passive, Brawler's synergy bonus, the generic
+	-- `regen` trait stat all feed the same HealthService.registerBonusRegen
+	-- hook), so a decoration-scaled regen bonus mostly just rewarded
+	-- whoever already stacked regen the hardest. Coziness now scales how
+	-- fast the "Rested" buff banks instead (see RestedService.lua) — a
+	-- different axis (gathering/XP, not combat regen) that doesn't compete
+	-- with any existing trait or passive. This module stays the only place
+	-- that counts furniture (see CampFurnitureService.cozinessRatio below);
+	-- RestedService just asks for the ratio.
 
 	-- Periodic safety net: the layout is always saved on teardown, but that
 	-- alone means an unexpected server restart mid-session loses anything
