@@ -30,6 +30,11 @@ local V = Vector3.new
 local EnemyService = {}
 
 local DEFAULT_REACH = Config.defaultReach -- fallback when a weapon def omits `reach`
+-- Damage aggro: getting hit locks the enemy onto its attacker (see dealDamage),
+-- even when they're beyond aggroRange (bow/spell openers), with a generous
+-- leash before it gives up the chase.
+local AGGRO_DURATION = 10 -- seconds the lock lasts after the last hit
+local AGGRO_LEASH_MULT = 3 -- × aggroRange chase leash while damage-aggroed
 local MISSILE_SPEED = 90 -- studs/second the magic missile travels
 local CRIT_CHANCE = Config.Combat.critChance
 local CRIT_MULTIPLIER = Config.Combat.critMultiplier
@@ -528,7 +533,9 @@ local function nearestPlayer(position, range)
 		local character = player.Character
 		local root = character and character:FindFirstChild("HumanoidRootPart")
 		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
-		if root and humanoid and humanoid.Health > 0 then
+		-- Downed players sit at 1 HP waiting for a revive; they're out of the
+		-- fight, so enemies drop them and look for someone else.
+		if root and humanoid and humanoid.Health > 0 and not HealthService.isDowned(player) then
 			local dist = (root.Position - position).Magnitude
 			if dist <= range and (not closestDist or dist < closestDist) then
 				closest, closestDist = player, dist
@@ -666,7 +673,8 @@ local function updateMarkBar(enemy, kind, remaining, total)
 	end
 end
 
--- Whether a player is a valid live chase target within `range` of `position`.
+-- Whether a player is a valid live chase target within `range` of `position`
+-- (downed players don't count — see nearestPlayer).
 local function playerInRange(player, position, range)
 	if not player or player.Parent == nil then
 		return false
@@ -677,6 +685,7 @@ local function playerInRange(player, position, range)
 	return root ~= nil
 		and humanoid ~= nil
 		and humanoid.Health > 0
+		and not HealthService.isDowned(player)
 		and (root.Position - position).Magnitude <= range
 end
 
@@ -699,6 +708,17 @@ local function updateEnemy(entry, dt)
 		end
 	else
 		enemy.tauntedBy, enemy.tauntedUntil = nil, nil
+	end
+	-- Damage aggro: chase whoever hit us last (set in dealDamage), even if
+	-- they're outside aggroRange.
+	if not target then
+		if enemy.aggroUntil and now < enemy.aggroUntil then
+			if playerInRange(enemy.aggroBy, enemy.part.Position, def.aggroRange * AGGRO_LEASH_MULT) then
+				target = enemy.aggroBy
+			end
+		else
+			enemy.aggroBy, enemy.aggroUntil = nil, nil
+		end
 	end
 	target = target or nearestPlayer(enemy.part.Position, def.aggroRange)
 
@@ -857,6 +877,11 @@ end
 dealDamage = function(entry, enemy, damage, killer, isCrit)
 	if not enemy or enemy.dead then
 		return
+	end
+	-- Every hit (re)locks the enemy onto the attacker — see updateEnemy.
+	if killer then
+		enemy.aggroBy = killer
+		enemy.aggroUntil = os.clock() + AGGRO_DURATION
 	end
 	-- Hunter's Mark: amplified damage from everyone while it lasts.
 	if enemy.markedUntil then

@@ -656,6 +656,13 @@ function HudUI.start()
 		slots[i] = makeSlot(bar, i, i < WEAPON_SLOTS, function()
 			activateSlot(i)
 		end)
+		-- Right-click opens the picker even on an occupied slot (left-click
+		-- casts/equips), so a bind can be replaced or removed.
+		if i >= WEAPON_SLOTS then
+			slots[i].button.MouseButton2Click:Connect(function()
+				togglePicker(i)
+			end)
+		end
 	end
 
 	-- ---- page switcher (three saved hotbar pages, cycled by clicking) ----
@@ -704,9 +711,10 @@ function HudUI.start()
 		HotbarBinds.cyclePage() -- fires changed → renderHotbar refreshes everything
 	end)
 
-	-- ---- empty-slot spell picker ----
-	-- Clicking an empty bind slot lists the known spells in a panel growing
-	-- upward from that slot; clicking a row binds it there.
+	-- ---- bind-slot spell picker ----
+	-- Clicking an empty bind slot — or right-clicking any bind slot — lists
+	-- the known spells in a panel growing upward from that slot; clicking a
+	-- row binds it there, and occupied slots get a "Remove" row that unbinds.
 	local pickerFrame, pickerSlot
 	local PICKER_ROW = 30
 	local PICKER_W = 190
@@ -725,15 +733,19 @@ function HudUI.start()
 		end
 		closePicker()
 		local ids = SpellsClient.list()
-		if #ids == 0 then
+		-- An occupied slot still opens (even spell-less) so its bind can be
+		-- removed from the same list.
+		local currentBind = HotbarBinds.get(i)
+		if #ids == 0 and currentBind == nil then
 			return
 		end
+		local rowCount = #ids + (currentBind ~= nil and 1 or 0)
 		local anchor = slots[i].button
 
 		local frame = Instance.new("Frame")
 		frame.AnchorPoint = Vector2.new(0, 1)
 		frame.Position = UDim2.new(0, anchor.AbsolutePosition.X, 0, anchor.AbsolutePosition.Y - 8)
-		frame.Size = UDim2.new(0, PICKER_W, 0, #ids * PICKER_ROW + 26)
+		frame.Size = UDim2.new(0, PICKER_W, 0, rowCount * PICKER_ROW + 26)
 		frame.BackgroundColor3 = Theme.Semantic.PanelTop
 		frame.BorderSizePixel = 0
 		frame.Parent = gui
@@ -790,6 +802,38 @@ function HudUI.start()
 
 			row.Activated:Connect(function()
 				HotbarBinds.set(i, Spells.toBind(spellId))
+				closePicker()
+			end)
+		end
+
+		-- Occupied slot: a last "Remove" row clears whatever is bound there.
+		if currentBind ~= nil then
+			local row = Instance.new("TextButton")
+			row.Size = UDim2.new(1, -8, 0, PICKER_ROW - 4)
+			row.Position = UDim2.new(0, 4, 0, 24 + #ids * PICKER_ROW)
+			row.BackgroundColor3 = Theme.Color.Ink650
+			row.AutoButtonColor = true
+			row.BorderSizePixel = 0
+			row.FontFace = Theme.Font.Body
+			row.TextSize = 13
+			row.TextColor3 = Theme.Semantic.TextBody
+			row.TextXAlignment = Enum.TextXAlignment.Left
+			row.Text = "    ✕  Remove"
+			row.Parent = frame
+
+			local rowCorner = Instance.new("UICorner")
+			rowCorner.CornerRadius = UDim.new(0, 4)
+			rowCorner.Parent = row
+
+			local accent = Instance.new("Frame")
+			accent.Size = UDim2.new(0, 3, 1, -8)
+			accent.Position = UDim2.new(0, 3, 0, 4)
+			accent.BackgroundColor3 = Theme.Semantic.Bad
+			accent.BorderSizePixel = 0
+			accent.Parent = row
+
+			row.Activated:Connect(function()
+				HotbarBinds.clear(i)
 				closePicker()
 			end)
 		end

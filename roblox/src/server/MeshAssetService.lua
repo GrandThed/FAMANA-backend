@@ -75,6 +75,24 @@ local function normalize(container, name)
 	return model
 end
 
+-- Rebases every part so the model's content sits upright, bottom-centered
+-- at the LOCAL origin (+ an optional yaw, degrees). The import pipeline
+-- leaves arbitrary orientations in the raw part CFrames — the world path's
+-- bounding-box placement corrects that implicitly, but items are pivoted on
+-- their Handle and welded raw into Tools, so the template itself must be
+-- canonical: thumbnails, held tools and grip heights all rely on it.
+local function canonicalize(model, yawDeg)
+	local bounds, size = model:GetBoundingBox()
+	local rebase = CFrame.Angles(0, math.rad(yawDeg or 0), 0)
+		* CFrame.new(0, size.Y / 2, 0)
+		* bounds:Inverse()
+	for _, p in ipairs(model:GetDescendants()) do
+		if p:IsA("BasePart") then
+			p.CFrame = rebase * p.CFrame
+		end
+	end
+end
+
 function MeshAssetService.get(key)
 	return templates[key]
 end
@@ -164,6 +182,7 @@ function MeshAssetService.start()
 
 	for itemId, def in pairs(MeshAssets.items) do
 		load(itemId, def, function(model)
+			canonicalize(model, def.yaw)
 			-- Held items get an invisible Handle at the grip height: ToolService
 			-- welds the mesh parts to it and the hand holds its center. Gear that
 			-- is never held (armor, rings) skips it — normalize's biggest-part
@@ -184,6 +203,7 @@ function MeshAssetService.start()
 	end
 	for key, def in pairs(MeshAssets.world) do
 		load(key, def, function(model)
+			canonicalize(model, 0)
 			templates[key] = model
 			model.Parent = worldFolder
 		end)

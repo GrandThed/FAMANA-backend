@@ -10,6 +10,7 @@ local BackendService = require(script.Parent.BackendService)
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Config = require(Shared:WaitForChild("Config"))
 local Items = require(Shared:WaitForChild("Items"))
+local Traits = require(Shared:WaitForChild("Traits"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local GridConfig = require(Shared:WaitForChild("GridConfig"))
 local Classes = require(Shared:WaitForChild("Classes"))
@@ -281,6 +282,20 @@ function PlayerService.moveItem(player, from, to)
 	local profile = cache[player.UserId]
 	if not profile or profile._temporary then
 		return false, "offline"
+	end
+	-- Level gate: gear above the active class level can sit in the grid (and
+	-- stays equipped-but-INERT through class swaps / rebirth), but can't be
+	-- NEWLY equipped. Equipment→equipment shuffles are already-worn pieces.
+	if to.containerId == "equipment" and from.containerId ~= "equipment" then
+		for _, entry in ipairs(profile.inventory) do
+			if entry.containerId == from.containerId and entry.x == from.x and entry.y == from.y then
+				local itemLevel = Traits.entryInfo(entry, Items.get(entry.itemId))
+				if itemLevel > (profile.level or 1) then
+					return false, "item_level"
+				end
+				break
+			end
+		end
 	end
 	local ok, inventory, errorCode = BackendService.moveItem(player.UserId, from, to)
 	if ok then

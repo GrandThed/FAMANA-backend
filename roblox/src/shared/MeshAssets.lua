@@ -15,16 +15,19 @@ local MeshAssets = {}
 -- (studs above the model's base) where the hand holds it; MeshAssetService
 -- adds an invisible Handle part there.
 MeshAssets.items = {
-	-- held weapons/tools (grip required: they become Tools)
+	-- held weapons/tools (grip required: they become Tools). `yaw` spins the
+	-- canonicalized template (degrees): the axes/picks arrive edge-to-+Z, and
+	-- a held Tool's forward (out of the fist, the swing direction) is -Z —
+	-- yaw 180 puts the cutting edge at the front.
 	sword_basic = { assetId = 127767149272624, grip = 0.7 },
 	sword_iron = { assetId = 97025410736955, grip = 0.7 },
 	sword_duelist = { assetId = 113061284197497, grip = 0.6 },
 	staff_basic = { assetId = 87600364107340, grip = 2.4 },
 	bow_basic = { assetId = 131363212695848, grip = 2.6 },
-	axe_basic = { assetId = 102257619570241, grip = 1.1 },
-	axe_copper = { assetId = 126935822934292, grip = 1.1 },
-	pickaxe_basic = { assetId = 71680183113559, grip = 1.1 },
-	pickaxe_copper = { assetId = 89911475912573, grip = 1.1 },
+	axe_basic = { assetId = 102257619570241, grip = 1.1, yaw = 180 },
+	axe_copper = { assetId = 126935822934292, grip = 1.1, yaw = 180 },
+	pickaxe_basic = { assetId = 71680183113559, grip = 1.1, yaw = 180 },
+	pickaxe_copper = { assetId = 89911475912573, grip = 1.1, yaw = 180 },
 	-- paper-doll gear (thumbnails, drops, item stands — never held)
 	helmet_leather = { assetId = 75707656342609 },
 	chest_leather = { assetId = 128783349712113 },

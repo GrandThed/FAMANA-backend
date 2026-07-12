@@ -165,6 +165,9 @@ arrows instead of magic orbs; public combat API for spells —
 `registerDamageTakenMult`/`registerCritChanceBonus`/`registerDodgeChance`
 hooks used by effects, subclass passives and traits (dodged hits pop
 "Dodge!" and skip on-hit effects);
+targeting is taunt > damage aggro > nearest-in-aggroRange — any hit locks
+the enemy onto its attacker for 10s with a 3× aggroRange leash (so ranged
+openers pull from afar), and downed players are never valid targets;
 stunned/slowed enemies show 💫/🐌 billboard marks with remaining-duration
 drain bars, slows scale walk speed and hop cadence) ·
 `DropService` (loot tables → ground drops + public
@@ -205,9 +208,10 @@ XP bar over the hotbar, an active-effects strip, and a
 quick binds from `HotbarBinds` — item binds equip Tools, spell binds
 (`spell:<id>`) cast via `CastSpell` and render a school-colored icon with a
 cooldown veil from the `SpellCd_<id>` attributes (grayed while the spell
-isn't currently known — its gear unequipped); clicking an empty bind slot opens a pick-list
-of known spells, and the three bind pages cycle via the button at the bar's
-right end or the `X` key; HUD effect rows drain a remaining-duration bar), `SpellTrackerUI` (TFT-style tracker
+isn't currently known — its gear unequipped); clicking an empty bind slot —
+or right-clicking any bind slot — opens a pick-list of known spells (occupied
+slots add a "Remove" row that unbinds), and the three bind pages cycle via
+the button at the bar's right end or the `X` key; HUD effect rows drain a remaining-duration bar), `SpellTrackerUI` (TFT-style tracker
 mounted by `InventoryUI` to the left of the paper doll — SpellTrackerUI.start(hostFrame)
 builds into whatever frame it's given, so it only exists (and is only
 visible) while the inventory is open; the tooltip still gets its own
@@ -226,9 +230,14 @@ races the persisted binds), `InventoryUI` (grid inventory screen, `B`
 key: SpellTrackerUI's trait tracker, equipment paper doll + effects panel,
 Sort/gold utilities bar over the scrollable 10×30 drag & drop grid — left to
 right; R rotates while
-dragging, drop previews green/red, hover + 3–0 quick-binds tools/consumables,
+dragging, drop previews green/red, hover + Q throws the item on the ground,
+hover + 3–0 quick-binds tools/consumables,
 hover + 1/2 equips a weapon/tool into weapon/offhand with the occupant
-swapped back to the first free grid spot),
+swapped back to the first free grid spot; tiles show "Lv N" top-right (red =
+above your class level) and gear above the active class level can't be newly
+equipped — gated in every client equip path and server-side in
+`PlayerService.moveItem` (`item_level`), while already-equipped pieces stay
+on through class swaps as INERT),
 `HotbarBinds` (bind registry shared by the UIs, in THREE swappable pages
 ({ active, pages } persisted with the profile — legacy flat maps migrate to
 page 1 on load); fresh profiles get axe/pickaxe seeded on keys 3/4 of

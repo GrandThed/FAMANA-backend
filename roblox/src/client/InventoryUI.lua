@@ -11,7 +11,8 @@
 --            10x30 item grid.
 -- Items span WxH cells (item def `size`); drag & drop moves them (R rotates
 -- while dragging, green/red highlight previews the drop). Hovering an item
--- and pressing 3–0 quick-binds tools/consumables to the hotbar (HotbarBinds);
+-- and pressing Q throws it on the ground (same verb as dragging it out);
+-- pressing 3–0 quick-binds tools/consumables to the hotbar (HotbarBinds);
 -- bound items show their key as a badge on the tile. Hovering equippable
 -- gear shows trait deltas vs the equipped counterpart in the tooltip
 -- (ItemTooltip's compareEntry). Shift-click equips into the first FREE
@@ -556,6 +557,14 @@ function InventoryUI.start()
 		return entry.containerId == ref.containerId and entry.x == ref.x and entry.y == ref.y
 	end
 
+	-- Level gate (mirrors PlayerService.moveItem): gear above the active class
+	-- level can be carried — and stays equipped-but-INERT through class swaps /
+	-- rebirth — but can't be NEWLY equipped. Returns (ok, itemLevel).
+	local function equipLevelOk(entry)
+		local itemLevel = Traits.entryInfo(entry, Items.get(entry.itemId))
+		return itemLevel <= (player:GetAttribute("Level") or 1), itemLevel
+	end
+
 	-- Client-side fit preview for the main grid (server still has final say).
 	local function canPlace(gx, gy, w, h, itemId)
 		if gx < 0 or gy < 0 or gx + w > GRID_W or gy + h > GRID_H then
@@ -691,6 +700,11 @@ function InventoryUI.start()
 		if not drag then
 			return
 		end
+		-- Already-equipped pieces may shuffle between slots even when inert.
+		local levelOk = drag.from.containerId == "equipment" or (equipLevelOk(drag.entry))
+		if not levelOk then
+			return
+		end
 		local def = Items.get(drag.itemId)
 		for slotName, slot in pairs(equipSlots) do
 			local isSource = slot.entry ~= nil and sameRef(slot.entry, drag.from)
@@ -781,6 +795,7 @@ function InventoryUI.start()
 				if pointIn(slot.frame, mouse.X, mouse.Y) then
 					local accepts = Items.slotAccepts(slotName, def)
 						and (slot.entry == nil or sameRef(slot.entry, drag.from))
+						and (drag.from.containerId == "equipment" or (equipLevelOk(drag.entry)))
 					slot.stroke.Color = accepts and COLORS.good or COLORS.bad
 					slot.stroke.Thickness = 3
 					if accepts then
@@ -878,6 +893,31 @@ function InventoryUI.start()
 		return nil
 	end
 
+	-- Throws the stack at `from` on the ground — the drag-out verb, shared
+	-- with the Q shortcut. Optimistic like moves: remove + render now, ask
+	-- the server in the background, revert only on rejection.
+	local function throwStack(from)
+		local snapshot = applyOptimisticDrop(from)
+		if not snapshot then
+			return
+		end
+		render(currentInventory)
+		local generationAtMove = serverGeneration
+		task.spawn(function()
+			local ok, result = false, nil
+			if dropItemRemote then
+				ok, result = pcall(function()
+					return dropItemRemote:InvokeServer(from)
+				end)
+			end
+			local accepted = ok and typeof(result) == "table" and result.ok == true
+			if not accepted and serverGeneration == generationAtMove then
+				currentInventory = snapshot
+				render(snapshot)
+			end
+		end)
+	end
+
 	local function endDrag(commit)
 		if not drag then
 			return
@@ -899,16 +939,15 @@ function InventoryUI.start()
 			return
 		end
 
+		if target.world == true then
+			throwStack(from)
+			return
+		end
+
 		-- Optimistic: apply and show the change now, ask the server in the
 		-- background, revert only on rejection (and only if no authoritative
 		-- update landed in the meantime).
-		local isWorldDrop = target.world == true
-		local snapshot
-		if isWorldDrop then
-			snapshot = applyOptimisticDrop(from)
-		else
-			snapshot = applyOptimisticMove(from, target)
-		end
+		local snapshot = applyOptimisticMove(from, target)
 		if not snapshot then
 			return
 		end
@@ -917,25 +956,19 @@ function InventoryUI.start()
 		-- Sonido en el mismo momento que el cambio optimista se ve en
 		-- pantalla, no cuando el server confirma (mismo criterio que el
 		-- resto de este archivo: se revierte solo si el server rechaza).
-		if not isWorldDrop then
-			if target.containerId == "equipment" then
-				Sfx.play("equip")
-			elseif from.containerId == "equipment" then
-				Sfx.play("unequip")
-			end
+		if target.containerId == "equipment" then
+			Sfx.play("equip")
+		elseif from.containerId == "equipment" then
+			Sfx.play("unequip")
 		end
 
 		local generationAtMove = serverGeneration
 
 		task.spawn(function()
-			local remote = isWorldDrop and dropItemRemote or moveItemRemote
 			local ok, result = false, nil
-			if remote then
+			if moveItemRemote then
 				ok, result = pcall(function()
-					if isWorldDrop then
-						return remote:InvokeServer(from)
-					end
-					return remote:InvokeServer(from, target)
+					return moveItemRemote:InvokeServer(from, target)
 				end)
 			end
 			local accepted = ok and typeof(result) == "table" and result.ok == true
@@ -953,6 +986,7 @@ function InventoryUI.start()
 		hideTooltip()
 		drag = {
 			itemId = entry.itemId,
+			entry = entry, -- the live entry (meta carries rolled itemLevel)
 			from = fromRef,
 			rotated = entry.rotated == true,
 			sourceObj = sourceObj,
@@ -1235,6 +1269,8 @@ function InventoryUI.start()
 			local label = bindKeyLabelFor(record.itemId)
 			record.badge.Text = label or ""
 			record.badge.Visible = label ~= nil
+			-- The level label shares the top-right corner: give the badge room.
+			record.levelLabel.Size = UDim2.new(1, label ~= nil and -24 or -6, 0, 12)
 		end
 	end
 
@@ -1297,6 +1333,16 @@ function InventoryUI.start()
 		badge.ZIndex = 5
 		record.badge = badge
 
+		-- Item level, top-right ("Lv 3"; red = above your class level, so it
+		-- can't be equipped yet). Slides left of the bind badge when both show
+		-- (refreshBindBadges keeps the margin in sync).
+		local levelLabel = makeLabel(tile, "", 11, COLORS.textDim)
+		levelLabel.Size = UDim2.new(1, -6, 0, 12)
+		levelLabel.Position = UDim2.new(0, 3, 0, 3)
+		levelLabel.TextXAlignment = Enum.TextXAlignment.Right
+		levelLabel.ZIndex = 5
+		record.levelLabel = levelLabel
+
 		-- Mini trait hexes, bottom-left (the qty label keeps bottom-right).
 		record.badgeRow = makeBadgeRow(tile, 5)
 
@@ -1334,7 +1380,25 @@ function InventoryUI.start()
 				if shiftHeld and not drag then
 					-- Shift-click: equip into a free accepting slot; occupied
 					-- (or not equippable) → do nothing, and never start a drag.
-					equipEntry(entryNow)
+					local def = Items.get(entryNow.itemId)
+					local slotIndex = def and shiftEquipSlot(def)
+					local levelOk, needLevel = equipLevelOk(entryNow)
+					if slotIndex and not levelOk then
+						hoverLabel.Text = ("Requires Lv %d"):format(needLevel)
+					elseif slotIndex and moveItemRemote then
+						hideTooltip()
+						task.spawn(function()
+							local ok, result = pcall(function()
+								return moveItemRemote:InvokeServer(
+									{ containerId = "main", x = entryNow.x, y = entryNow.y },
+									{ containerId = "equipment", x = slotIndex, y = 0 }
+								)
+							end)
+							if ok and typeof(result) == "table" and result.ok == true then
+								Sfx.play("equip")
+							end
+						end)
+					end
 					return
 				end
 				beginDrag(entryNow, { containerId = "main", x = entryNow.x, y = entryNow.y }, tile)
@@ -1362,6 +1426,10 @@ function InventoryUI.start()
 			record.glow.ImageColor3 = rarity.glowColor
 		end
 		fillTraitBadges(record.badgeRow, entry, def)
+		local itemLevel = Traits.entryInfo(entry, def)
+		record.levelLabel.Text = itemLevel > 0 and ("Lv %d"):format(itemLevel) or ""
+		record.levelLabel.TextColor3 = itemLevel > (player:GetAttribute("Level") or 1) and COLORS.bad
+			or COLORS.textDim
 	end
 
 	-- ---- rendering (diff) -----------------------------------------------------
@@ -1780,9 +1848,21 @@ function InventoryUI.start()
 				local def = Items.get(entry.itemId)
 				local slotName = Items.EQUIPMENT_SLOTS[equipSlotIndex + 1]
 				if def and Items.slotAccepts(slotName, def) then
-					task.spawn(equipFromGrid, entry, equipSlotIndex)
+					local levelOk, needLevel = equipLevelOk(entry)
+					if levelOk then
+						task.spawn(equipFromGrid, entry, equipSlotIndex)
+					else
+						hoverLabel.Text = ("Requires Lv %d"):format(needLevel)
+					end
 				end
 			end
+			return
+		end
+		-- Q over an item: throw it on the ground (same verb as dragging it out).
+		if input.KeyCode == Enum.KeyCode.Q and hovered and not drag then
+			local entry = hovered
+			hideTooltip()
+			throwStack({ containerId = entry.containerId, x = entry.x, y = entry.y })
 			return
 		end
 		local bindSlot = BIND_KEYS[input.KeyCode]
