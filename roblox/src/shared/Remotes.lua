@@ -5,6 +5,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
 
 local Remotes = {}
 
@@ -41,6 +42,22 @@ end
 
 function Remotes.getFunction(name)
 	return getInstance(name, "RemoteFunction")
+end
+
+-- Server-only: fires `name` to every player whose character is within
+-- `radius` studs of `position`, instead of a single player. Used for "world"
+-- SFX (weapon swings, hits, enemy deaths) so everyone standing nearby hears
+-- them too, not just whoever caused it — see Config.CombatSfxHearRadius.
+function Remotes.fireNearby(name, position, radius, ...)
+	assert(RunService:IsServer(), "Remotes.fireNearby is server-only")
+	local remote = Remotes.get(name)
+	for _, plr in ipairs(Players:GetPlayers()) do
+		local character = plr.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root and (root.Position - position).Magnitude <= radius then
+			remote:FireClient(plr, ...)
+		end
+	end
 end
 
 return Remotes

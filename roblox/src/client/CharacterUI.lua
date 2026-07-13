@@ -269,8 +269,13 @@ function CharacterUI.start()
 		addSection("Combat")
 		addRow("Attack Damage", tostring(player:GetAttribute("AttackDamage") or 0))
 		addRow("Ability Power", tostring(player:GetAttribute("AbilityPower") or 0))
-		addRow("Armor", tostring((player:GetAttribute("Armor") or 0) + (stats.armor or 0)))
-		addRow("Magic Resist", tostring((player:GetAttribute("MagicResist") or 0) + (stats.mr or 0)))
+		local armor = (player:GetAttribute("Armor") or 0) + (stats.armor or 0)
+		local mr = (player:GetAttribute("MagicResist") or 0) + (stats.mr or 0)
+		-- Mitigation %% alongside the raw stat — same curve enemies show in
+		-- EnemyInspectUI's stat card (Classes.mitigation), so "40 armor"
+		-- reads as "how much weaker incoming hits land", not an opaque number.
+		addRow("Armor", string.format("%d (-%d%%)", armor, math.floor(Classes.mitigation(armor) * 100 + 0.5)))
+		addRow("Magic Resist", string.format("%d (-%d%%)", mr, math.floor(Classes.mitigation(mr) * 100 + 0.5)))
 		addRow(
 			"Crit Chance",
 			string.format("%d%%", math.floor((player:GetAttribute("CritChance") or 0) * 100 + 0.5))

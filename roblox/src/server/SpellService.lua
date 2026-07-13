@@ -247,13 +247,13 @@ function BEHAVIORS.projectile(player, root, def)
 				and enemy.hp / enemy.maxHp <= def.executeBelowFraction then
 				damage = math.max(damage, enemy.hp)
 			end
-			EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+			EnemyService.dealSpellDamage(ref, damage, player, isCrit, def.damageKind)
 			if def.splashRadius and impactPos then
 				burst(impactPos, def.missile and def.missile.color or Color3.new(1, 1, 1), def.splashRadius)
 				local splash = math.max(1, math.floor(damage * (def.splashMult or 0.5) + 0.5))
 				for _, other in ipairs(EnemyService.enemiesNear(impactPos, def.splashRadius)) do
 					if other.enemy ~= ref.enemy then
-						EnemyService.dealSpellDamage(other, splash, player, false)
+						EnemyService.dealSpellDamage(other, splash, player, false, def.damageKind)
 					end
 				end
 			end
@@ -311,7 +311,7 @@ local function runZone(player, def, centerCF)
 				end
 				if inside then
 					if tick > 0 then
-						EnemyService.dealSpellDamage(ref, tick, player, false)
+						EnemyService.dealSpellDamage(ref, tick, player, false, def.damageKind)
 					end
 					if def.slow then
 						EnemyService.slow(ref, def.slow.duration, def.slow.mult, player)
@@ -408,7 +408,7 @@ function BEHAVIORS.delayedAoe(player, root, def)
 			burst(pos, def.color, def.radius, 0.6)
 			for _, target in ipairs(EnemyService.enemiesNear(pos, def.radius)) do
 				local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind, { baseMult = def.powerMult })
-				EnemyService.dealSpellDamage(target, damage, player, isCrit)
+				EnemyService.dealSpellDamage(target, damage, player, isCrit, def.damageKind)
 			end
 		end)
 	end
@@ -433,7 +433,7 @@ function BEHAVIORS.pullBurst(player, root, def)
 			burst(pos + Vector3.new(0, 2, 0), def.color, 6, 0.4)
 			for _, target in ipairs(refs) do
 				local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind, { baseMult = def.powerMult })
-				EnemyService.dealSpellDamage(target, damage, player, isCrit)
+				EnemyService.dealSpellDamage(target, damage, player, isCrit, def.damageKind)
 				if def.stunDuration then
 					EnemyService.stun(target, def.stunDuration, player)
 				end
@@ -451,7 +451,7 @@ function BEHAVIORS.strike(player, root, def)
 	end
 	return function()
 		local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
-		EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+		EnemyService.dealSpellDamage(ref, damage, player, isCrit, def.damageKind)
 		if def.stunDuration then
 			EnemyService.stun(ref, def.stunDuration, player)
 		end
@@ -503,7 +503,7 @@ function BEHAVIORS.aoe(player, root, def)
 		burst(root.Position, def.color or Color3.new(1, 1, 1), def.radius, 0.5)
 		for _, ref in ipairs(refs) do
 			local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
-			EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+			EnemyService.dealSpellDamage(ref, damage, player, isCrit, def.damageKind)
 			if def.stunDuration then
 				EnemyService.stun(ref, def.stunDuration, player)
 			end
@@ -726,7 +726,7 @@ function BEHAVIORS.line(player, root, def)
 			local lp = centerCF:PointToObjectSpace(ref.part.Position)
 			if math.abs(lp.X) <= halfWidth and math.abs(lp.Z) <= halfDepth then
 				local damage, isCrit = EnemyService.computePlayerDamage(player, def.damage, def.damageKind)
-				EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+				EnemyService.dealSpellDamage(ref, damage, player, isCrit, def.damageKind)
 			end
 		end
 		for _, ally in ipairs(alliesNear(centerCF.Position, searchRadius, nil)) do
@@ -1015,7 +1015,7 @@ local function updateFamiliars()
 					baseMult = empowered and (units.empowerMult or 2) or 1,
 				})
 				fireBolt(unit.part.Position, ref.part, { size = 0.5, color = unit.color, speed = 80 }, function()
-					EnemyService.dealSpellDamage(ref, damage, player, false)
+					EnemyService.dealSpellDamage(ref, damage, player, false, "magic")
 				end)
 			end
 		end

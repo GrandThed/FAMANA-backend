@@ -22,9 +22,24 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 local MAX_SIZE = Config.Party.maxSize
 local INVITE_TIMEOUT = Config.Party.inviteTimeout
 
+-- Colores por miembro, para que cualquier HUD (PartyMarkerUI, MarkerUI) pueda
+-- diferenciar de un vistazo quién es quién en el grupo. Se exponen como el
+-- attribute "PartyColor" — mismo mecanismo que PartyId/PartyLeader/PartyOpen,
+-- replica solo, sin remote nuevo. 8 colores > MAX_SIZE (6) de sobra.
+local COLOR_PALETTE = {
+	Color3.fromRGB(224, 76, 76), -- rojo
+	Color3.fromRGB(230, 156, 52), -- naranja
+	Color3.fromRGB(224, 200, 64), -- amarillo
+	Color3.fromRGB(72, 196, 184), -- cian
+	Color3.fromRGB(94, 150, 230), -- azul
+	Color3.fromRGB(172, 108, 224), -- violeta
+	Color3.fromRGB(232, 108, 176), -- rosa
+	Color3.fromRGB(140, 196, 84), -- lima
+}
+
 local PartyService = {}
 
--- [partyId] = { leader = userId, members = { [userId] = true }, open = bool }
+-- [partyId] = { leader = userId, members = { [userId] = true }, open = bool, colors = { [userId] = paletteIndex } }
 local parties = {}
 -- [userId] = partyId
 local playerParty = {}
@@ -59,6 +74,25 @@ local function memberIds(party)
 	return ids
 end
 
+-- Le da a `userId` el primer color de la paleta que ningún otro miembro
+-- ACTUAL de `party` esté usando (así dos compañeros nunca comparten color,
+-- aunque uno se haya ido y vuelto a entrar con otro índice). Si la party
+-- llegara a tener más miembros que colores (no debería, MAX_SIZE <= 8), cae
+-- a un hash estable por userId — se repite algún color, pero no rompe nada.
+local function assignColor(party, userId)
+	local used = {}
+	for _, index in pairs(party.colors) do
+		used[index] = true
+	end
+	for index = 1, #COLOR_PALETTE do
+		if not used[index] then
+			party.colors[userId] = index
+			return
+		end
+	end
+	party.colors[userId] = (userId % #COLOR_PALETTE) + 1
+end
+
 -- Re-applies PartyId/PartyLeader/PartyOpen to every currently-online member so
 -- clients never see a stale roster. Cheap: parties are at most 6 players.
 local function refreshAttributes(partyId)
@@ -72,6 +106,8 @@ local function refreshAttributes(partyId)
 			plr:SetAttribute("PartyId", partyId)
 			plr:SetAttribute("PartyLeader", party.leader == userId)
 			plr:SetAttribute("PartyOpen", party.open)
+			local colorIndex = party.colors[userId]
+			plr:SetAttribute("PartyColor", colorIndex and COLOR_PALETTE[colorIndex] or nil)
 		end
 	end
 end
@@ -80,6 +116,7 @@ local function clearAttributes(player)
 	player:SetAttribute("PartyId", nil)
 	player:SetAttribute("PartyLeader", nil)
 	player:SetAttribute("PartyOpen", nil)
+	player:SetAttribute("PartyColor", nil)
 end
 
 local function broadcast(party, message, exceptUserId)
@@ -103,6 +140,7 @@ local function removeMember(partyId, userId)
 
 	local wasLeader = party.leader == userId
 	party.members[userId] = nil
+	party.colors[userId] = nil
 	playerParty[userId] = nil
 
 	local removedPlayer = Players:GetPlayerByUserId(userId)
@@ -141,6 +179,17 @@ end
 
 function PartyService.getPartyId(player)
 	return playerParty[player.UserId]
+end
+
+-- Color3 asignado a `player` dentro de su party actual, o nil si no está en
+-- ninguna. Server-side no necesita esto (todo pasa por el attribute
+-- PartyColor, que ya replica solo) pero queda expuesto por si algún otro
+-- service lo necesita sin leer attributes.
+function PartyService.getPartyColor(player)
+	local partyId = playerParty[player.UserId]
+	local party = partyId and parties[partyId]
+	local index = party and party.colors[player.UserId]
+	return index and COLOR_PALETTE[index] or nil
 end
 
 function PartyService.isLeader(player)
@@ -207,8 +256,9 @@ function PartyService.invite(inviter, target)
 		-- Inviter has no party yet: form a new one, led by them.
 		partyId = nextPartyId
 		nextPartyId += 1
-		parties[partyId] = { leader = inviter.UserId, members = { [inviter.UserId] = true }, open = true }
+		parties[partyId] = { leader = inviter.UserId, members = { [inviter.UserId] = true }, open = true, colors = {} }
 		playerParty[inviter.UserId] = partyId
+		assignColor(parties[partyId], inviter.UserId)
 		refreshAttributes(partyId)
 	end
 
@@ -269,6 +319,7 @@ function PartyService.respond(target, fromUserId, accept)
 
 	party.members[target.UserId] = true
 	playerParty[target.UserId] = pending.partyId
+	assignColor(party, target.UserId)
 	refreshAttributes(pending.partyId)
 	broadcast(party, target.Name .. " joined the party.", target.UserId)
 	notify(target, "You joined " .. (inviter and inviter.Name or "the") .. "'s party.")
