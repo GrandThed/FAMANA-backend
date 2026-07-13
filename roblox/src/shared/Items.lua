@@ -278,22 +278,24 @@ Items.defs = {
 	arrow_fire = {
 		id = "arrow_fire",
 		name = "Fire Arrow",
-		flavor = "Pitch-wrapped and lit — sets the target ablaze on impact.",
+		flavor = "Pitch-wrapped and lit — hits softer, but sets the target ablaze.",
 		type = "ammo",
 		stackable = true,
 		maxStack = 99,
 		size = { 1, 1 },
+		damageMult = 0.75, -- 25% less impact damage than a plain arrow
 		-- Refreshing burn: reapplying just extends the timer, doesn't stack.
 		arrowEffect = { kind = "burn", damagePerTick = 3, interval = 1, duration = 4 },
 	},
 	arrow_poison = {
 		id = "arrow_poison",
 		name = "Poison Arrow",
-		flavor = "Tipped in slime toxin — repeated hits build up a nastier dose.",
+		flavor = "Tipped in slime toxin — hits softer, but repeated shots build up a nastier dose.",
 		type = "ammo",
 		stackable = true,
 		maxStack = 99,
 		size = { 1, 1 },
+		damageMult = 0.75, -- 25% less impact damage than a plain arrow
 		-- Stacking poison: each hit within the window adds a stack (up to
 		-- maxStacks), multiplying the per-tick damage.
 		arrowEffect = { kind = "poison", damagePerTick = 2, interval = 1, duration = 5, maxStacks = 5 },

@@ -1417,6 +1417,14 @@ local function onWeaponSwing(player, tool, def)
 		local arrowEffect = arrowDef and arrowDef.arrowEffect
 		local arrowColor = arrowEffect and ARROW_EFFECT_COLORS[arrowEffect.kind]
 
+		-- Special arrows hit softer on impact than a plain arrow — the
+		-- damageMult (shared/Items.lua, e.g. 0.75 = 25% less) is what they
+		-- trade away for their DoT, so picking one is a real choice and not
+		-- a strict upgrade.
+		if arrowDef and arrowDef.damageMult then
+			damage = math.max(1, math.floor(damage * arrowDef.damageMult + 0.5))
+		end
+
 		fireMissile(root.Position + Vector3.new(0, 2, 0), hitEnemy.part, function()
 			dealDamage(hitEntry, hitEnemy, damage, player, isCrit, damageKind)
 			applyLifesteal()
@@ -1434,6 +1442,9 @@ local function onWeaponSwing(player, tool, def)
 						return
 					end
 					local echoDamage, echoCrit = EnemyService.computePlayerDamage(player, def.damage or 10, damageKind)
+					if arrowDef and arrowDef.damageMult then
+						echoDamage = math.max(1, math.floor(echoDamage * arrowDef.damageMult + 0.5))
+					end
 					fireMissile(root.Position + Vector3.new(0, 2, 0), hitEnemy.part, function()
 						dealDamage(hitEntry, hitEnemy, echoDamage, player, echoCrit, damageKind)
 						local lifesteal = hookedLifesteal(player)

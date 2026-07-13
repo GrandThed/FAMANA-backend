@@ -379,7 +379,7 @@
     "arrow_fire": {
       "id": "arrow_fire",
       "name": "Fire Arrow",
-      "flavor": "Pitch-wrapped and lit — sets the target ablaze on impact.",
+      "flavor": "Pitch-wrapped and lit — hits softer, but sets the target ablaze.",
       "type": "ammo",
       "stackable": true,
       "maxStack": 99,
@@ -387,6 +387,7 @@
         1,
         1
       ],
+      "damageMult": 0.75,
       "arrowEffect": {
         "kind": "burn",
         "damagePerTick": 3,
@@ -397,7 +398,7 @@
     "arrow_poison": {
       "id": "arrow_poison",
       "name": "Poison Arrow",
-      "flavor": "Tipped in slime toxin — repeated hits build up a nastier dose.",
+      "flavor": "Tipped in slime toxin — hits softer, but repeated shots build up a nastier dose.",
       "type": "ammo",
       "stackable": true,
       "maxStack": 99,
@@ -405,6 +406,7 @@
         1,
         1
       ],
+      "damageMult": 0.75,
       "arrowEffect": {
         "kind": "poison",
         "damagePerTick": 2,
