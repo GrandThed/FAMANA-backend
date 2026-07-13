@@ -33,6 +33,7 @@ local SpellsClient = require(script.Parent.SpellsClient)
 local ClientState = require(script.Parent.ClientState)
 local Theme = require(script.Parent.Theme)
 local UIKit = require(script.Parent.UIKit)
+local ItemTooltip = require(script.Parent.ItemTooltip)
 
 local player = Players.LocalPlayer
 
@@ -253,9 +254,120 @@ local function makeEffectsPanel(parent)
 	end)
 end
 
+-- Lightweight hover card for spell-bound hotbar slots: name (school-tinted),
+-- mana cost, description. Item-bound slots reuse the full ItemTooltip card
+-- (same one InventoryUI/StoreUI show) since they already have an entry with
+-- rarity/traits/stats; spells have none of that, so this stays much simpler
+-- instead of stretching ItemTooltip to cover a shape it wasn't built for.
+local function makeSpellTooltip(gui)
+	local frame = Instance.new("Frame")
+	frame.BackgroundColor3 = Theme.Semantic.PanelTop
+	frame.BorderSizePixel = 0
+	frame.AutomaticSize = Enum.AutomaticSize.Y
+	frame.Size = UDim2.new(0, 200, 0, 0)
+	frame.Visible = false
+	frame.ZIndex = 60
+	frame.Parent = gui
+	UIKit.autoScale(frame)
+
+	local gradient = Instance.new("UIGradient")
+	gradient.Rotation = 90
+	gradient.Color = ColorSequence.new(Theme.Semantic.PanelTop, Theme.Semantic.PanelBot)
+	gradient.Parent = frame
+
+	local stroke = Instance.new("UIStroke")
+	stroke.Thickness = 1
+	stroke.Color = Theme.Semantic.BorderSlot
+	stroke.Parent = frame
+
+	local pad = Instance.new("UIPadding")
+	pad.PaddingTop = UDim.new(0, 8)
+	pad.PaddingBottom = UDim.new(0, 8)
+	pad.PaddingLeft = UDim.new(0, 10)
+	pad.PaddingRight = UDim.new(0, 10)
+	pad.Parent = frame
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 4)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = frame
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Size = UDim2.new(1, 0, 0, 18)
+	nameLabel.FontFace = Theme.Font.DisplayBold
+	nameLabel.TextSize = Theme.Text.Item
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.ZIndex = 61
+	nameLabel.LayoutOrder = 1
+	nameLabel.Parent = frame
+
+	local manaLabel = Instance.new("TextLabel")
+	manaLabel.BackgroundTransparency = 1
+	manaLabel.Size = UDim2.new(1, 0, 0, 14)
+	manaLabel.FontFace = Theme.Font.Body
+	manaLabel.TextSize = Theme.Text.Xs
+	manaLabel.TextColor3 = Theme.Semantic.TextMuted
+	manaLabel.TextXAlignment = Enum.TextXAlignment.Left
+	manaLabel.ZIndex = 61
+	manaLabel.LayoutOrder = 2
+	manaLabel.Parent = frame
+
+	local descLabel = Instance.new("TextLabel")
+	descLabel.BackgroundTransparency = 1
+	descLabel.Size = UDim2.new(1, 0, 0, 0)
+	descLabel.AutomaticSize = Enum.AutomaticSize.Y
+	descLabel.FontFace = Theme.Font.Body
+	descLabel.TextSize = Theme.Text.Sm
+	descLabel.TextColor3 = Theme.Semantic.TextBody
+	descLabel.TextXAlignment = Enum.TextXAlignment.Left
+	descLabel.TextWrapped = true
+	descLabel.ZIndex = 61
+	descLabel.LayoutOrder = 3
+	descLabel.Parent = frame
+
+	local mouse = player:GetMouse()
+	local hoverToken = 0
+	local handle = {}
+
+	function handle.hide()
+		hoverToken += 1
+		frame.Visible = false
+	end
+
+	-- `def` is a Spells def (name/school/manaCost/description).
+	function handle.schedule(def)
+		hoverToken += 1
+		local token = hoverToken
+		task.delay(ItemTooltip.DELAY, function()
+			if token ~= hoverToken then
+				return
+			end
+			local school = Spells.getSchool(def.school)
+			local accent = school and school.color or Theme.Semantic.TextHero
+			stroke.Color = accent
+			nameLabel.TextColor3 = accent
+			nameLabel.Text = def.name
+			manaLabel.Visible = def.manaCost ~= nil
+			manaLabel.Text = def.manaCost and ("Mana " .. def.manaCost) or ""
+			descLabel.Text = def.description or ""
+
+			local s = UIKit.scaleFactor()
+			local guiSize = gui.AbsoluteSize
+			frame.Position = UDim2.fromOffset(
+				math.min(mouse.X + 14, guiSize.X - 216 * s),
+				math.min(mouse.Y + 10, guiSize.Y - 160 * s)
+			)
+			frame.Visible = true
+		end)
+	end
+
+	return handle
+end
+
 -- Builds one hotbar socket (a button). Returns { set, setEquipped }.
 -- `reserved` marks the weapon slots (1/2) with a warmer socket tint.
-local function makeSlot(parent, order, reserved, onActivated)
+local function makeSlot(parent, order, reserved, onActivated, itemTooltip, spellTooltip)
 	local slot = Instance.new("TextButton")
 	slot.Size = UDim2.new(0, SLOT, 0, SLOT)
 	slot.LayoutOrder = order
@@ -358,9 +470,13 @@ local function makeSlot(parent, order, reserved, onActivated)
 	local isSpell = false
 	local spellDimmed = false -- spell belongs to a class we're not playing
 	local shownId = nil -- itemId / "spell:<id>" currently rendered
+	local shownEntry = nil -- full inventory entry behind an item slot, for the tooltip
+	local shownSpellDef = nil -- Spells def behind a spell slot, for the tooltip
 
-	local function set(itemId, quantity)
+	local function set(itemId, quantity, entry)
 		isSpell = false
+		shownSpellDef = nil
+		shownEntry = entry
 		spellIcon.Visible = false
 		cdVeil.Visible = false
 		cdText.Visible = false
@@ -398,6 +514,8 @@ local function makeSlot(parent, order, reserved, onActivated)
 		end
 		hasItem = false
 		isSpell = true
+		shownEntry = nil
+		shownSpellDef = def
 		spellDimmed = dimmed == true
 		name.Text = ""
 		qty.Text = ""
@@ -443,6 +561,20 @@ local function makeSlot(parent, order, reserved, onActivated)
 			stroke.Color = hasItem and Theme.Semantic.BorderDivider or baseStroke
 			stroke.Thickness = 1.5
 		end
+	end
+
+	if itemTooltip and spellTooltip then
+		slot.MouseEnter:Connect(function()
+			if isSpell and shownSpellDef then
+				spellTooltip.schedule(shownSpellDef)
+			elseif hasItem and shownEntry then
+				itemTooltip.schedule(shownEntry)
+			end
+		end)
+		slot.MouseLeave:Connect(function()
+			itemTooltip.hide()
+			spellTooltip.hide()
+		end)
 	end
 
 	return { set = set, setSpell = setSpell, setCooldown = setCooldown, setEquipped = setEquipped, button = slot }
@@ -651,11 +783,17 @@ function HudUI.start()
 		end
 	end
 
+	-- Hover tooltip for hotbar slots: full ItemTooltip card for item binds
+	-- (same one InventoryUI/StoreUI use), a lighter name+description card
+	-- for spell binds (see makeSpellTooltip above).
+	local hotbarItemTooltip = ItemTooltip.create(gui)
+	local hotbarSpellTooltip = makeSpellTooltip(gui)
+
 	local slots = {}
 	for i = 0, hotbarSize - 1 do
 		slots[i] = makeSlot(bar, i, i < WEAPON_SLOTS, function()
 			activateSlot(i)
-		end)
+		end, hotbarItemTooltip, hotbarSpellTooltip)
 		-- Right-click opens the picker even on an occupied slot (left-click
 		-- casts/equips), so a bind can be replaced or removed.
 		if i >= WEAPON_SLOTS then
@@ -879,7 +1017,7 @@ function HudUI.start()
 		for i = 0, WEAPON_SLOTS - 1 do
 			local entry = weaponEntries[i]
 			slotItem[i] = entry and entry.itemId or nil
-			slots[i].set(slotItem[i], entry and entry.quantity or nil)
+			slots[i].set(slotItem[i], entry and entry.quantity or nil, entry)
 		end
 
 		for i = WEAPON_SLOTS, hotbarSize - 1 do
@@ -906,7 +1044,7 @@ function HudUI.start()
 					HotbarBinds.clear(i)
 				end
 				slotItem[i] = entry and entry.itemId or nil
-				slots[i].set(slotItem[i], entry and entry.quantity or nil)
+				slots[i].set(slotItem[i], entry and entry.quantity or nil, entry)
 			end
 		end
 		refreshEquipped()

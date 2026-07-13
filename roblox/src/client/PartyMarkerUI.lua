@@ -9,7 +9,14 @@ local player = Players.LocalPlayer
 
 local PartyMarkerUI = {}
 
-local MARKER_COLOR = Color3.fromRGB(255, 221, 51) -- es el mismo color que el de "Clase" en el inventario, podríamos hacer que cada miembro tenga un color distinto
+local MARKER_COLOR = Color3.fromRGB(255, 221, 51) -- fallback si el attribute todavía no replicó
+
+-- Cada miembro tiene su propio Color3 asignado por PartyService (attribute
+-- "PartyColor", mismo que usa MarkerUI para los pings) — así se distinguen
+-- de un vistazo en vez de que todos compartan el mismo amarillo.
+local function colorFor(memberPlayer)
+	return memberPlayer:GetAttribute("PartyColor") or MARKER_COLOR
+end
 local DISTANCE_REFRESH = 0.25 -- segundos antes de que se actualice la distancia
 
 function PartyMarkerUI.start()
@@ -44,10 +51,12 @@ function PartyMarkerUI.start()
 	end
 
 	local function buildRow(memberPlayer)
+		local color = colorFor(memberPlayer)
+
 		local highlight = Instance.new("Highlight")
 		highlight.FillTransparency = 0.85
-		highlight.FillColor = MARKER_COLOR
-		highlight.OutlineColor = MARKER_COLOR
+		highlight.FillColor = color
+		highlight.OutlineColor = color
 		highlight.OutlineTransparency = 0.1
 		highlight.Enabled = true
 
@@ -63,7 +72,7 @@ function PartyMarkerUI.start()
 		nameLabel.Size = UDim2.new(1, 0, 0, 18)
 		nameLabel.Font = Enum.Font.GothamBold
 		nameLabel.TextSize = 15
-		nameLabel.TextColor3 = MARKER_COLOR
+		nameLabel.TextColor3 = color
 		nameLabel.TextStrokeTransparency = 0.2
 		nameLabel.Text = memberPlayer.Name
 		nameLabel.Parent = billboard

@@ -15,6 +15,10 @@ SwingRemote.Name = "SwingRemote"
 local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Items"))
 local ArtKit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ArtKit"))
 local ItemModels = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemModels"))
+local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+-- Aliased: `Remotes` above is already taken by the raw ReplicatedStorage
+-- folder this file hand-rolls instead of using the shared factory module.
+local RemotesModule = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local PlayerService = require(script.Parent.PlayerService)
 
 local ToolService = {}
@@ -91,8 +95,9 @@ local function playSwing(player, def)
 		return
 	end
 
-	-- Tell the activating client to play the animation locally (server-side
-	-- LoadAnimation is not visible to other clients).
+	-- Tell every nearby client to play the swing animation/sound locally
+	-- (server-side LoadAnimation is not visible to other clients) — not
+	-- just the activating player, so it's heard around them too.
 	local styleName = "slash"
 	if def.type == "tool" then
 		styleName = "chop"
@@ -105,7 +110,12 @@ local function playSwing(player, def)
 			styleName = "cast"
 		end
 	end
-	SwingRemote:FireClient(player, styleName)
+	local root = character:FindFirstChild("HumanoidRootPart")
+	if root then
+		RemotesModule.fireNearby("SwingRemote", root.Position, Config.CombatSfxHearRadius, styleName)
+	else
+		SwingRemote:FireClient(player, styleName)
+	end
 
 	-- Procedural grip-weld tween is cosmetic and fine to run on the server.
 	local weld = gripWeld(character)

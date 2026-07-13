@@ -53,6 +53,8 @@ return {
 			hpPerLevel = 0.15, -- +15% hp per level above 1
 			damagePerLevel = 0.10, -- +10% damage per level above 1
 			xpPerLevel = 0.20, -- +20% xp reward per level above 1
+			armorPerLevel = 0.12, -- +12% armor per level above 1
+			magicResistPerLevel = 0.12, -- +12% magic resist per level above 1
 		},
 	},
 
@@ -71,6 +73,13 @@ return {
 		inviteTimeout = 30, -- las invitaciones sn validas por 30 segs
 		xpShareRadius = 60, -- radio para compartir xp entre miembros de party
 	},
+
+	-- Sfx.lua no tiene sonido posicional (sin rolloff por distancia real),
+	-- así que el radio de "quién lo escucha" se controla acá: cualquier
+	-- jugador con su HumanoidRootPart a esta distancia o menos del origen
+	-- del sonido (swing, hit/crit, muerte de enemigo) lo recibe, no solo
+	-- quien lo generó. Mismo orden de magnitud que xpShareRadius arriba.
+	CombatSfxHearRadius = 60,
 
 	-- Acampada: zona segura + respawn craftable por el jugador (ver
 	-- shared/Recipes.lua y server/CampService.lua). Solo en memoria del
@@ -179,5 +188,12 @@ return {
 		minSpacing = 4, -- studs mínimos entre dos muebles del mismo campamento
 		chestColumns = 6, -- ancho de la grilla del cofre (mismo componente ItemGrid)
 		chestRows = 6,
+	},
+
+	-- Marcadores de ping (click medio sobre enemigo/loot/piso). En memoria
+	-- del server, un marcador activo por jugador — ver server/MarkerService.lua.
+	Markers = {
+		maxDistance = 150, -- distancia máxima jugador -> punto marcado (anti-exploit)
+		groundDuration = 12, -- segundos que dura un marcador de piso antes de expirar solo
 	},
 }

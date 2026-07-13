@@ -40,6 +40,8 @@ local CRIT_CHANCE = Config.Combat.critChance
 local CRIT_MULTIPLIER = Config.Combat.critMultiplier
 local HP_PER_LEVEL = Config.Combat.mobLevel.hpPerLevel
 local DAMAGE_PER_LEVEL = Config.Combat.mobLevel.damagePerLevel
+local ARMOR_PER_LEVEL = Config.Combat.mobLevel.armorPerLevel
+local MR_PER_LEVEL = Config.Combat.mobLevel.magicResistPerLevel
 local XP_PER_LEVEL = Config.Combat.mobLevel.xpPerLevel
 local XP_SHARE_RADIUS = Config.Party.xpShareRadius
 
@@ -76,6 +78,8 @@ local ENEMY_DEFS = {
 		name = "Slime",
 		hp = 30,
 		damage = 5,
+		armor = 5, -- squishy against weapons
+		magicResist = 15, -- but its gooey body shrugs off magic
 		minLevel = 1,
 		maxLevel = 3,
 		nightLevelBonus = 1, -- placeholder; added to the rolled level while it's night (see DayNightService)
@@ -111,6 +115,8 @@ local ENEMY_DEFS = {
 		name = "Goblin",
 		hp = 60,
 		damage = 10,
+		armor = 15, -- wears scraps of armor, tougher against weapons
+		magicResist = 5, -- has no answer for magic
 		minLevel = 2,
 		maxLevel = 5,
 		nightLevelBonus = 2, -- placeholder; goblins get meaner faster at night than slimes
@@ -401,6 +407,8 @@ local function buildEnemy(pos, def)
 	end
 	local maxHp = math.floor(def.hp * (1 + (level - 1) * HP_PER_LEVEL) + 0.5)
 	local damage = math.floor(def.damage * (1 + (level - 1) * DAMAGE_PER_LEVEL) + 0.5)
+	local armor = math.floor((def.armor or 0) * (1 + (level - 1) * ARMOR_PER_LEVEL) + 0.5)
+	local magicResist = math.floor((def.magicResist or 0) * (1 + (level - 1) * MR_PER_LEVEL) + 0.5)
 
 	local part = Instance.new("Part")
 	part.Name = def.name
@@ -414,6 +422,13 @@ local function buildEnemy(pos, def)
 	-- level (see client/EnemyLevelUI.lua), instead of everyone seeing the
 	-- same absolute-level color this file paints below as a placeholder.
 	part:SetAttribute("Level", level)
+	-- Exposed for EnemyInspectUI's click-to-inspect stat card — read-only
+	-- flavor info for the client, no gameplay logic depends on these being
+	-- attributes (the server always uses its own `enemy` table).
+	part:SetAttribute("MaxHp", maxHp)
+	part:SetAttribute("Damage", damage)
+	part:SetAttribute("Armor", armor)
+	part:SetAttribute("MagicResist", magicResist)
 
 	-- Style-A mesh visual when its template loaded: the body part stays the
 	-- physics/targeting object and goes invisible underneath it. Otherwise
@@ -516,6 +531,8 @@ local function buildEnemy(pos, def)
 		hp = maxHp,
 		maxHp = maxHp,
 		damage = damage,
+		armor = armor,
+		magicResist = magicResist,
 		level = level,
 		lastAttack = 0,
 		dead = false,
@@ -813,12 +830,12 @@ local function killEnemy(entry, enemy, killer)
 	enemy.part:Destroy()
 	entry.enemy = nil
 
-	-- Solo al killer, no a todos: el resto del audio de combate (swing,
-	-- hit/crit) ya es 2D-solo-para-el-atacante (Sfx.lua no tiene sonido
-	-- posicional todavía), así que un muerte "audible para todo el mundo"
-	-- desentonaría siendo la única excepción.
-	if killer and enemyDiedRemote then
-		enemyDiedRemote:FireClient(killer, lootSource)
+	-- Antes solo lo escuchaba el killer. Ahora, como el resto del audio de
+	-- combate (swing, hit/crit — ver ToolService/EnemyService abajo), llega
+	-- a cualquier jugador dentro de Config.CombatSfxHearRadius, aunque no
+	-- haya sido quien remató al enemigo.
+	if enemyDiedRemote then
+		Remotes.fireNearby("EnemyDied", position, Config.CombatSfxHearRadius, lootSource)
 	end
 
 	if killer and enemy.def.xpReward then
@@ -874,7 +891,12 @@ local function targetFor(player, root, reach)
 	return hitEntry, hitEnemy
 end
 
-dealDamage = function(entry, enemy, damage, killer, isCrit)
+-- damageKind ("melee" | "physical" | "magic"), when provided, picks which of
+-- the enemy's resist stats mitigates this hit — armor for melee/physical,
+-- magicResist for magic — using the same MOBA-style curve as player armor/MR
+-- (Classes.mitigation). Omitted (nil) for hits that intentionally bypass
+-- resistances (e.g. Retribution's reflect damage).
+dealDamage = function(entry, enemy, damage, killer, isCrit, damageKind)
 	if not enemy or enemy.dead then
 		return
 	end
@@ -882,6 +904,12 @@ dealDamage = function(entry, enemy, damage, killer, isCrit)
 	if killer then
 		enemy.aggroBy = killer
 		enemy.aggroUntil = os.clock() + AGGRO_DURATION
+	end
+	if damageKind then
+		local resist = damageKind == "magic" and enemy.magicResist or enemy.armor
+		if resist and resist > 0 then
+			damage = math.max(1, math.floor(damage * (1 - Classes.mitigation(resist)) + 0.5))
+		end
 	end
 	-- Hunter's Mark: amplified damage from everyone while it lasts.
 	if enemy.markedUntil then
@@ -953,9 +981,13 @@ function EnemyService.enemiesNear(position, radius)
 end
 
 -- Applies already-rolled damage (see computePlayerDamage) to a ref.
-function EnemyService.dealSpellDamage(ref, damage, player, isCrit)
+-- damageKind ("melee" | "physical" | "magic") picks the enemy's mitigating
+-- resist stat, same as dealDamage — pass the spell/weapon's own damageKind
+-- (def.damageKind) so zone/AoE hits mitigate correctly per-target even when
+-- the raw damage number was rolled once and applied to several enemies.
+function EnemyService.dealSpellDamage(ref, damage, player, isCrit, damageKind)
 	if ref and ref.enemy then
-		dealDamage(ref.entry, ref.enemy, damage, player, isCrit == true)
+		dealDamage(ref.entry, ref.enemy, damage, player, isCrit == true, damageKind)
 	end
 end
 
@@ -1166,7 +1198,7 @@ local function onWeaponSwing(player, tool, def)
 			return
 		end
 		fireMissile(root.Position + Vector3.new(0, 2, 0), hitEnemy.part, function()
-			dealDamage(hitEntry, hitEnemy, damage, player, isCrit)
+			dealDamage(hitEntry, hitEnemy, damage, player, isCrit, damageKind)
 			applyLifesteal()
 		end, damageKind)
 		-- Double Nock: a primed charge echoes the shot — a second arrow at the
@@ -1180,7 +1212,7 @@ local function onWeaponSwing(player, tool, def)
 					end
 					local echoDamage, echoCrit = EnemyService.computePlayerDamage(player, def.damage or 10, damageKind)
 					fireMissile(root.Position + Vector3.new(0, 2, 0), hitEnemy.part, function()
-						dealDamage(hitEntry, hitEnemy, echoDamage, player, echoCrit)
+						dealDamage(hitEntry, hitEnemy, echoDamage, player, echoCrit, damageKind)
 						local lifesteal = hookedLifesteal(player)
 						if lifesteal > 0 then
 							HealthService.heal(player, echoDamage * lifesteal)
@@ -1190,7 +1222,7 @@ local function onWeaponSwing(player, tool, def)
 			end
 		end
 	else
-		dealDamage(hitEntry, hitEnemy, damage, player, isCrit)
+		dealDamage(hitEntry, hitEnemy, damage, player, isCrit, damageKind)
 		applyLifesteal()
 	end
 end
