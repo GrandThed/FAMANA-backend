@@ -540,7 +540,7 @@ function InventoryUI.start()
 	local dragStepConn = nil
 	local serverGeneration = 0 -- bumps on every authoritative update (for reverts)
 
-	local moveItemRemote, sortRemote, dropItemRemote -- resolved async in the remotes block
+	local moveItemRemote, sortRemote, dropItemRemote, splitStackRemote -- resolved async in the remotes block
 
 	local render -- forward-declared: endDrag (optimistic apply) re-renders
 
@@ -1017,6 +1017,7 @@ function InventoryUI.start()
 		use = "Usar",
 		place = "Colocar",
 		consume = "Consumir",
+		split = "Dividir",
 		drop = "Soltar",
 		unequip = "Desequipar",
 	}
@@ -1028,16 +1029,24 @@ function InventoryUI.start()
 		if not def then
 			return { "drop" }
 		end
+		local actions
 		if def.type == "weapon" or def.type == "tool" or def.type == "armor" or def.type == "ring" then
-			return { "use", "drop" }
+			actions = { "use", "drop" }
+		elseif def.type == "placeable" then
+			actions = { "place", "drop" }
+		elseif def.type == "consumable" then
+			actions = { "consume", "drop" }
+		else
+			actions = { "drop" } -- resources/misc: nothing to use or equip
 		end
-		if def.type == "placeable" then
-			return { "place", "drop" }
+		-- "Dividir" solo tiene sentido para stacks de más de 1 (para tirar
+		-- una parte específica al piso y dejar el resto en el inventario).
+		-- Los items rolleados (meta) nunca llegan con quantity > 1, así que
+		-- ya quedan afuera por esta misma condición.
+		if def.stackable and (entry.quantity or 1) > 1 then
+			table.insert(actions, #actions, "split") -- justo antes de "Soltar"
 		end
-		if def.type == "consumable" then
-			return { "consume", "drop" }
-		end
-		return { "drop" } -- resources/misc: nothing to use or equip
+		return actions
 	end
 
 	-- Equip the entry into the first free accepting slot; does nothing if
@@ -1156,8 +1165,168 @@ function InventoryUI.start()
 		end)
 	end
 
-	local ACTION_HANDLERS =
-		{ use = equipEntrySwap, place = equipEntrySwap, consume = consumeEntry, drop = dropEntry, unequip = unequipEntry }
+	-- ---- split stack modal ("Dividir") ---------------------------------------
+	-- Quantity picker for stackable resources (baba de slime, madera, etc.):
+	-- separa una parte del stack en un casillero vacío nuevo del inventario,
+	-- sin tirar nada al piso — el jugador decide después, con el "Soltar" de
+	-- siempre, si quiere tirar esa parte (por ejemplo para dársela a otro
+	-- jugador) o no. El server elige el casillero libre y valida la
+	-- cantidad (ver inventory.js splitStack).
+	local splitModal = Instance.new("Frame")
+	splitModal.Name = "SplitStackModal"
+	splitModal.Size = UDim2.new(0, 260, 0, 190)
+	splitModal.Position = UDim2.new(0.5, 0, 0.5, 0)
+	splitModal.AnchorPoint = Vector2.new(0.5, 0.5)
+	splitModal.Visible = false
+	splitModal.ZIndex = 60
+	splitModal.Parent = gui
+	UIKit.stylePanel(splitModal)
+	UIKit.addShadow(splitModal)
+	UIKit.autoScale(splitModal)
+
+	local splitModalTitle = makeLabel(
+		splitModal,
+		"Dividir stack",
+		Theme.Text.Title,
+		Theme.Semantic.TextTitle,
+		Theme.Font.DisplayBold
+	)
+	splitModalTitle.Size = UDim2.new(1, -40, 0, 26)
+	splitModalTitle.Position = UDim2.new(0, 12, 0, 10)
+	splitModalTitle.ZIndex = 60
+
+	local splitModalClose = UIKit.closeButton(splitModal)
+	splitModalClose.Position = UDim2.new(1, -6, 0, 6)
+	splitModalClose.AnchorPoint = Vector2.new(1, 0)
+
+	local splitItemLabel = makeLabel(splitModal, "", Theme.Text.Sm, COLORS.textDim)
+	splitItemLabel.Size = UDim2.new(1, -24, 0, 18)
+	splitItemLabel.Position = UDim2.new(0, 12, 0, 40)
+	splitItemLabel.ZIndex = 60
+
+	-- fila del stepper: [-]  [ 12 ]  [+]
+	local splitStepMinus = UIKit.ghostButton(splitModal, "-")
+	splitStepMinus.Size = UDim2.new(0, 34, 0, 34)
+	splitStepMinus.Position = UDim2.new(0, 12, 0, 66)
+
+	local splitAmountBox = Instance.new("TextBox")
+	splitAmountBox.Name = "SplitAmountBox"
+	splitAmountBox.Size = UDim2.new(1, -152, 0, 34)
+	splitAmountBox.Position = UDim2.new(0, 54, 0, 66)
+	splitAmountBox.BackgroundColor3 = COLORS.section
+	splitAmountBox.BorderSizePixel = 0
+	splitAmountBox.FontFace = Theme.Font.BodyBold
+	splitAmountBox.TextSize = Theme.Text.Lg
+	splitAmountBox.TextColor3 = COLORS.text
+	splitAmountBox.TextXAlignment = Enum.TextXAlignment.Center
+	splitAmountBox.Text = "1"
+	splitAmountBox.ClearTextOnFocus = false
+	splitAmountBox.ZIndex = 60
+	splitAmountBox.Parent = splitModal
+
+	local splitStepPlus = UIKit.ghostButton(splitModal, "+")
+	splitStepPlus.Size = UDim2.new(0, 34, 0, 34)
+	splitStepPlus.Position = UDim2.new(1, -46, 0, 66)
+
+	local splitHalfBtn = UIKit.ghostButton(splitModal, "Mitad")
+	splitHalfBtn.Size = UDim2.new(0, 110, 0, 26)
+	splitHalfBtn.Position = UDim2.new(0, 12, 0, 108)
+	splitHalfBtn.TextSize = Theme.Text.Sm
+
+	local splitMaxBtn = UIKit.ghostButton(splitModal, "Máx")
+	splitMaxBtn.Size = UDim2.new(0, 110, 0, 26)
+	splitMaxBtn.Position = UDim2.new(1, -122, 0, 108)
+	splitMaxBtn.TextSize = Theme.Text.Sm
+
+	local splitConfirmBtn = UIKit.primaryButton(splitModal, "Dividir")
+	splitConfirmBtn.Size = UDim2.new(1, -24, 0, 32)
+	splitConfirmBtn.Position = UDim2.new(0, 12, 1, -42)
+
+	local splitTarget = nil -- inventory entry el modal está editando
+	local splitCap = 1 -- tope = quantity - 1 (dividir "todo" no es dividir nada, así que no se ofrece)
+
+	local function clampSplitAmount(n)
+		n = math.floor(tonumber(n) or 1)
+		return math.clamp(n, 1, math.max(splitCap, 1))
+	end
+
+	local function setSplitAmount(n)
+		splitAmountBox.Text = tostring(clampSplitAmount(n))
+	end
+
+	splitStepMinus.Activated:Connect(function()
+		setSplitAmount((tonumber(splitAmountBox.Text) or 1) - 1)
+	end)
+	splitStepPlus.Activated:Connect(function()
+		setSplitAmount((tonumber(splitAmountBox.Text) or 1) + 1)
+	end)
+	splitHalfBtn.Activated:Connect(function()
+		setSplitAmount(math.floor((splitCap + 1) / 2))
+	end)
+	splitMaxBtn.Activated:Connect(function()
+		setSplitAmount(splitCap)
+	end)
+	splitAmountBox.FocusLost:Connect(function()
+		setSplitAmount(splitAmountBox.Text)
+	end)
+
+	local function closeSplitModal()
+		splitModal.Visible = false
+		splitTarget = nil
+	end
+	splitModalClose.Activated:Connect(closeSplitModal)
+
+	-- Abre el picker para `entry` (siempre un stack apilable con quantity > 1
+	-- del grid principal — actionIdsFor solo ofrece "split" para esos).
+	local function openSplitModal(entry)
+		local def = Items.get(entry.itemId)
+		splitTarget = entry
+		local quantity = math.max(entry.quantity or 1, 1)
+		splitCap = math.max(quantity - 1, 1)
+		splitItemLabel.Text = (def and def.name or entry.itemId) .. " — tenés " .. tostring(quantity) .. "x"
+		setSplitAmount(math.max(1, math.floor(quantity / 2)))
+		splitModal.Visible = true
+	end
+
+	-- Divide `amount` de `entry` en un stack nuevo, en el primer casillero
+	-- libre del grid — el resto se queda donde estaba. A diferencia de
+	-- dropEntry/throwStack esto no es optimista: el server es quien decide
+	-- en qué casillero libre entra la parte nueva (no lo podemos adivinar
+	-- del lado del cliente sin arriesgarnos a un resultado distinto), así
+	-- que solo pedimos y esperamos el push de InventoryUpdated para
+	-- refrescar el grid — mismo patrón que usa el botón "Ordenar".
+	local function confirmSplit(entry, amount)
+		amount = clampSplitAmount(amount)
+		task.spawn(function()
+			if splitStackRemote then
+				pcall(function()
+					splitStackRemote:InvokeServer({
+						containerId = entry.containerId,
+						x = entry.x,
+						y = entry.y,
+					}, amount)
+				end)
+			end
+		end)
+	end
+
+	splitConfirmBtn.Activated:Connect(function()
+		if not splitTarget then
+			return
+		end
+		local entry, amount = splitTarget, tonumber(splitAmountBox.Text) or 1
+		closeSplitModal()
+		confirmSplit(entry, amount)
+	end)
+
+	local ACTION_HANDLERS = {
+		use = equipEntrySwap,
+		place = equipEntrySwap,
+		consume = consumeEntry,
+		split = openSplitModal,
+		drop = dropEntry,
+		unequip = unequipEntry,
+	}
 
 	local contextMenu = Instance.new("Frame")
 	contextMenu.Name = "ItemContextMenu"
@@ -1779,6 +1948,7 @@ function InventoryUI.start()
 			endDrag(false)
 			hideTooltip()
 			closeContextMenu()
+			closeSplitModal()
 		end
 		TweenService:Create(panel, SLIDE_TWEEN, { Position = isOpen and OPEN_POS or CLOSED_POS }):Play()
 	end
@@ -1890,6 +2060,7 @@ function InventoryUI.start()
 		moveItemRemote = Remotes.getFunction("MoveItem")
 		sortRemote = Remotes.getFunction("SortInventory")
 		dropItemRemote = Remotes.getFunction("DropItem")
+		splitStackRemote = Remotes.getFunction("SplitStack")
 
 		local inventoryUpdated = Remotes.get("InventoryUpdated")
 		inventoryUpdated.OnClientEvent:Connect(renderFromServer)

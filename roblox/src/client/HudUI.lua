@@ -531,11 +531,9 @@ local function makeSlot(parent, order, reserved, onActivated, itemTooltip, spell
 	end
 
 	-- fraction = remaining/cooldown (nil/0 hides the veil); manaOk dims the
-	-- icon when the next cast isn't affordable.
+	-- icon when the next cast isn't affordable. Used by both spell slots and
+	-- (for the swing cooldown) item slots — the veil itself doesn't care.
 	local function setCooldown(fraction, text, manaOk)
-		if not isSpell then
-			return
-		end
 		if fraction and fraction > 0 then
 			cdVeil.Visible = true
 			cdVeil.Size = UDim2.new(1, 0, math.clamp(fraction, 0, 1), 0)
@@ -563,6 +561,47 @@ local function makeSlot(parent, order, reserved, onActivated, itemTooltip, spell
 		end
 	end
 
+	-- Cast feedback: a quick bright flash on success, a red nudge (denied)
+	-- on rejection. Reads the slot's own stroke color as the flash's "home"
+	-- color so it settles back into whatever setSpell/setCooldown last set
+	-- (school color, dimmed gray, etc.) instead of hardcoding one.
+	local flashTween, shakeTween
+	local function pulse(ok)
+		if ok then
+			local home = stroke.Color
+			local homeThickness = stroke.Thickness
+			stroke.Color = Theme.Color.Gold400
+			stroke.Thickness = 3
+			if flashTween then
+				flashTween:Cancel()
+			end
+			flashTween = TweenService:Create(
+				stroke,
+				TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Color = home, Thickness = homeThickness }
+			)
+			flashTween:Play()
+		else
+			local home = stroke.Color
+			local homeThickness = stroke.Thickness
+			local homePos = slot.Position
+			if shakeTween then
+				shakeTween:Cancel()
+				slot.Position = homePos
+			end
+			stroke.Color = Theme.Semantic.Danger
+			stroke.Thickness = 3
+			TweenService:Create(
+				stroke,
+				TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{ Color = home, Thickness = homeThickness }
+			):Play()
+			local nudge = TweenInfo.new(0.06, Enum.EasingStyle.Linear, Enum.EasingDirection.Out, 3, true)
+			shakeTween = TweenService:Create(slot, nudge, { Position = homePos + UDim2.new(0, 3, 0, 0) })
+			shakeTween:Play()
+		end
+	end
+
 	if itemTooltip and spellTooltip then
 		slot.MouseEnter:Connect(function()
 			if isSpell and shownSpellDef then
@@ -577,7 +616,7 @@ local function makeSlot(parent, order, reserved, onActivated, itemTooltip, spell
 		end)
 	end
 
-	return { set = set, setSpell = setSpell, setCooldown = setCooldown, setEquipped = setEquipped, button = slot }
+	return { set = set, setSpell = setSpell, setCooldown = setCooldown, setEquipped = setEquipped, pulse = pulse, button = slot }
 end
 
 -- Finds the Tool for an item in the local player's Backpack/Character.
@@ -1060,8 +1099,9 @@ function HudUI.start()
 		renderHotbar(nil) -- known-spells set changed: (un)dim spell slots
 	end)
 
-	-- Cooldown sweep for spell slots: drains the veil from the SpellCd_<id>
-	-- attributes (server-clock expiries) and dims icons we can't afford.
+	-- Cooldown sweep for hotbar slots: drains the veil from server-clock
+	-- expiry attributes — SpellCd_<id> for spells (dims icons we can't
+	-- afford too), SwingCdExpiry/SwingCdDuration for the equipped weapon/tool.
 	task.spawn(function()
 		while true do
 			task.wait(0.1)
@@ -1080,6 +1120,33 @@ function HudUI.start()
 						slots[i].setCooldown(remaining / def.cooldown, text, manaOk)
 					else
 						slots[i].setCooldown(nil, nil, manaOk)
+					end
+				end
+			end
+
+			-- Swing/gather cooldown veil: unlike spells (one timer per spell
+			-- id), weapon and tool swings share ONE timer per player
+			-- (SwingCdExpiry/SwingCdDuration, set by ToolService.playSwing —
+			-- axes/pickaxes use their real, longer gather cooldown here, see
+			-- GatheringService's registerCooldownFor("tool", ...)). Shown on
+			-- whichever hotbar slot is the currently-equipped Tool, whether
+			-- that's one of the fixed weapon/offhand slots or a flexible
+			-- bind slot (axe/pickaxe usually live in the latter).
+			local swingExpiry = player:GetAttribute("SwingCdExpiry")
+			local swingDuration = player:GetAttribute("SwingCdDuration")
+			local swingRemaining = typeof(swingExpiry) == "number" and (swingExpiry - now) or 0
+			for i = 0, hotbarSize - 1 do
+				local value = slotItem[i]
+				-- Flexible slots (i >= WEAPON_SLOTS) can hold a spell bind
+				-- instead of an item — leave those alone, the spell block
+				-- above already owns their veil.
+				local isItemSlot = value ~= nil and (i < WEAPON_SLOTS or not Spells.fromBind(value))
+				if isItemSlot then
+					local _, isEquipped = findTool(value)
+					if isEquipped and swingRemaining > 0 and (swingDuration or 0) > 0 then
+						slots[i].setCooldown(swingRemaining / swingDuration, nil, true)
+					else
+						slots[i].setCooldown(nil, nil, true)
 					end
 				end
 			end
@@ -1165,6 +1232,19 @@ function HudUI.start()
 	-- ---- inventory → hotbar ----
 	task.spawn(function()
 		castSpellRemote = Remotes.get("CastSpell")
+
+		-- server/SpellService.tryCast fires this on every cast attempt (not
+		-- just the ones that land) — gold flash on success, red nudge on a
+		-- denied cast (cooldown/no mana/no target/etc.), whichever slot the
+		-- spell is currently bound to (a spell can only be bound once).
+		Remotes.get("SpellFeedback").OnClientEvent:Connect(function(spellId, ok)
+			for i = WEAPON_SLOTS, hotbarSize - 1 do
+				if slotItem[i] and Spells.fromBind(slotItem[i]) == spellId then
+					slots[i].pulse(ok)
+					break
+				end
+			end
+		end)
 
 		local inventoryUpdated = Remotes.get("InventoryUpdated")
 		inventoryUpdated.OnClientEvent:Connect(renderHotbar)

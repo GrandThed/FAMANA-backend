@@ -15,6 +15,13 @@
 -- owns every ingredient (PlayerService.getItemCount), removes them, then
 -- adds the result — refunding the ingredients back if the output can't fit
 -- (mirrors VendorService's buy-refund-on-no-space flow).
+--
+-- CraftItem also takes an optional `quantity` (how many times to run the
+-- recipe in one call, so the client can offer "craft 5" / "craft max"
+-- instead of one InvokeServer round-trip per item). Ingredient totals and
+-- the result are simply scaled by quantity — same all-or-nothing check,
+-- same refund-on-no-space — so a batch craft is exactly as atomic as a
+-- single one; it never partially succeeds.
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -33,6 +40,7 @@ local CraftingService = {}
 
 local STATION_RANGE = 16 -- studs; matches VendorService's MAX_TRADE_DISTANCE
 local PROXIMITY_INTERVAL = 1 -- seconds between nearby-station rechecks
+local MAX_CRAFT_QUANTITY = 99 -- hard ceiling on a single batch craft request
 
 -- { station, name, position, facing? (degrees yaw), build? }. Position is a
 -- placeholder spot near the vendor/stand cluster — move it once there's a
@@ -234,20 +242,29 @@ local function hookedDoubleCraftChance(player, recipeDef)
 	return sum
 end
 
-local function craftMessage(def)
-	local quantity = def.result.quantity
+local function craftMessage(def, quantity)
+	local totalQuantity = def.result.quantity * quantity
 	local resultDef = Items.get(def.result.itemId)
 	local label = resultDef and resultDef.name or def.result.itemId
-	if quantity > 1 then
-		label = quantity .. "x " .. label
+	if totalQuantity > 1 then
+		label = totalQuantity .. "x " .. label
 	end
 	return "Crafted " .. label
 end
 
-local function handleCraft(player, recipeId)
+local function handleCraft(player, recipeId, quantity)
 	if typeof(recipeId) ~= "string" then
 		return { ok = false, error = "bad_request" }
 	end
+	-- quantity is client-supplied and only ever used as a multiplier on the
+	-- same checks a single craft already does, so a bogus value just fails
+	-- those checks rather than needing separate validation.
+	quantity = typeof(quantity) == "number" and math.floor(quantity) or 1
+	if quantity < 1 or quantity ~= quantity then -- NaN guard
+		quantity = 1
+	end
+	quantity = math.min(quantity, MAX_CRAFT_QUANTITY)
+
 	local def = Recipes.get(recipeId)
 	if not def then
 		return { ok = false, error = "unknown_recipe" }
@@ -257,7 +274,7 @@ local function handleCraft(player, recipeId)
 	end
 
 	for _, ingredient in ipairs(def.ingredients) do
-		if PlayerService.getItemCount(player, ingredient.itemId) < ingredient.quantity then
+		if PlayerService.getItemCount(player, ingredient.itemId) < ingredient.quantity * quantity then
 			return { ok = false, error = "missing_materials" }
 		end
 	end
@@ -267,17 +284,18 @@ local function handleCraft(player, recipeId)
 	-- rare enough that the loop stops rather than trying to be atomic.
 	local removed = {}
 	for _, ingredient in ipairs(def.ingredients) do
-		if not PlayerService.removeItem(player, ingredient.itemId, ingredient.quantity) then
+		local needed = ingredient.quantity * quantity
+		if not PlayerService.removeItem(player, ingredient.itemId, needed) then
 			-- Refund whatever was already taken and bail.
 			for _, back in ipairs(removed) do
 				PlayerService.addItem(player, back.itemId, back.quantity)
 			end
 			return { ok = false, error = "missing_materials" }
 		end
-		table.insert(removed, ingredient)
+		table.insert(removed, { itemId = ingredient.itemId, quantity = needed })
 	end
 
-	local ok = PlayerService.addItem(player, def.result.itemId, def.result.quantity)
+	local ok = PlayerService.addItem(player, def.result.itemId, def.result.quantity * quantity)
 	if not ok then
 		for _, back in ipairs(removed) do
 			PlayerService.addItem(player, back.itemId, back.quantity)
@@ -286,18 +304,26 @@ local function handleCraft(player, recipeId)
 	end
 
 	if notifyRemote then
-		notifyRemote:FireClient(player, craftMessage(def))
+		notifyRemote:FireClient(player, craftMessage(def, quantity))
 	end
 
 	-- Double-craft roll (the Mage's brewing identity + future Alchemist
-	-- gear): a second copy of the output, free. Silent on no-space — the
-	-- paid-for craft already landed.
-	if math.random() < hookedDoubleCraftChance(player, def) then
-		if PlayerService.addItem(player, def.result.itemId, def.result.quantity) and notifyRemote then
-			notifyRemote:FireClient(player, "Double craft!")
+	-- gear): each unit in the batch gets its own independent roll, same
+	-- odds as if it had been crafted one at a time. Silent on no-space —
+	-- the paid-for craft already landed.
+	local bonusUnits = 0
+	local chance = hookedDoubleCraftChance(player, def)
+	for _ = 1, quantity do
+		if math.random() < chance then
+			bonusUnits += 1
 		end
 	end
-	return { ok = true }
+	if bonusUnits > 0 then
+		if PlayerService.addItem(player, def.result.itemId, def.result.quantity * bonusUnits) and notifyRemote then
+			notifyRemote:FireClient(player, bonusUnits > 1 and (bonusUnits .. "x Double craft!") or "Double craft!")
+		end
+	end
+	return { ok = true, crafted = quantity }
 end
 
 function CraftingService.start()

@@ -683,6 +683,13 @@ function GatheringService.start()
 	end
 
 	ToolService.registerActivated("tool", onToolSwing)
+	-- The animation/indicator cooldown for tools should be the REAL gather
+	-- cooldown, not the shorter generic combat swing cooldown — otherwise
+	-- the axe/pickaxe looks ready to go well before onToolSwing's own
+	-- GATHER_COOLDOWN check will actually let a gather through.
+	ToolService.registerCooldownFor("tool", function()
+		return GATHER_COOLDOWN
+	end)
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastGather[player.UserId] = nil
@@ -690,4 +697,3 @@ function GatheringService.start()
 end
 
 return GatheringService
-

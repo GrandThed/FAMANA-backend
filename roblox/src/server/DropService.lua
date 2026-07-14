@@ -16,6 +16,7 @@ local Items = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Ite
 local Traits = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Traits"))
 local Rarity = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Rarity"))
 local ItemModels = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("ItemModels"))
+local Loot = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Loot"))
 local Remotes = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Remotes"))
 local PlayerService = require(script.Parent.PlayerService)
 local EnemyService = require(script.Parent.EnemyService)
@@ -80,7 +81,7 @@ local GEAR_LOOT = {
 local MAX_ROLLED_LEVEL = 20
 
 local function rollGear(source, mobLevel)
-	local gear = GEAR_LOOT[source]
+	local gear = Loot.GEAR[source]
 	if not gear or math.random() > gear.chance then
 		return nil
 	end
@@ -217,7 +218,7 @@ local function hookedQuantityBonus(player)
 end
 
 local function rollLoot(source)
-	local lootTable = LOOT[source]
+	local lootTable = Loot.TABLE[source]
 	if not lootTable then
 		return {}
 	end

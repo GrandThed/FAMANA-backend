@@ -1,9 +1,14 @@
--- remarcador de party y distancia a los miembros de la party wachin
-
--- se crea un highlight y un billboard gui para cada miembro de la party, y se actualiza la distancia pero no a tiempo real
+-- remarcador de party wachin: un Highlight por miembro de la party que SOLO
+-- se ve cuando está tapado por una pared (ver checkLineOfSight). El nombre y
+-- la distancia del compañero ya los muestra PlayerNameplateUI (mismo
+-- nameplate que usa el resto de los jugadores, sin límite de distancia
+-- cuando sos party con esa persona) — antes este módulo también creaba un
+-- segundo BillboardGui con nombre + distancia, y quedaban dos nombres
+-- pisándose arriba de la cabeza; ahora eso vive en un solo lugar.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 
@@ -17,10 +22,11 @@ local MARKER_COLOR = Color3.fromRGB(255, 221, 51) -- fallback si el attribute to
 local function colorFor(memberPlayer)
 	return memberPlayer:GetAttribute("PartyColor") or MARKER_COLOR
 end
-local DISTANCE_REFRESH = 0.25 -- segundos antes de que se actualice la distancia
+
+local LOS_REFRESH = 0.15 -- segundos entre chequeos de línea de visión
 
 function PartyMarkerUI.start()
-	local rows = {} -- [userId] = { highlight, characterConn, billboard, distanceLabel }
+	local rows = {} -- [userId] = { highlight, characterConn }
 
 	local function destroyRow(userId)
 		local row = rows[userId]
@@ -33,21 +39,12 @@ function PartyMarkerUI.start()
 		if row.highlight then
 			row.highlight:Destroy()
 		end
-		if row.billboard then
-			row.billboard:Destroy()
-		end
 		rows[userId] = nil
 	end
 
 	local function attachTo(row, character)
-		local head = character:FindFirstChild("Head") or character:WaitForChild("HumanoidRootPart", 5)
-		if not head then
-			return
-		end
 		row.highlight.Adornee = character
 		row.highlight.Parent = character
-		row.billboard.Adornee = head
-		row.billboard.Parent = head
 	end
 
 	local function buildRow(memberPlayer)
@@ -58,37 +55,15 @@ function PartyMarkerUI.start()
 		highlight.FillColor = color
 		highlight.OutlineColor = color
 		highlight.OutlineTransparency = 0.1
-		highlight.Enabled = true
+		-- AlwaysOnTop = se dibuja atravesando paredes. Lo dejamos apagado por
+		-- default: solo lo prendemos (ver checkLineOfSight) cuando el
+		-- raycast detecta que el compañero está tapado por geometría, así
+		-- no genera ruido visual alrededor del player model cuando ya lo
+		-- estás viendo directamente.
+		highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+		highlight.Enabled = false
 
-		local billboard = Instance.new("BillboardGui")
-		billboard.Name = "PartyMarker"
-		billboard.Size = UDim2.new(0, 140, 0, 34)
-		billboard.StudsOffset = Vector3.new(0, 2.6, 0)
-		billboard.AlwaysOnTop = true -- con esto se muestra por encima de los objetos
-		billboard.MaxDistance = 0 -- 0 = no hay distancia maxima
-
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Size = UDim2.new(1, 0, 0, 18)
-		nameLabel.Font = Enum.Font.GothamBold
-		nameLabel.TextSize = 15
-		nameLabel.TextColor3 = color
-		nameLabel.TextStrokeTransparency = 0.2
-		nameLabel.Text = memberPlayer.Name
-		nameLabel.Parent = billboard
-
-		local distanceLabel = Instance.new("TextLabel")
-		distanceLabel.BackgroundTransparency = 1
-		distanceLabel.Size = UDim2.new(1, 0, 0, 14)
-		distanceLabel.Position = UDim2.new(0, 0, 0, 18)
-		distanceLabel.Font = Enum.Font.Gotham
-		distanceLabel.TextSize = 12
-		distanceLabel.TextColor3 = Color3.new(1, 1, 1)
-		distanceLabel.TextStrokeTransparency = 0.3
-		distanceLabel.Text = ""
-		distanceLabel.Parent = billboard
-
-		local row = { highlight = highlight, billboard = billboard, distanceLabel = distanceLabel }
+		local row = { highlight = highlight }
 
 		if memberPlayer.Character then
 			attachTo(row, memberPlayer.Character)
@@ -98,6 +73,22 @@ function PartyMarkerUI.start()
 		end)
 
 		rows[memberPlayer.UserId] = row
+	end
+
+	-- Tira un rayo desde mi HumanoidRootPart hasta el del compañero,
+	-- ignorando ambos characters. Si el rayo pega contra algo en el medio
+	-- (una pared, el terreno, etc.) quiere decir que está tapado -> ahí sí
+	-- prendemos el highlight (que atraviesa paredes por el DepthMode). Si
+	-- el rayo llega limpio, ya lo estás viendo directamente y apagamos el
+	-- highlight para no ensuciar la vista.
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+
+	local function checkLineOfSight(myRoot, theirRoot, myCharacter, theirCharacter)
+		raycastParams.FilterDescendantsInstances = { myCharacter, theirCharacter }
+		local direction = theirRoot.Position - myRoot.Position
+		local result = Workspace:Raycast(myRoot.Position, direction, raycastParams)
+		return result ~= nil -- true = hay algo en el medio -> está tapado
 	end
 
 	-- actualiza la lista de miembros de la party, agregando o eliminando los que entran o salen
@@ -144,16 +135,16 @@ function PartyMarkerUI.start()
 
 	refresh()
 
-	-- labes de distancia yippeeee
-	local accumulator = 0
+	local losAccumulator = 0
 	RunService.Heartbeat:Connect(function(dt)
-		accumulator += dt
-		if accumulator < DISTANCE_REFRESH then
+		losAccumulator += dt
+		if losAccumulator < LOS_REFRESH then
 			return
 		end
-		accumulator = 0
+		losAccumulator = 0
 
-		local myRoot = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+		local myCharacter = player.Character
+		local myRoot = myCharacter and myCharacter:FindFirstChild("HumanoidRootPart")
 		if not myRoot then
 			return
 		end
@@ -162,11 +153,11 @@ function PartyMarkerUI.start()
 			local memberPlayer = Players:GetPlayerByUserId(userId)
 			local character = memberPlayer and memberPlayer.Character
 			local theirRoot = character and character:FindFirstChild("HumanoidRootPart")
+
 			if theirRoot then
-				local studs = (theirRoot.Position - myRoot.Position).Magnitude
-				row.distanceLabel.Text = math.floor(studs + 0.5) .. "m"
+				row.highlight.Enabled = checkLineOfSight(myRoot, theirRoot, myCharacter, character)
 			else
-				row.distanceLabel.Text = ""
+				row.highlight.Enabled = false
 			end
 		end
 	end)

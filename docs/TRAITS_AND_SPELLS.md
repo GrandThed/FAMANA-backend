@@ -315,6 +315,18 @@ right mix of gear.
 - **Empty-slot spell picker** — clicking an empty hotbar slot pops a list of
   your known spells growing upward from that slot; clicking a row binds it
   there. Together with the tracker this covers rearranging/rebinding spells.
+- **Cast feedback (`SpellFeedback` remote + `SpellFeedbackSfx`)** —
+  `SpellService.tryCast` fires `SpellFeedback(spellId, ok)` to the caster on
+  *every* attempt, not just the ones that land: `true` right after mana/CD
+  are charged, `false` on any rejection (unknown/cooldown/no mana/no valid
+  target). `HudUI` flashes the bound slot's stroke gold on a hit or red +
+  a small shake on a miss; `SpellFeedbackSfx` plays the matching sound — one
+  cast sound per school (`spellCast_<schoolId>` in `Sfx.lua`, 12 total,
+  falling back to `spellCastDefault` for a school that doesn't have its own
+  entry yet) on a hit, one generic "denied" sound on any miss. Kept separate
+  from `warnPlayer`'s text toast, which is shared with unrelated systems and
+  rate-limited — a mashed cast should still get a "no" cue every time even
+  while the toast itself is cooling down.
 - **Auto-place on unlock** — a newly unlocked spell lands in the next free
   hotbar slot (page 1 first, then 2, then 3); on a fresh profile the whole
   known list is seeded in recommended order **into page 1**, right after the

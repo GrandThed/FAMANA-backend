@@ -12,6 +12,11 @@
 --     primeShot / primeFreeCast);
 --   * per-spell cooldowns, mirrored to the client as SpellCd_<id> player
 --     attributes holding the expiry on the server clock (like Effect_<id>);
+--   * cast feedback: every CastSpell attempt fires SpellFeedback(spellId, ok)
+--     to the caster — ok=true on an actual cast, false on any rejection
+--     (unknown/cooldown/no target/no mana). HudUI flashes the hotbar slot and
+--     SpellFeedbackSfx plays the sound; separate from the rate-limited
+--     warnPlayer() text toast so a mashed cast always gets a "no" cue;
 --   * subclass passives (+% damage / armor), fed into EnemyService's damage
 --     hooks so weapon swings benefit too;
 --   * summoned familiars (follow their owner, auto-attack nearby enemies).
@@ -41,6 +46,7 @@ local SpellService = {}
 local spellsChangedRemote -- RemoteEvent, resolved in start()
 local notifyRemote -- RemoteEvent, resolved in start()
 local dashRemote -- RemoteEvent, resolved in start() — client-side dash execution
+local spellFeedbackRemote -- RemoteEvent, resolved in start() — cast sound/flash cue (see feedback())
 
 -- [userId] = { set = {spellId=true}, list = {spellId} } (list is priority-sorted)
 local knownCache = {}
@@ -68,6 +74,15 @@ local function warnPlayer(player, message)
 	if notifyRemote and now - (lastWarn[player.UserId] or 0) >= WARN_COOLDOWN then
 		lastWarn[player.UserId] = now
 		notifyRemote:FireClient(player, message)
+	end
+end
+
+-- Cast sound/flash cue for the hotbar slot, separate from warnPlayer's text
+-- toast (which is shared with unrelated systems and rate-limited — a denied
+-- cast should still snap the slot every time, even mid-toast-cooldown).
+local function feedback(player, spellId, ok)
+	if spellFeedbackRemote then
+		spellFeedbackRemote:FireClient(player, spellId, ok)
 	end
 end
 
@@ -1034,6 +1049,7 @@ local function tryCast(player, spellId)
 	end
 	if not SpellService.isKnown(player, spellId) then
 		warnPlayer(player, "You don't know that spell yet")
+		feedback(player, spellId, false)
 		return
 	end
 
@@ -1050,7 +1066,8 @@ local function tryCast(player, spellId)
 		cooldowns[player.UserId] = userCds
 	end
 	if (userCds[spellId] or 0) > os.clock() then
-		return -- still cooling down; the hotbar overlay already shows it
+		feedback(player, spellId, false) -- still cooling down; the veil already shows it, but a mash still deserves a "no" cue
+		return
 	end
 
 	local behavior = BEHAVIORS[def.behavior]
@@ -1061,6 +1078,7 @@ local function tryCast(player, spellId)
 	local fire, reason = behavior(player, root, def)
 	if not fire then
 		warnPlayer(player, reason or "Couldn't cast that")
+		feedback(player, spellId, false)
 		return
 	end
 
@@ -1080,6 +1098,7 @@ local function tryCast(player, spellId)
 			end
 		elseif not ManaService.trySpend(player, manaCost) then
 			warnPlayer(player, "Not enough mana")
+			feedback(player, spellId, false)
 			return
 		end
 	end
@@ -1087,6 +1106,7 @@ local function tryCast(player, spellId)
 	userCds[spellId] = os.clock() + def.cooldown
 	player:SetAttribute(Spells.cdAttributeFor(spellId), Workspace:GetServerTimeNow() + def.cooldown)
 
+	feedback(player, spellId, true)
 	fire()
 end
 
@@ -1096,6 +1116,7 @@ function SpellService.start()
 	spellsChangedRemote = Remotes.get("SpellsChanged")
 	notifyRemote = Remotes.get("Notify")
 	dashRemote = Remotes.get("InnateDash")
+	spellFeedbackRemote = Remotes.get("SpellFeedback")
 
 	local castRemote = Remotes.get("CastSpell")
 	castRemote.OnServerEvent:Connect(tryCast)

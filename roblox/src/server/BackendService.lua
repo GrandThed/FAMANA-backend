@@ -136,6 +136,22 @@ function BackendService.dropItem(userId, ref)
 	return false, nil, nil, nil, nil
 end
 
+-- Split `quantity` off the stack at `ref` into a new stack at the first
+-- free grid spot (the "Dividir" action) — stays in the inventory, doesn't
+-- touch the ground. ref = { containerId, x, y }. Returns (ok,
+-- updatedInventory, errorCode).
+function BackendService.splitStack(userId, ref, quantity)
+	local ok, data = request(
+		"POST",
+		"/player/" .. tostring(userId) .. "/inventory/split",
+		{ containerId = ref.containerId, x = ref.x, y = ref.y, quantity = quantity }
+	)
+	if ok and data then
+		return true, data.inventory, nil
+	end
+	return false, nil, data and data.error or nil
+end
+
 -- Repack the main grid (the Sort button). Returns (ok, updatedInventory).
 function BackendService.sortInventory(userId)
 	-- Non-empty body so Fastify's JSON parser doesn't reject the POST.

@@ -5,6 +5,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
 
 -- RemoteEvent used to tell the client which swing style to animate.
 local Remotes = ReplicatedStorage:FindFirstChild("Remotes") or Instance.new("Folder", ReplicatedStorage)
@@ -44,7 +45,23 @@ function ToolService.registerSwingCooldownMult(fn)
 	swingCooldownMultFn = fn
 end
 
-local function swingCooldownFor(player)
+-- Optional per-item-type override, for item types whose REAL cooldown isn't
+-- the generic combat swing cooldown (e.g. gathering tools: GatheringService
+-- enforces its own longer GATHER_COOLDOWN). function(player) -> seconds.
+-- Registering one here makes the animation AND the client-side cooldown
+-- indicator match the actual rule instead of the 0.4s default — otherwise
+-- the swing looks "ready" well before the handler will actually do anything.
+local cooldownForType = {}
+
+function ToolService.registerCooldownFor(itemType, fn)
+	cooldownForType[itemType] = fn
+end
+
+local function swingCooldownFor(player, def)
+	local override = def and cooldownForType[def.type]
+	if override then
+		return override(player)
+	end
 	local mult = swingCooldownMultFn and swingCooldownMultFn(player) or 1
 	return SWING_COOLDOWN * mult
 end
@@ -83,12 +100,24 @@ local function gripWeld(character)
 	return hand and hand:FindFirstChild("RightGrip")
 end
 
+-- Returns true if the swing passed the debounce (and was actually played).
+-- This is the single source of truth for "did this Activated call count" —
+-- callers must gate any damage/gather handler on the return value, not just
+-- the cosmetic animation, or spam-clicking bypasses the cooldown entirely.
 local function playSwing(player, def)
 	local now = os.clock()
-	if now - (lastSwing[player.UserId] or 0) < swingCooldownFor(player) then
-		return
+	local cooldown = swingCooldownFor(player, def)
+	if now - (lastSwing[player.UserId] or 0) < cooldown then
+		return false
 	end
 	lastSwing[player.UserId] = now
+
+	-- Replicated so the client can draw a cooldown veil on the hotbar slot —
+	-- same pattern as SpellService's SpellCd_<id> attributes (server-clock
+	-- expiry + duration, since the effective cooldown varies with the Agile
+	-- Hands attack-speed trait).
+	player:SetAttribute("SwingCdExpiry", Workspace:GetServerTimeNow() + cooldown)
+	player:SetAttribute("SwingCdDuration", cooldown)
 
 	local character = player.Character
 	if not character then
@@ -128,6 +157,8 @@ local function playSwing(player, def)
 		)
 		tween:Play()
 	end
+
+	return true
 end
 
 -- Fallback looks for equippables without an ItemModels entry yet.
@@ -276,7 +307,13 @@ local function buildTool(player, itemId)
 	end
 
 	tool.Activated:Connect(function()
-		playSwing(player, def)
+		-- playSwing IS the debounce: if it returns false we're still inside
+		-- the cooldown window, so the handler (damage/gather) must not run
+		-- either — otherwise spam-clicking deals damage on every click even
+		-- though the animation is being throttled.
+		if not playSwing(player, def) then
+			return
+		end
 		local handler = ToolService.activatedHandlers[def.type]
 		if handler then
 			handler(player, tool, def)

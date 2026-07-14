@@ -334,6 +334,60 @@ export async function removeAt(client, playerId, ref) {
   return { itemId: source.itemId, quantity: source.quantity, meta: source.meta || undefined };
 }
 
+// Splits `quantity` off the stack at `ref` into a NEW stack at the first
+// free grid spot — the "Dividir" context-menu action. The original stack
+// stays right where it was with the remainder; nothing is thrown on the
+// ground (that's still the separate "Soltar" action / removeAt above, on
+// whichever of the two stacks the player picks afterwards).
+// `quantity` must be a positive integer STRICTLY less than the stack's
+// total (splitting off "everything" isn't a split, it's just the stack
+// where it already is — the client doesn't offer that). Rolled instances
+// (meta rows) can't be split — they're unique, there's nothing to divide.
+// Throws { code: 'bad_move' | 'not_found' | 'bad_quantity' | 'no_room' }.
+export async function splitStack(client, playerId, ref, quantity) {
+  if (!ref || ref.containerId !== "main" || !Number.isInteger(ref.x) || !Number.isInteger(ref.y)) {
+    throw err("bad position reference", "bad_move");
+  }
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw err("quantity must be a positive integer", "bad_quantity");
+  }
+
+  const rows = await loadRows(client, playerId);
+  const source = rows.find(
+    (r) => r.containerId === "main" && r.x === ref.x && r.y === ref.y
+  );
+  if (!source) {
+    throw err("no item at position", "not_found");
+  }
+  if (source.meta) {
+    throw err("rolled items can't be split", "bad_quantity");
+  }
+  const def = getItem(source.itemId);
+  if (!def || !def.stackable || quantity >= source.quantity) {
+    throw err("quantity must be less than the stack", "bad_quantity");
+  }
+
+  // The source keeps occupying its own footprint (it isn't moving, only
+  // shrinking) — occupancy from ALL current rows is exactly what a new,
+  // separate stack needs to avoid landing on top of anything.
+  const occ = makeOccupancy(rows);
+  const spot = findSpot(occ, source.itemId);
+  if (!spot) {
+    throw err("no room to split", "no_room");
+  }
+
+  await client.query(
+    `UPDATE inventory_items SET quantity = quantity - $1 WHERE id = $2`,
+    [quantity, source.id]
+  );
+  await client.query(
+    `INSERT INTO inventory_items (player_id, container_id, x, y, rotated, item_id, quantity, meta)
+     VALUES ($1, 'main', $2, $3, $4, $5, $6, NULL)`,
+    [playerId, spot.x, spot.y, spot.rotated, source.itemId, quantity]
+  );
+  return { split: true };
+}
+
 // Moves the stack at `from` to `to` (the drag & drop verb). Handles main-grid
 // moves (with rotation), equip/unequip (slot compatibility validated), and
 // merging when dropped onto a same-item stack.

@@ -24,6 +24,26 @@ local SOUNDS = {
 	swingMelee = { id = "rbxassetid://135315310485417", volume = 0.45 }, 
 	swingRanged = { id = "rbxassetid://123925235254965", volume = 0.5 },
 	swingMagic = { id = "rbxassetid://81276928984693", volume = 0.5 }, 
+	-- Cast de habilidad, UNO POR ESCUELA (las 12 de shared/Spells.lua) — la
+	-- clave es "spellCast_<schoolId>", armada dinámicamente en
+	-- SpellFeedbackSfx.lua a partir de def.school, así que una escuela
+	-- nueva solo necesita una entrada acá con su id (nada que tocar en el
+	-- código). spellCastDefault cubre el hueco mientras esa entrada no
+	-- exista todavía.
+	spellCast_pyromancer = { id = "rbxassetid://9125817786", volume = 0.55 },
+	spellCast_arcanist = { id = "rbxassetid://9114234512", volume = 0.5 },
+	spellCast_invoker = { id = "rbxassetid://9114234890", volume = 0.5 },
+	spellCast_berserker = { id = "rbxassetid://9114233671", volume = 0.55 },
+	spellCast_sentinel = { id = "rbxassetid://9114235102", volume = 0.5 },
+	spellCast_justicar = { id = "rbxassetid://9114235344", volume = 0.55 },
+	spellCast_sniper = { id = "rbxassetid://9114233417", volume = 0.5 },
+	spellCast_trapper = { id = "rbxassetid://9114235587", volume = 0.5 },
+	spellCast_scout = { id = "rbxassetid://9114235801", volume = 0.45 },
+	spellCast_light_priest = { id = "rbxassetid://9114233983", volume = 0.55 },
+	spellCast_holy_avenger = { id = "rbxassetid://9114236044", volume = 0.55 },
+	spellCast_oracle = { id = "rbxassetid://9114236277", volume = 0.5 },
+	spellCastDefault = { id = "rbxassetid://9125817786", volume = 0.55 }, -- fallback: escuela sin sonido propio todavía
+	spellDenied = { id = "rbxassetid://9125881137", volume = 0.4 }, -- "no" seco: sin maná/en cooldown/sin objetivo
 	hurt = { id = "rbxassetid://1471213022", volume = 0.55 },
 	hit = { id = "rbxassetid://139520673393967", volume = 0.5 },
 	critHit = { id = "rbxassetid://137392628136734", volume = 0.65 },
@@ -66,6 +86,13 @@ function Sfx.play(name)
 	end
 	sound.TimePosition = 0
 	sound:Play()
+end
+
+-- Para callers que arman el nombre dinámicamente (p. ej. SpellFeedbackSfx
+-- resolviendo "spellCast_<school>") y necesitan un fallback si todavía no
+-- se registró un sonido para esa clave puntual.
+function Sfx.exists(name)
+	return SOUNDS[name] ~= nil
 end
 
 -- Igual que Sfx.play, pero con un piso de tiempo entre dos reproducciones

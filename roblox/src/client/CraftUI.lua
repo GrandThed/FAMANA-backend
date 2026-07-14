@@ -150,6 +150,7 @@ function CraftUI.start()
 	local inventory = {}
 	local nearby = {} -- set of station ids currently in range, from the attribute
 	local selected = Recipes.list()[1] and Recipes.list()[1].id
+	local quantity = 1 -- how many of `selected` to craft on next click; reset per-selection
 
 	local craftItem = Remotes.getFunction("CraftItem")
 
@@ -169,24 +170,39 @@ function CraftUI.start()
 		return def.station == nil or nearby[def.station] == true
 	end
 
-	local function canAfford(def)
+	local function canAfford(def, qty)
+		qty = qty or 1
 		for _, ingredient in ipairs(def.ingredients) do
-			if countOwned(ingredient.itemId) < ingredient.quantity then
+			if countOwned(ingredient.itemId) < ingredient.quantity * qty then
 				return false
 			end
 		end
 		return true
 	end
 
+	-- Highest quantity of `def` craftable right now given owned materials
+	-- (ignores station distance / inventory space, both re-checked server-side).
+	local function maxCraftable(def)
+		local max = math.huge
+		for _, ingredient in ipairs(def.ingredients) do
+			local owned = countOwned(ingredient.itemId)
+			max = math.min(max, math.floor(owned / ingredient.quantity))
+		end
+		if max == math.huge then
+			max = 0
+		end
+		return max
+	end
+
 	local refresh -- forward declaration
 
-	local function doCraft(recipeId)
+	local function doCraft(recipeId, qty)
 		if busy then
 			return
 		end
 		busy = true
 		statusLabel.Text = ""
-		local result = craftItem:InvokeServer(recipeId)
+		local result = craftItem:InvokeServer(recipeId, qty)
 		busy = false
 		if typeof(result) ~= "table" or not result.ok then
 			local code = typeof(result) == "table" and result.error or nil
@@ -215,6 +231,9 @@ function CraftUI.start()
 			hint.Position = UDim2.new(0, 12, 0, 8)
 			return
 		end
+
+		local maxQty = math.max(1, maxCraftable(def))
+		quantity = math.clamp(quantity, 1, maxQty)
 
 		local resultDef = Items.get(def.result.itemId)
 		local rarity = Rarity.forDef(resultDef)
@@ -257,13 +276,16 @@ function CraftUI.start()
 		stationLabel.Size = UDim2.new(1, -24, 0, 16)
 		stationLabel.Position = UDim2.new(0, 12, 0, 150)
 
+		-- Ingredient costs scale with the currently selected batch quantity,
+		-- so "5/3" style shortfalls are visible before the player commits.
 		local y = 174
 		for _, ingredient in ipairs(def.ingredients) do
 			local owned = countOwned(ingredient.itemId)
-			local have = owned >= ingredient.quantity
+			local needed = ingredient.quantity * quantity
+			local have = owned >= needed
 			local ingredientDef = Items.get(ingredient.itemId)
 			local label = detailText(
-				("%s  %d/%d"):format(ingredientDef and ingredientDef.name or ingredient.itemId, owned, ingredient.quantity),
+				("%s  %d/%d"):format(ingredientDef and ingredientDef.name or ingredient.itemId, owned, needed),
 				Theme.Text.Sm,
 				have and COLORS.good or COLORS.bad,
 				Theme.Font.Body
@@ -273,13 +295,90 @@ function CraftUI.start()
 			y += 20
 		end
 
+		-- ---- batch quantity stepper --------------------------------------
+		-- Sits pinned above the action button (not flowed under the
+		-- ingredient list) so its position doesn't jump around as recipes
+		-- with different ingredient counts get selected.
+		local stepper = Instance.new("Frame")
+		stepper.BackgroundTransparency = 1
+		stepper.Size = UDim2.new(1, -24, 0, 28)
+		stepper.Position = UDim2.new(0, 12, 1, -54)
+		stepper.AnchorPoint = Vector2.new(0, 1)
+		stepper.Parent = detail
+
+		local function stepButton(text, xOffset)
+			local btn = Instance.new("TextButton")
+			btn.Text = text
+			btn.Size = UDim2.new(0, 28, 0, 28)
+			btn.Position = UDim2.new(0, xOffset, 0, 0)
+			btn.BackgroundColor3 = Theme.Color.Ink700
+			btn.BackgroundTransparency = 0.4
+			btn.BorderSizePixel = 0
+			btn.AutoButtonColor = false
+			btn.FontFace = Theme.Font.BodyBold
+			btn.TextSize = Theme.Text.Sm
+			btn.TextColor3 = COLORS.text
+			btn.Parent = stepper
+			local stroke = Instance.new("UIStroke")
+			stroke.Thickness = 1
+			stroke.Color = COLORS.line
+			stroke.Parent = btn
+			UIKit.hover(btn, Theme.Color.Ink700, Theme.Color.Ink650)
+			return btn
+		end
+
+		local minusBtn = stepButton("-", 0)
+		local qtyLabel = detailText(quantity .. " / " .. maxQty, Theme.Text.Sm, COLORS.text, Theme.Font.BodyBold)
+		qtyLabel.Size = UDim2.new(0, 70, 0, 28)
+		qtyLabel.Position = UDim2.new(0, 34, 0, 0)
+		qtyLabel.TextXAlignment = Enum.TextXAlignment.Center
+		qtyLabel.Parent = stepper
+		local plusBtn = stepButton("+", 106)
+
+		local maxBtn = Instance.new("TextButton")
+		maxBtn.Text = "Max"
+		maxBtn.Size = UDim2.new(0, 56, 0, 28)
+		maxBtn.Position = UDim2.new(1, -56, 0, 0)
+		maxBtn.BackgroundColor3 = Theme.Color.Ink700
+		maxBtn.BackgroundTransparency = 0.4
+		maxBtn.BorderSizePixel = 0
+		maxBtn.AutoButtonColor = false
+		maxBtn.FontFace = Theme.Font.BodyBold
+		maxBtn.TextSize = Theme.Text.Sm
+		maxBtn.TextColor3 = COLORS.text
+		maxBtn.Parent = stepper
+		local maxStroke = Instance.new("UIStroke")
+		maxStroke.Thickness = 1
+		maxStroke.Color = COLORS.line
+		maxStroke.Parent = maxBtn
+		UIKit.hover(maxBtn, Theme.Color.Ink700, Theme.Color.Ink650)
+
+		minusBtn.Activated:Connect(function()
+			if quantity > 1 then
+				quantity -= 1
+				renderDetail()
+			end
+		end)
+		plusBtn.Activated:Connect(function()
+			if quantity < maxQty then
+				quantity += 1
+				renderDetail()
+			end
+		end)
+		maxBtn.Activated:Connect(function()
+			if quantity ~= maxQty then
+				quantity = maxQty
+				renderDetail()
+			end
+		end)
+
 		local available = isAvailable(def)
-		local affordable = canAfford(def)
+		local affordable = canAfford(def, quantity)
 		local actionBtn
 		if available and affordable then
-			actionBtn = UIKit.primaryButton(detail, "Craft")
+			actionBtn = UIKit.primaryButton(detail, quantity > 1 and ("Craft x" .. quantity) or "Craft")
 			actionBtn.MouseButton1Click:Connect(function()
-				doCraft(def.id)
+				doCraft(def.id, quantity)
 			end)
 		else
 			actionBtn = UIKit.ghostButton(detail, not available and "Too far" or "Missing materials")
@@ -352,6 +451,7 @@ function CraftUI.start()
 
 		row.MouseButton1Click:Connect(function()
 			selected = def.id
+			quantity = 1
 			statusLabel.Text = ""
 			styleRowSelection()
 			renderDetail()

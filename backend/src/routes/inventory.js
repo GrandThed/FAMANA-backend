@@ -1,5 +1,5 @@
 import { withTransaction } from "../db.js";
-import { getInventory, addItem, removeItem, removeAt, moveItem, sortInventory } from "../inventory.js";
+import { getInventory, addItem, removeItem, removeAt, moveItem, sortInventory, splitStack } from "../inventory.js";
 
 function parseId(request, reply) {
   const id = Number(request.params.id);
@@ -110,6 +110,34 @@ export default async function inventoryRoutes(fastify) {
         return { error: err.code };
       }
       if (err.code === "bad_move") {
+        reply.code(400);
+        return { error: err.code };
+      }
+      throw err;
+    }
+  });
+
+  // Split part of a stack off into a new stack at the first free grid spot
+  // (the "Dividir" context-menu action) — nothing leaves the inventory,
+  // it just becomes two stacks. body { containerId, x, y, quantity } →
+  // { inventory }.
+  fastify.post("/player/:id/inventory/split", async (request, reply) => {
+    const id = parseId(request, reply);
+    if (id === null) return;
+    const { containerId, x, y, quantity } = request.body || {};
+
+    try {
+      const result = await withTransaction((client) =>
+        splitStack(client, id, { containerId, x, y }, quantity)
+      );
+      const inventory = await withTransaction((client) => getInventory(client, id));
+      return { ...result, inventory };
+    } catch (err) {
+      if (err.code === "not_found" || err.code === "no_room") {
+        reply.code(409);
+        return { error: err.code };
+      }
+      if (err.code === "bad_move" || err.code === "bad_quantity") {
         reply.code(400);
         return { error: err.code };
       }

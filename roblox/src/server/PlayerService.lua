@@ -59,6 +59,18 @@ end
 local inventoryUpdated -- RemoteEvent
 local requestInventory -- RemoteFunction
 local levelUpRemote -- RemoteEvent, resolved in start()
+local notifyRemote -- RemoteEvent (toasts), resolved in start()
+
+-- Por qué falló "Dividir", en criollo — el jugador ve esto como toast
+-- (mismo remote "Notify" que usan los pickups/logros/etc.).
+local SPLIT_ERROR_MESSAGES = {
+	no_room = "No hay espacio libre en el inventario para dividir el stack",
+	bad_quantity = "Esa cantidad no se puede dividir",
+	not_found = "Ese item ya no está ahí",
+	bad_move = "No se pudo dividir el stack",
+	offline = "Tu inventario todavía se está cargando, esperá un toque",
+}
+local SPLIT_ERROR_FALLBACK = "No se pudo dividir el stack"
 
 -- Other services (ClassService, for HP/Mana caps that scale with level) can
 -- hook into level-ups here instead of PlayerService requiring them directly
@@ -334,6 +346,24 @@ function PlayerService.dropItem(player, ref)
 	return false
 end
 
+-- Splits `quantity` off the stack at `ref` into a new stack in the first
+-- free grid spot (the "Dividir" context menu action) — both stacks stay in
+-- the inventory, nothing hits the ground. The backend validates the
+-- quantity/room and picks the spot. Returns (ok, errorCode).
+function PlayerService.splitStack(player, ref, quantity)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary then
+		return false, "offline"
+	end
+	local ok, inventory, errorCode = BackendService.splitStack(player.UserId, ref, quantity)
+	if ok then
+		profile.inventory = inventory
+		PlayerService.pushInventory(player)
+		return true
+	end
+	return false, errorCode
+end
+
 -- Repack the main grid (the Sort button).
 function PlayerService.sortInventory(player)
 	local profile = cache[player.UserId]
@@ -585,6 +615,7 @@ function PlayerService.start()
 	inventoryUpdated = Remotes.get("InventoryUpdated")
 	requestInventory = Remotes.getFunction("RequestInventory")
 	levelUpRemote = Remotes.get("LevelUp")
+	notifyRemote = Remotes.get("Notify")
 
 	-- Client pulls its inventory once its UI is ready. The profile loads
 	-- asynchronously (backend HTTP), and the client may ask before it's ready,
@@ -629,6 +660,26 @@ function PlayerService.start()
 	local sortInventory = Remotes.getFunction("SortInventory")
 	sortInventory.OnServerInvoke = function(player)
 		return { ok = PlayerService.sortInventory(player) }
+	end
+
+	-- "Dividir" from the item's context menu. Only the main grid has room to
+	-- create a second stack, so equipment isn't accepted here.
+	local splitStack = Remotes.getFunction("SplitStack")
+	splitStack.OnServerInvoke = function(player, ref, quantity)
+		if typeof(ref) ~= "table" then
+			return { ok = false, error = "bad_move" }
+		end
+		local x, y = tonumber(ref.x), tonumber(ref.y)
+		local qty = tonumber(quantity)
+		if ref.containerId ~= "main" or not x or not y or not qty or qty <= 0 then
+			return { ok = false, error = "bad_move" }
+		end
+		local safeRef = { containerId = "main", x = math.floor(x), y = math.floor(y) }
+		local ok, errorCode = PlayerService.splitStack(player, safeRef, math.floor(qty))
+		if not ok and notifyRemote then
+			notifyRemote:FireClient(player, SPLIT_ERROR_MESSAGES[errorCode] or SPLIT_ERROR_FALLBACK)
+		end
+		return { ok = ok, error = errorCode }
 	end
 
 	-- The client pushes its full quick-bind structure ({ active, pages }) on
