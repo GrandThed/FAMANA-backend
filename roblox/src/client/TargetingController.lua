@@ -385,12 +385,14 @@ function TargetingController.start()
 			originalMinZoom = player.CameraMinZoomDistance
 			originalMaxZoom = player.CameraMaxZoomDistance
 			local camera = Workspace.CurrentCamera
-			local character = player.Character
-			local root = character and character:FindFirstChild("HumanoidRootPart")
+			-- The default camera measures zoom to its Focus (the subject point
+			-- it maintains at head height), NOT to the root — measuring to the
+			-- root pins the bounds slightly past the real zoom, so every RMB
+			-- press made the camera pop out to the too-far pinned distance.
 			local currentDistance = originalMinZoom
-			if camera and root then
+			if camera then
 				currentDistance = math.clamp(
-					(camera.CFrame.Position - root.Position).Magnitude,
+					(camera.CFrame.Position - camera.Focus.Position).Magnitude,
 					originalMinZoom,
 					originalMaxZoom
 				)

@@ -842,6 +842,46 @@ end
 
 local dealDamage -- forward-declared: updateEnemy's reflect path needs it
 
+-- Enemies steer by CFrame writes on anchored parts, so physics never pushes
+-- overlapping bodies apart — this does. Each frame a grounded enemy gets
+-- nudged out of any living neighbor closer than the sum of their
+-- half-footprints, horizontal only, capped so the push reads as shuffling
+-- apart rather than teleporting.
+local SEPARATION_SPEED = 6 -- studs/sec max push-apart rate
+
+local function applySeparation(enemy, dt)
+	local part = enemy.part
+	local pos = part.Position
+	local myRadius = math.max(enemy.def.size.X, enemy.def.size.Z) / 2
+	local push = Vector3.zero
+	for _, other in ipairs(spawns) do
+		local neighbor = other.enemy
+		if neighbor and neighbor ~= enemy and not neighbor.dead and neighbor.part then
+			local minDist = (myRadius + math.max(neighbor.def.size.X, neighbor.def.size.Z) / 2) * 0.85
+			local delta = pos - neighbor.part.Position
+			local flat = Vector3.new(delta.X, 0, delta.Z)
+			local dist = flat.Magnitude
+			if dist < minDist then
+				local dir
+				if dist > 0.05 then
+					dir = flat / dist
+				else
+					-- Exactly stacked: no direction to push along — fan out on a
+					-- per-enemy random heading so the pair doesn't drift together.
+					enemy.sepJitter = enemy.sepJitter or math.random() * 2 * math.pi
+					dir = Vector3.new(math.cos(enemy.sepJitter), 0, math.sin(enemy.sepJitter))
+				end
+				push += dir * (minDist - dist)
+			end
+		end
+	end
+	if push.Magnitude > 1e-3 then
+		local step = math.min(push.Magnitude, SEPARATION_SPEED * dt)
+		local newPos = pos + push.Unit * step
+		part.CFrame = (part.CFrame - part.CFrame.Position) + newPos
+	end
+end
+
 local function updateEnemy(entry, dt)
 	local enemy = entry.enemy
 	if not enemy or enemy.dead then
@@ -926,6 +966,12 @@ local function updateEnemy(entry, dt)
 		updateMarkBar(enemy, "telegraph", math.max(0, enemy.windupEndsAt - now), enemy.windupTotal)
 	end
 	local speedMult = slowed and (enemy.slowMult or 0.5) or 1
+
+	-- Keep bodies from stacking (skip mid-air hops: the parabola owns the
+	-- position until it lands, and nudging it mid-flight reads as jitter).
+	if not (def.movement == "hop" and enemy.hopState == "air") then
+		applySeparation(enemy, dt)
+	end
 
 	-- Stunned: no chasing, no winding up new hops, no attacking. A hop already
 	-- in flight still lands (freezing mid-air reads as a bug, not a stun).

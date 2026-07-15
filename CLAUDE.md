@@ -236,9 +236,14 @@ key: SpellTrackerUI's trait tracker, equipment paper doll + effects panel,
 Sort/gold utilities bar over the scrollable 10×30 drag & drop grid — left to
 right; R rotates while
 dragging, drop previews green/red, hover + Q throws the item on the ground,
-hover + 3–0 quick-binds tools/consumables,
-hover + 1/2 equips a weapon/tool into weapon/offhand with the occupant
-swapped back to the first free grid spot; tiles show "Lv N" top-right (red =
+hover + 3–0 quick-binds tools/consumables (shift-click binds them to the
+leftmost free hotbar slot),
+hover + 1/2 equips into weapon/offhand with the occupant swapped back to the
+first free grid spot (the weapon slot is weapons-only; the offhand also takes
+a tool — `Items.slotAccepts`, mirrored in backend `items.js`); right-clicking
+a deployable puts its Tool straight in the hand — no equipment slot, no bind —
+closes the panel, and the held item's tile keeps a bright border while it
+stays in hand; tiles show "Lv N" top-right (red =
 above your class level) and gear above the active class level can't be newly
 equipped — gated in every client equip path and server-side in
 `PlayerService.moveItem` (`item_level`), while already-equipped pieces stay

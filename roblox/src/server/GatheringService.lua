@@ -107,10 +107,55 @@ local function buildMeshNode(spot, def, key, look)
 	local visual = MeshAssetService.place(key, origin * CFrame.Angles(0, math.rad(math.random(0, 359)), 0))
 	visual.Parent = model
 
+	local visualParts = {}
+	for _, p in ipairs(visual:GetDescendants()) do
+		if p:IsA("BasePart") then
+			table.insert(visualParts, p)
+		end
+	end
+
+	-- The authored anchorSize was tuned for one variant, but each pool draws
+	-- from several differently-sized meshes — fit the collision box to what
+	-- was actually placed so players collide with what they see:
+	--   fit = "bounds"  the whole visual's bounding box (compact solids: rocks)
+	--   fit = "trunk"   the wood/bark part's footprint (trees: the canopy
+	--                   must NOT collide)
+	local aliveSize = look.anchorSize
+	local aliveCFrame = origin * CFrame.new(0, look.anchorSize.Y / 2, 0)
+	if look.fit == "bounds" then
+		local bounds, boundsSize = visual:GetBoundingBox()
+		-- Slightly slimmer than the box so its corners don't stick out past
+		-- the mesh's bevels.
+		aliveSize = Vector3.new(boundsSize.X * 0.9, boundsSize.Y, boundsSize.Z * 0.9)
+		aliveCFrame = bounds
+	elseif look.fit == "trunk" then
+		local trunk, trunkVolume
+		for _, p in ipairs(visualParts) do
+			local lower = p.Name:lower()
+			if lower:find("bark", 1, true) or lower:find("wood", 1, true) or lower:find("trunk", 1, true) then
+				local volume = p.Size.X * p.Size.Y * p.Size.Z
+				if not trunk or volume > trunkVolume then
+					trunk, trunkVolume = p, volume
+				end
+			end
+		end
+		if trunk then
+			-- Branches share the wood part, so its box can be much wider than
+			-- the visible trunk — and an anchor wider than the trunk is an
+			-- invisible wall. Only ever SHRINK the authored footprint.
+			aliveSize = Vector3.new(
+				math.min(look.anchorSize.X, trunk.Size.X),
+				look.anchorSize.Y,
+				math.min(look.anchorSize.Z, trunk.Size.Z)
+			)
+			aliveCFrame = origin * CFrame.new(0, aliveSize.Y / 2, 0)
+		end
+	end
+
 	local anchor = Instance.new("Part")
 	anchor.Name = "Anchor"
-	anchor.Size = look.anchorSize
-	anchor.CFrame = origin * CFrame.new(0, look.anchorSize.Y / 2, 0)
+	anchor.Size = aliveSize
+	anchor.CFrame = aliveCFrame
 	anchor.Transparency = 1
 	anchor.Anchored = true
 	anchor.Material = ArtKit.Material
@@ -118,13 +163,6 @@ local function buildMeshNode(spot, def, key, look)
 	anchor.Parent = model
 	model.PrimaryPart = anchor
 	model.Parent = resourceFolder
-
-	local visualParts = {}
-	for _, p in ipairs(visual:GetDescendants()) do
-		if p:IsA("BasePart") then
-			table.insert(visualParts, p)
-		end
-	end
 
 	return {
 		def = def,
@@ -134,10 +172,16 @@ local function buildMeshNode(spot, def, key, look)
 			for _, p in ipairs(visualParts) do
 				p.Transparency = 1
 			end
-			anchor.Transparency = 0
-			anchor.Size = look.remnantSize
-			anchor.CFrame = origin * CFrame.new(0, look.remnantSize.Y / 2, 0)
-			anchor.Color = ArtKit.Palette[look.remnantColor]
+			if look.noRemnant then
+				-- Rocks vanish outright: no stump, no leftover collision.
+				anchor.CanCollide = false
+				anchor.CanQuery = false
+			else
+				anchor.Transparency = 0
+				anchor.Size = look.remnantSize
+				anchor.CFrame = origin * CFrame.new(0, look.remnantSize.Y / 2, 0)
+				anchor.Color = ArtKit.Palette[look.remnantColor]
+			end
 			anchor:SetAttribute("Depleted", true)
 		end,
 		restore = function()
@@ -145,8 +189,10 @@ local function buildMeshNode(spot, def, key, look)
 				p.Transparency = 0
 			end
 			anchor.Transparency = 1
-			anchor.Size = look.anchorSize
-			anchor.CFrame = origin * CFrame.new(0, look.anchorSize.Y / 2, 0)
+			anchor.CanCollide = true
+			anchor.CanQuery = true
+			anchor.Size = aliveSize
+			anchor.CFrame = aliveCFrame
 			anchor:SetAttribute("Depleted", false)
 		end,
 	}
@@ -156,6 +202,7 @@ local function buildTree(spot, def)
 	-- Anchor sized for the 1.5x mesh scale (MeshAssets.world.tree.scale).
 	local meshNode = buildMeshNode(spot, def, "tree", {
 		anchorSize = Vector3.new(2.7, 12, 2.7),
+		fit = "trunk",
 		remnantSize = Vector3.new(2.7, 2.4, 2.7),
 		remnantColor = "trunkDark",
 	})
@@ -212,6 +259,7 @@ local function buildHardwoodTree(spot, def)
 	-- Anchor sized for the 1.5x mesh scale (MeshAssets.world.hardwood_tree.scale).
 	local meshNode = buildMeshNode(spot, def, "hardwood_tree", {
 		anchorSize = Vector3.new(3.9, 13.5, 3.9),
+		fit = "trunk",
 		remnantSize = Vector3.new(3.9, 2.7, 3.9),
 		remnantColor = "stoneDark",
 	})
@@ -267,6 +315,7 @@ end
 local function buildConiferTree(spot, def)
 	local meshNode = buildMeshNode(spot, def, "conifer_tree", {
 		anchorSize = Vector3.new(2.4, 14, 2.4),
+		fit = "trunk",
 		remnantSize = Vector3.new(2.4, 2.4, 2.4),
 		remnantColor = "stoneLight",
 	})
@@ -319,6 +368,7 @@ end
 local function buildDeadTree(spot, def)
 	local meshNode = buildMeshNode(spot, def, "dead_tree", {
 		anchorSize = Vector3.new(2.2, 9, 2.2),
+		fit = "trunk",
 		remnantSize = Vector3.new(2.2, 2, 2.2),
 		remnantColor = "stoneDark",
 	})
@@ -331,8 +381,8 @@ local function buildDeadTree(spot, def)
 
 	local model = ArtKit.build("DeadTree", origin, {
 		{ name = "Trunk", size = Vector3.new(1.6, 8, 1.6), offset = Vector3.new(0, 4, 0), rot = Vector3.new(0, 15, 8), color = "stoneDark", primary = true },
-		{ name = "Branch1", size = Vector3.new(0.9, 4.5, 0.9), offset = Vector3.new(1.4, 6.6, 0.4), rot = Vector3.new(0, 10, -38), color = "stoneDark" },
-		{ name = "Branch2", size = Vector3.new(0.8, 3.6, 0.8), offset = Vector3.new(-1.2, 7, -0.4), rot = Vector3.new(14, 0, 34), color = "stoneDark" },
+		{ name = "Branch1", size = Vector3.new(0.9, 4.5, 0.9), offset = Vector3.new(1.4, 6.6, 0.4), rot = Vector3.new(0, 10, -38), color = "stoneDark", canCollide = false },
+		{ name = "Branch2", size = Vector3.new(0.8, 3.6, 0.8), offset = Vector3.new(-1.2, 7, -0.4), rot = Vector3.new(14, 0, 34), color = "stoneDark", canCollide = false },
 	})
 
 	local trunk = model.PrimaryPart
@@ -349,7 +399,6 @@ local function buildDeadTree(spot, def)
 		deplete = function()
 			for _, branch in ipairs(branches) do
 				branch.Transparency = 1
-				branch.CanCollide = false
 			end
 			trunk.Size = Vector3.new(1.6, 1.8, 1.6)
 			trunk.CFrame = origin * CFrame.new(0, 0.9, 0) * CFrame.Angles(0, math.rad(15), 0)
@@ -358,7 +407,6 @@ local function buildDeadTree(spot, def)
 		restore = function()
 			for _, branch in ipairs(branches) do
 				branch.Transparency = 0
-				branch.CanCollide = true
 			end
 			trunk.Size = trunkSize
 			trunk.CFrame = trunkCFrame
@@ -372,8 +420,8 @@ end
 local function buildStoneRock(spot, def)
 	local meshNode = buildMeshNode(spot, def, "stone_rock", {
 		anchorSize = Vector3.new(4.2, 2.8, 3.6),
-		remnantSize = Vector3.new(2.2, 1, 2),
-		remnantColor = "stoneDark",
+		fit = "bounds",
+		noRemnant = true,
 	})
 	if meshNode then
 		return meshNode
@@ -391,7 +439,6 @@ local function buildStoneRock(spot, def)
 
 	local boulder = model.PrimaryPart
 	local chunks = { model.Chunk1, model.Chunk2 }
-	local boulderCFrame, boulderSize = boulder.CFrame, boulder.Size
 
 	boulder:SetAttribute("Depleted", false)
 	model.Parent = resourceFolder
@@ -401,23 +448,25 @@ local function buildStoneRock(spot, def)
 		amount = def.capacity,
 		anchor = boulder,
 		deplete = function()
+			-- Rocks vanish outright when consumed — no stump, no leftover
+			-- collision (trees keep their stump remnant instead).
+			boulder.Transparency = 1
+			boulder.CanCollide = false
+			boulder.CanQuery = false
 			for _, chunk in ipairs(chunks) do
 				chunk.Transparency = 1
 				chunk.CanCollide = false
 			end
-			boulder.Size = Vector3.new(2.2, 1, 2)
-			boulder.CFrame = origin * CFrame.new(0, 0.5, 0) * CFrame.Angles(0, math.rad(25), 0)
-			boulder.Color = ArtKit.Palette.stoneDark
 			boulder:SetAttribute("Depleted", true)
 		end,
 		restore = function()
+			boulder.Transparency = 0
+			boulder.CanCollide = true
+			boulder.CanQuery = true
 			for _, chunk in ipairs(chunks) do
 				chunk.Transparency = 0
 				chunk.CanCollide = true
 			end
-			boulder.Size = boulderSize
-			boulder.CFrame = boulderCFrame
-			boulder.Color = ArtKit.Palette.stone
 			boulder:SetAttribute("Depleted", false)
 		end,
 	}
@@ -428,8 +477,8 @@ end
 local function buildCopperRock(spot, def)
 	local meshNode = buildMeshNode(spot, def, "copper_rock", {
 		anchorSize = Vector3.new(4.2, 2.8, 3.6),
-		remnantSize = Vector3.new(2.2, 1, 2),
-		remnantColor = "stoneDark",
+		fit = "bounds",
+		noRemnant = true,
 	})
 	if meshNode then
 		return meshNode
@@ -446,7 +495,6 @@ local function buildCopperRock(spot, def)
 
 	local boulder = model.PrimaryPart
 	local chunks = { model.Chunk1, model.Chunk2 }
-	local boulderCFrame, boulderSize = boulder.CFrame, boulder.Size
 
 	boulder:SetAttribute("Depleted", false)
 	model.Parent = resourceFolder
@@ -456,23 +504,25 @@ local function buildCopperRock(spot, def)
 		amount = def.capacity,
 		anchor = boulder,
 		deplete = function()
+			-- Rocks vanish outright when consumed — no stump, no leftover
+			-- collision (trees keep their stump remnant instead).
+			boulder.Transparency = 1
+			boulder.CanCollide = false
+			boulder.CanQuery = false
 			for _, chunk in ipairs(chunks) do
 				chunk.Transparency = 1
 				chunk.CanCollide = false
 			end
-			boulder.Size = Vector3.new(2.2, 1, 2)
-			boulder.CFrame = origin * CFrame.new(0, 0.5, 0) * CFrame.Angles(0, math.rad(25), 0)
-			boulder.Color = ArtKit.Palette.stoneDark
 			boulder:SetAttribute("Depleted", true)
 		end,
 		restore = function()
+			boulder.Transparency = 0
+			boulder.CanCollide = true
+			boulder.CanQuery = true
 			for _, chunk in ipairs(chunks) do
 				chunk.Transparency = 0
 				chunk.CanCollide = true
 			end
-			boulder.Size = boulderSize
-			boulder.CFrame = boulderCFrame
-			boulder.Color = ArtKit.Palette.stone
 			boulder:SetAttribute("Depleted", false)
 		end,
 	}
@@ -484,8 +534,8 @@ end
 local function buildIronRock(spot, def)
 	local meshNode = buildMeshNode(spot, def, "iron_rock", {
 		anchorSize = Vector3.new(4.2, 2.8, 3.6),
-		remnantSize = Vector3.new(2.2, 1, 2),
-		remnantColor = "stoneDark",
+		fit = "bounds",
+		noRemnant = true,
 	})
 	if meshNode then
 		return meshNode
@@ -502,7 +552,6 @@ local function buildIronRock(spot, def)
 
 	local boulder = model.PrimaryPart
 	local chunks = { model.Chunk1, model.Chunk2 }
-	local boulderCFrame, boulderSize = boulder.CFrame, boulder.Size
 
 	boulder:SetAttribute("Depleted", false)
 	model.Parent = resourceFolder
@@ -512,23 +561,25 @@ local function buildIronRock(spot, def)
 		amount = def.capacity,
 		anchor = boulder,
 		deplete = function()
+			-- Rocks vanish outright when consumed — no stump, no leftover
+			-- collision (trees keep their stump remnant instead).
+			boulder.Transparency = 1
+			boulder.CanCollide = false
+			boulder.CanQuery = false
 			for _, chunk in ipairs(chunks) do
 				chunk.Transparency = 1
 				chunk.CanCollide = false
 			end
-			boulder.Size = Vector3.new(2.2, 1, 2)
-			boulder.CFrame = origin * CFrame.new(0, 0.5, 0) * CFrame.Angles(0, math.rad(25), 0)
-			boulder.Color = ArtKit.Palette.stoneDark
 			boulder:SetAttribute("Depleted", true)
 		end,
 		restore = function()
+			boulder.Transparency = 0
+			boulder.CanCollide = true
+			boulder.CanQuery = true
 			for _, chunk in ipairs(chunks) do
 				chunk.Transparency = 0
 				chunk.CanCollide = true
 			end
-			boulder.Size = boulderSize
-			boulder.CFrame = boulderCFrame
-			boulder.Color = ArtKit.Palette.stoneDark
 			boulder:SetAttribute("Depleted", false)
 		end,
 	}

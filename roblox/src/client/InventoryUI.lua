@@ -15,9 +15,13 @@
 -- pressing 3–0 quick-binds tools/consumables to the hotbar (HotbarBinds);
 -- bound items show their key as a badge on the tile. Hovering equippable
 -- gear shows trait deltas vs the equipped counterpart in the tooltip
--- (ItemTooltip's compareEntry). Shift-click equips into the first FREE
--- accepting slot — never swaps (that's the 1/2 keys' job) — and
--- shift-clicking a paper-doll slot unequips into the first free grid spot.
+-- (ItemTooltip's compareEntry). Shift-click equips gear into the first FREE
+-- accepting slot — never swaps (that's the 1/2 keys' job) — while tools and
+-- consumables shift-click onto the leftmost free hotbar bind instead (the
+-- weapon slot is weapons-only); shift-clicking a paper-doll slot unequips
+-- into the first free grid spot. Right-clicking a deployable puts its Tool
+-- straight in the hand and closes the panel; the held item's tile keeps a
+-- bright border while it stays in hand.
 --
 -- Rendering is a diff: tiles are reused (and just repositioned) across
 -- updates so item thumbnails aren't rebuilt on every move/sort. Moves apply
@@ -1001,11 +1005,12 @@ function InventoryUI.start()
 	-- ---- right-click context menu -------------------------------------------
 	-- Right-clicking a grid tile (main container only — equipped items still
 	-- use shift-click to unequip) pops a small action list next to the
-	-- cursor. Which actions show depends on the item's type:
+	-- cursor. Placeables skip the menu entirely: right-click holds them
+	-- directly (holdEntry) and closes the panel. For everything else, which
+	-- actions show depends on the item's type:
 	--   weapon/tool/armor/ring -> "Usar"     (equip into the first free slot)
-	--   placeable              -> "Colocar"  (same equip call — once it's a
-	--                                          held Tool, FurniturePlacementUI
-	--                                          drives the actual placement)
+	--   placeable              -> "Colocar"  (unreachable via the menu now,
+	--                                          kept as the holdEntry handler)
 	--   consumable              -> "Consumir" (no consumable items exist yet,
 	--                                          so this never actually renders
 	--                                          today; ConsumeItem isn't wired
@@ -1097,6 +1102,34 @@ function InventoryUI.start()
 		end
 		hideTooltip()
 		equipFromGrid(entry, slotIndex)
+	end
+
+	-- "Colocar" for deployables: put the item's Tool straight in the hand —
+	-- no equipment slot, no hotbar bind — and close the panel so the placement
+	-- preview (CampPlacementUI/FurniturePlacementUI) is usable immediately.
+	-- ToolService keeps a Tool in the Backpack for every equippable item the
+	-- player owns, so this is a purely client-side equip; the held item's tile
+	-- stays highlighted next time the panel opens (refreshHeldHighlight).
+	local function holdEntry(entry)
+		local character = player.Character
+		local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+		if not humanoid or humanoid.Health <= 0 then
+			return
+		end
+		local backpack = player:FindFirstChildOfClass("Backpack")
+		if not backpack then
+			return
+		end
+		for _, t in ipairs(backpack:GetChildren()) do
+			if t:IsA("Tool") and t:GetAttribute("itemId") == entry.itemId then
+				hideTooltip()
+				humanoid:EquipTool(t)
+				if ClientState.closeInventory then
+					ClientState.closeInventory()
+				end
+				return
+			end
+		end
 	end
 
 	-- Throw the entry onto the ground. Shared logic with drag-to-world-drop
@@ -1321,7 +1354,7 @@ function InventoryUI.start()
 
 	local ACTION_HANDLERS = {
 		use = equipEntrySwap,
-		place = equipEntrySwap,
+		place = holdEntry,
 		consume = consumeEntry,
 		split = openSplitModal,
 		drop = dropEntry,
@@ -1530,12 +1563,19 @@ function InventoryUI.start()
 		end)
 		tile.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton2 then
+				local rightDef = Items.get(record.entry.itemId)
+				if rightDef and rightDef.type == "placeable" and not drag then
+					-- Deployables: right-click puts the Tool straight in the
+					-- hand and closes the panel (no menu, no equipment slot).
+					holdEntry(record.entry)
+					return
+				end
 				local shiftHeld = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
 					or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
 				if shiftHeld and not drag then
-					-- Shift+right-click: same as picking "Usar"/"Colocar" from
-					-- the menu, but immediate — swaps the equipped item if
-					-- every accepting slot is already full.
+					-- Shift+right-click: same as picking "Usar" from the menu,
+					-- but immediate — swaps the equipped item if every
+					-- accepting slot is already full.
 					equipEntrySwap(record.entry)
 					return
 				end
@@ -1547,9 +1587,28 @@ function InventoryUI.start()
 				local shiftHeld = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
 					or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
 				if shiftHeld and not drag then
+					local def = Items.get(entryNow.itemId)
+					-- Tools/consumables: quick-bind to the leftmost free slot
+					-- on the active hotbar page instead of the paper doll (the
+					-- weapon slot is weapons-only — see Items.slotAccepts).
+					-- Already bound → leave the bind where it is.
+					if def and (def.type == "tool" or def.type == "consumable") then
+						for slot = 2, 9 do
+							if HotbarBinds.get(slot) == entryNow.itemId then
+								return
+							end
+						end
+						for slot = 2, 9 do
+							if not HotbarBinds.get(slot) then
+								HotbarBinds.set(slot, entryNow.itemId)
+								return
+							end
+						end
+						hoverLabel.Text = "No free hotbar slot"
+						return
+					end
 					-- Shift-click: equip into a free accepting slot; occupied
 					-- (or not equippable) → do nothing, and never start a drag.
-					local def = Items.get(entryNow.itemId)
 					local slotIndex = def and shiftEquipSlot(def)
 					local levelOk, needLevel = equipLevelOk(entryNow)
 					if slotIndex and not levelOk then
@@ -1599,6 +1658,22 @@ function InventoryUI.start()
 		record.levelLabel.Text = itemLevel > 0 and ("Lv %d"):format(itemLevel) or ""
 		record.levelLabel.TextColor3 = itemLevel > (player:GetAttribute("Level") or 1) and COLORS.bad
 			or COLORS.textDim
+	end
+
+	-- The tile of the item currently in the hand (e.g. a deployable equipped
+	-- via right-click, or a wielded grid tool) keeps a bright border, so
+	-- reopening the panel shows what you're carrying. Every other stroke
+	-- resets to its entry's rarity color.
+	local function refreshHeldHighlight()
+		local character = player.Character
+		local tool = character and character:FindFirstChildOfClass("Tool")
+		local heldId = tool and tool:GetAttribute("itemId")
+		for _, record in ipairs(tileRecords) do
+			local isHeld = heldId ~= nil and record.itemId == heldId
+			record.stroke.Color = isHeld and COLORS.good
+				or Rarity.forEntry(record.entry, Items.get(record.itemId)).color
+			record.stroke.Thickness = isHeld and 2.5 or 1
+		end
 	end
 
 	-- ---- rendering (diff) -----------------------------------------------------
@@ -1715,6 +1790,7 @@ function InventoryUI.start()
 		resetEquipStrokes() -- rarity borders track the (new) occupants
 
 		refreshBindBadges()
+		refreshHeldHighlight()
 	end
 
 	-- Authoritative updates from the server bump the generation so pending
@@ -1944,6 +2020,7 @@ function InventoryUI.start()
 			end
 			refreshEffects()
 			refreshDoll()
+			refreshHeldHighlight() -- the held Tool may have changed while closed
 		else
 			endDrag(false)
 			hideTooltip()
@@ -1984,6 +2061,26 @@ function InventoryUI.start()
 	end)
 	if player.Character then
 		task.defer(refreshDoll)
+	end
+
+	-- Equipping/unequipping a Tool while the panel is open moves the
+	-- held-item border live (holdEntry closes the panel, but hotbar keys
+	-- and death can change the hand at any time).
+	local function watchHeldTools(character)
+		character.ChildAdded:Connect(function(child)
+			if child:IsA("Tool") then
+				refreshHeldHighlight()
+			end
+		end)
+		character.ChildRemoved:Connect(function(child)
+			if child:IsA("Tool") then
+				refreshHeldHighlight()
+			end
+		end)
+	end
+	player.CharacterAdded:Connect(watchHeldTools)
+	if player.Character then
+		watchHeldTools(player.Character)
 	end
 
 	-- Bound action (not raw InputBegan) so the key works without 3D-viewport

@@ -97,8 +97,12 @@ export const EQUIPMENT_SLOTS = [
 // Whether an item def may sit in the given equipment slot.
 export function slotAccepts(slotName, def) {
   if (!def) return false;
-  if (slotName === "weapon" || slotName === "offhand") {
-    return def.type === "weapon" || def.type === "tool" || def.type === "placeable";
+  // The weapon slot is weapons-only; tools live on hotbar quick binds and
+  // placeables are held directly (never parked in a hand slot). The offhand
+  // still takes a tool (sword + torch). Mirror of shared/Items.lua.
+  if (slotName === "weapon") return def.type === "weapon";
+  if (slotName === "offhand") {
+    return def.type === "weapon" || def.type === "tool";
   }
   if (slotName === "ring1" || slotName === "ring2") return def.type === "ring";
   if (slotName === "back") return def.type === "backpack";

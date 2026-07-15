@@ -115,7 +115,7 @@ function ClassPassiveService.start()
 	-- ---- recompute triggers ------------------------------------------------
 	-- Level and Class attributes both move which tier is active (Level
 	-- directly; Class swaps which passive applies at the new level).
-	Players.PlayerAdded:Connect(function(player)
+	local function watchPlayer(player)
 		player:GetAttributeChangedSignal("Level"):Connect(function()
 			recompute(player)
 		end)
@@ -125,7 +125,17 @@ function ClassPassiveService.start()
 		player.CharacterAdded:Connect(function()
 			recompute(player)
 		end)
-	end)
+		if player.Character then
+			recompute(player)
+		end
+	end
+
+	Players.PlayerAdded:Connect(watchPlayer)
+	-- Players who connected during server boot fired PlayerAdded before the
+	-- connect above (same sweep as PlayerService).
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchPlayer(player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
 		statsCache[player.UserId] = nil

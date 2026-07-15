@@ -607,8 +607,14 @@ function Items.slotAccepts(slotName, def)
 	if not def then
 		return false
 	end
-	if slotName == "weapon" or slotName == "offhand" then
-		return def.type == "weapon" or def.type == "tool" or def.type == "placeable"
+	-- The weapon slot is weapons-only; tools live on hotbar quick binds and
+	-- placeables are held directly (InventoryUI's right-click "Colocar").
+	-- The offhand still takes a tool (sword + torch).
+	if slotName == "weapon" then
+		return def.type == "weapon"
+	end
+	if slotName == "offhand" then
+		return def.type == "weapon" or def.type == "tool"
 	end
 	if slotName == "ring1" or slotName == "ring2" then
 		return def.type == "ring"
