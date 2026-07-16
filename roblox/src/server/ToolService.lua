@@ -69,6 +69,13 @@ end
 -- Per-player swing debounce so the animation can't be spammed.
 local lastSwing = {}
 
+-- A click that lands this close to the end of the cooldown gets queued and
+-- fires the moment the cooldown expires, instead of being eaten (dropped
+-- inputs read as lag, especially on the long gather cooldown).
+local INPUT_BUFFER = 0.35
+
+local pendingSwing = {} -- [userId] = true while a buffered activation waits
+
 -- Procedural swing per item kind: the tool itself is rotated in the hand by
 -- tweening the engine-made RightGrip weld out and back (same server-side
 -- cosmetic-tween approach as the magic missile). Layered on top of the arm
@@ -306,19 +313,34 @@ local function buildTool(player, itemId)
 		light.Parent = orb
 	end
 
-	tool.Activated:Connect(function()
-		-- playSwing IS the debounce: if it returns false we're still inside
-		-- the cooldown window, so the handler (damage/gather) must not run
-		-- either — otherwise spam-clicking deals damage on every click even
-		-- though the animation is being throttled.
+	-- playSwing IS the debounce: if it returns false we're still inside
+	-- the cooldown window, so the handler (damage/gather) must not run
+	-- either — otherwise spam-clicking deals damage on every click even
+	-- though the animation is being throttled. A click in the cooldown's
+	-- tail (INPUT_BUFFER) is queued and re-fired at expiry instead.
+	local function activate()
 		if not playSwing(player, def) then
+			local remaining = swingCooldownFor(player, def)
+				- (os.clock() - (lastSwing[player.UserId] or 0))
+			if remaining > 0 and remaining <= INPUT_BUFFER and not pendingSwing[player.UserId] then
+				pendingSwing[player.UserId] = true
+				task.delay(remaining + 0.02, function()
+					pendingSwing[player.UserId] = nil
+					-- Only if this exact tool is still the one in hand.
+					if tool.Parent == player.Character then
+						activate()
+					end
+				end)
+			end
 			return
 		end
 		local handler = ToolService.activatedHandlers[def.type]
 		if handler then
 			handler(player, tool, def)
 		end
-	end)
+	end
+
+	tool.Activated:Connect(activate)
 
 	return tool
 end
@@ -384,7 +406,7 @@ function ToolService.start()
 		ToolService.syncTools(player)
 	end)
 
-	Players.PlayerAdded:Connect(function(player)
+	local function watchPlayer(player)
 		player.CharacterAdded:Connect(function()
 			-- Backpack is recreated on every (re)spawn; wait for it then sync.
 			local backpack = player:WaitForChild("Backpack", 5)
@@ -392,11 +414,23 @@ function ToolService.start()
 				ToolService.syncTools(player)
 			end
 		end)
-	end)
+		if player.Character and player:FindFirstChildOfClass("Backpack") then
+			ToolService.syncTools(player)
+		end
+	end
+
+	Players.PlayerAdded:Connect(watchPlayer)
+	-- Players who connected while the server was still booting fired their
+	-- PlayerAdded before the connect above (same sweep as PlayerService) —
+	-- without this their hotbar has no Tools until the first inventory change.
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchPlayer(player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastSwing[player.UserId] = nil
 		heldItem[player.UserId] = nil
+		pendingSwing[player.UserId] = nil
 	end)
 end
 

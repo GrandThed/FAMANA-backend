@@ -35,6 +35,7 @@ function MapMarkers.take(prefix)
 					byKey[key] = byKey[key] or {}
 					table.insert(byKey[key], {
 						cframe = inst.CFrame,
+						size = inst.Size, -- borders build a wall the marker's size
 						attributes = inst:GetAttributes(),
 					})
 					inst:Destroy()

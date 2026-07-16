@@ -18,6 +18,15 @@ local Spells = require(Shared:WaitForChild("Spells"))
 
 local PlayerService = {}
 
+-- Arrival-position override for border crossings: BorderService registers a
+-- resolver when the map places Border_ markers, so players arrive next to
+-- the authored wall instead of GridConfig's default entry point. fn(edge)
+-- returning nil falls back to GridConfig.entryPoint.
+local entryPointResolver
+function PlayerService.setEntryPointResolver(fn)
+	entryPointResolver = fn
+end
+
 -- xp required to go from `level` to `level + 1`.
 local function xpToNext(level)
 	local Leveling = Config.PlayerLeveling
@@ -244,7 +253,8 @@ local function loadProfile(player)
 	local joinData = player:GetJoinData()
 	local teleportData = joinData and joinData.TeleportData
 	if teleportData and teleportData.entryEdge then
-		local entry = GridConfig.entryPoint(teleportData.entryEdge)
+		local entry = (entryPointResolver and entryPointResolver(teleportData.entryEdge))
+			or GridConfig.entryPoint(teleportData.entryEdge)
 		data.position = { x = entry.X, y = entry.Y, z = entry.Z }
 	end
 

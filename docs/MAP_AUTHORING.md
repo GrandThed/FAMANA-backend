@@ -9,12 +9,12 @@ mechanics in git — and deploying to any number of places with one command.
 A Roblox **place** = the 3D world (Workspace) + the code. In this repo those
 have different owners:
 
-| What | Lives in | Reaches a place via |
+| What | Source of truth | Reaches a place via |
 | --- | --- | --- |
-| Mechanics (all Luau code) | `roblox/src/` | Rojo (serve while authoring, build when deploying) |
-| The map (terrain, buildings, layout) | `roblox/maps/<name>.rbxm` | Authored in Studio, exported to the repo |
-| Place settings (HTTP on, spawn, name) | `roblox/<name>.project.json` | Baked in at build time |
-| Which places exist | `roblox/places.json` | Read by the deploy script |
+| Mechanics (all Luau code) | `roblox/src/` (git) | Rojo (serve while authoring, build when deploying) |
+| The map (terrain, buildings, layout) | **the live place itself** (Studio) | Publish from Studio; code deploys pull it down first (`scripts/pull-maps.mjs`) and build it back in |
+| Place settings (HTTP on, spawn, name) | `roblox/<name>.project.json` (git) | Baked in at build time |
+| Which places exist | `roblox/places.json` (git) | Read by the deploy script |
 
 Historically this project had **no maps at all**: every tree, rock, enemy,
 vendor and workbench spawns at runtime from hardcoded positions in the
@@ -39,15 +39,24 @@ code. The map just says *where*, using **marker parts**:
 
 | Tag | Places | Key comes from |
 | --- | --- | --- |
-| `Node_tree`, `Node_rock`, `Node_iron_rock`, `Node_hardwood_tree` | Gathering node | `NODE_DEFS` key (GatheringService) |
-| `Enemy_slime`, `Enemy_goblin` | Enemy spawn point | `ENEMY_DEFS` key (EnemyService) |
+| `Node_tree`, `Node_hardwood_tree`, `Node_conifer_tree`, `Node_dead_tree`, `Node_stone_rock`, `Node_copper_rock`, `Node_iron_rock` | Gathering node | `NODE_DEFS` key (GatheringService). Legacy `Node_rock` markers split alternating stone/copper so old maps keep both — retag when touching an old map |
+| `Enemy_slime`, `Enemy_goblin`, `Enemy_golem`, `Enemy_spider` | Enemy spawn point | `ENEMY_DEFS` key (EnemyService) |
 | `Vendor_general_goods` | Vendor NPC | `VENDOR_DEFS` storeId (VendorService) |
 | `Workbench_crafting_table`, `Workbench_simple_forge` | Crafting station | `WORKBENCH_DEFS` station (CraftingService) |
 | `ItemStand_<itemId>` | Item display stand | any item id with a model |
 | `QuestGiver_quest_giver_village` | Quest giver NPC | `GIVER_DEFS` giverId (QuestService) |
 | `CampArchitect_npc` | Camp architect NPC | CampArchitectService |
+| `Border_east`, `Border_west`, … | Cell border crossing — the marker's SIZE becomes the teleport trigger wall, and arrivals from that edge appear just inside it | edge name in `GridConfig.neighbors` (BorderService) |
 
-**Marker kit:** instead of hand-tagging parts, paste
+**Bootstrap (first map for a place):** paste
+[`roblox/tools/map_bootstrap.lua`](../roblox/tools/map_bootstrap.lua) into
+the Command Bar once — it builds `Workspace.Map` with a marker for EVERY
+object the code currently spawns (trees, rocks, enemies, NPCs, workbenches,
+item stands), each at its exact current position. Playtest to confirm the
+world looks unchanged, then edit freely and publish. It refuses to run if
+`Workspace.Map` already exists, so it can't wipe an edited map.
+
+**Marker kit (adding markers later):** paste
 [`roblox/tools/marker_kit.lua`](../roblox/tools/marker_kit.lua) into the
 Command Bar once — it builds `ReplicatedStorage.MapMarkerKit` with a
 pre-tagged, labeled template per marker type. Copy one into `Workspace.Map`,
@@ -55,30 +64,32 @@ then Ctrl+D-duplicate it around (duplicates keep the tag). The kit lives in
 ReplicatedStorage so the templates themselves never spawn anything.
 
 The switch between markers and the hardcoded fallback is the **`Map` folder**:
-if `Workspace.Map` exists, services spawn ONLY from markers (`shared/MapMarkers`);
-if not, they use the def positions. Boot output tells you what happened — a
-typo'd tag prints `markers match no def` and a def with zero markers prints
-`none spawned`, so check the output window first when something's missing.
+if `Workspace.Map` exists, services spawn ONLY from markers (`shared/MapMarkers`)
+— what you see in Studio is the whole world, and deleting every marker of a
+type means none of that thing spawns. Without a `Map` folder (a bare
+baseplate dev session), services use their def positions instead. Boot
+output tells you what happened — a typo'd tag prints `markers match no def`
+and a def with zero markers prints `none spawned`, so check the output
+window first when something's missing.
 
 Ground height is handled for you: services raycast down at the marker's X/Z,
 so a marker floating above a hill still builds on the ground.
 
 ## 3. Authoring a map in Studio, step by step
 
-1. Open the place in Studio, run `rojo serve` in `roblox/` and connect the
-   plugin (this syncs the code, exactly like before — `default.project.json`
-   doesn't touch Workspace, so nothing you build gets overwritten).
+1. Open the place in Studio (Creator Dashboard → the experience → the place),
+   run `rojo serve` in `roblox/` and connect the plugin (this syncs the code,
+   exactly like before — `default.project.json` doesn't touch Workspace, so
+   nothing you build gets overwritten).
 2. Create a **Folder named `Map`** directly under Workspace. Build the entire
    map inside it — ground, buildings, decoration, and all marker parts.
-   Keeping everything in one folder is what makes step 4 a single export.
+   Anything left loose in Workspace OUTSIDE Map isn't part of the map: it
+   won't survive a deploy, and duplicate names out there break the map pull.
 3. Playtest as usual. The moment the `Map` folder exists, markers drive all
    spawning — if you haven't placed `Node_tree` markers yet, no trees.
-4. Export: right-click the `Map` folder → **Save to File…** → save as
-   `roblox/maps/<name>.rbxm` (e.g. `cellA.rbxm`). This is the ONLY manual
-   sync step, needed only when the map itself changed.
-5. Commit the `.rbxm` (gitignore has an exception for `roblox/maps/`) and
-   deploy (§4). Publishing from Studio (File → Publish) still works too for
-   the one place you have open.
+4. **File → Publish to Roblox.** That's it — no export, no commit. The map
+   now lives in the place, and every future code deploy pulls it down and
+   builds it back in automatically.
 
 ## 4. Deploying
 
@@ -95,8 +106,18 @@ place is a 5-step checklist in `DEPLOYMENT.md`.
 
 ## 5. Gotchas
 
-- **A deploy replaces the whole place.** Map work that was never exported to
-  `roblox/maps/` is overwritten. Export before you deploy.
+- **Publish your map work before pushing code.** Deploys pull the map from
+  the last PUBLISHED version of the place — an open Studio session with
+  unpublished changes contributes nothing (and if you publish from that
+  session AFTER a deploy, the whole place — including the now-old code — is
+  what goes live; re-deploy afterwards).
+- **A failed map pull fails that place's deploy** (by design: building
+  without the live map would overwrite it). The usual causes: the API key is
+  missing the **Legacy Assets → manage** permission (`legacy-assets:manage`),
+  or same-named instances left directly under Workspace outside `Map`. `node scripts/pull-maps.mjs` runs the pull standalone
+  for debugging; `--no-pull` deploys whatever `roblox/maps/` already holds.
+- **Maps are not in git.** Rollback for map mistakes is the place's version
+  history on the Creator Dashboard, not `git revert`.
 - **Close the place in Studio before deploying it.** An open Studio session
   holds a lock on the place and uploads bounce with `409: Server is busy`
   (the script retries a few times, but a held lock outlasts them).

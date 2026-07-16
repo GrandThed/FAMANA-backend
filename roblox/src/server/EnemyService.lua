@@ -138,6 +138,9 @@ local ENEMY_DEFS = {
 		size = Vector3.new(2.5, 4, 2.5),
 		color = ArtKit.Palette.goblin,
 		material = Enum.Material.SmoothPlastic,
+		-- Visual fallback chain: animated rig -> static Style-A mesh -> ArtKit
+		-- details (each only when the previous one failed to load).
+		animatedMesh = "goblin",
 		meshAsset = "goblin",
 		details = {
 			{ name = "EyeL", size = V(0.32, 0.32, 0.25), offset = V(-0.5, 1.3, -1.3), color = "ink" },
@@ -152,6 +155,66 @@ local ENEMY_DEFS = {
 		spots = {
 			Vector3.new(-34, 0, -8),
 			Vector3.new(-40, 0, -18),
+		},
+	},
+	golem = {
+		name = "Golem",
+		hp = 160,
+		ad = 18,
+		ap = 0,
+		damageKind = "physical",
+		armor = 40, -- living rock: weapons chip at it
+		magicResist = 25,
+		minLevel = 4,
+		maxLevel = 7,
+		nightLevelBonus = 2,
+		xpReward = 80,
+		attackCooldown = 2.4, -- slow two-fist slam, hits like a truck
+		walkSpeed = 7, -- lumbering stomp
+		aggroRange = 25, -- short-sighted pile of rocks
+		attackRange = 9, -- big body, long arms
+		respawn = 35,
+		lootSource = "golem",
+		size = Vector3.new(11, 12.6, 8), -- 2x the authored MeshAssets height (rig ScaleTo's x2)
+		color = ArtKit.Palette.stone, -- plain rock box when the rig fails to load
+		material = Enum.Material.SmoothPlastic,
+		animatedMesh = "golem",
+		-- Deep western wilds, past the goblin camp — far enough that a
+		-- goblin fight at (-40,-18) never chain-aggros a golem into it.
+		spots = {
+			Vector3.new(-62, 0, -34),
+			Vector3.new(-72, 0, -16),
+		},
+	},
+	spider = {
+		name = "Spider",
+		hp = 45,
+		ad = 13,
+		ap = 0,
+		damageKind = "physical",
+		armor = 5, -- crunchy carapace, all speed no bulk
+		magicResist = 10,
+		minLevel = 3,
+		maxLevel = 6,
+		nightLevelBonus = 2,
+		xpReward = 50,
+		attackCooldown = 1.1, -- rapid strikes
+		walkSpeed = 16, -- fast alternating-tetrapod scuttle
+		aggroRange = 32, -- longest leash in the game, but it must NOT reach
+		-- the forge/village from the nest spots below — check distances when
+		-- moving either
+		attackRange = 6,
+		respawn = 20,
+		lootSource = "spider",
+		size = Vector3.new(5, 5.4, 5), -- Y matches MeshAssets.animated height
+		color = ArtKit.Palette.ink, -- dark blob when the rig fails to load
+		material = Enum.Material.SmoothPlastic,
+		animatedMesh = "spider",
+		-- Spider nest: the far southeast pocket, ~35+ studs beyond the
+		-- village row's right edge and the crafting stations.
+		spots = {
+			Vector3.new(55, 0, -65),
+			Vector3.new(48, 0, -72),
 		},
 	},
 }
@@ -445,10 +508,21 @@ local function buildEnemy(pos, def)
 	-- show what the mob can drop without a remote round-trip.
 	part:SetAttribute("LootSource", def.lootSource)
 
-	-- Style-A mesh visual when its template loaded: the body part stays the
-	-- physics/targeting object and goes invisible underneath it. Otherwise
-	-- the ArtKit face/body details ride along via welds, as before.
-	local visual = def.meshAsset and MeshAssetService.weldVisual(part, def.meshAsset, def.size.Y)
+	-- Mesh visual when a template loaded: the body part stays the physics/
+	-- targeting object and goes invisible underneath it. Animated rigs win
+	-- over the static Style-A mesh, and the ArtKit face/body details stay
+	-- the last-resort look, as before.
+	local visual, tracks
+	if def.animatedMesh then
+		local animated = MeshAssetService.attachAnimatedVisual(part, def.animatedMesh, def.size.Y)
+		if animated then
+			visual = animated.model
+			tracks = animated.tracks
+		end
+	end
+	if not visual and def.meshAsset then
+		visual = MeshAssetService.weldVisual(part, def.meshAsset, def.size.Y)
+	end
 	if visual then
 		part.Transparency = 1
 	elseif def.details then
@@ -544,6 +618,12 @@ local function buildEnemy(pos, def)
 
 	part.Parent = enemyFolder
 
+	-- Animated rigs breathe from frame one; updateEnemy crossfades to the
+	-- walk track (setAnimState) once the enemy actually moves.
+	if tracks and tracks.idle then
+		tracks.idle:Play()
+	end
+
 	return {
 		part = part,
 		fill = fill,
@@ -559,6 +639,8 @@ local function buildEnemy(pos, def)
 		lastAttack = 0,
 		dead = false,
 		def = def,
+		tracks = tracks, -- animated-mesh AnimationTracks (idle/walk/attack) | nil
+		animState = tracks and "idle" or nil,
 	}
 end
 
@@ -646,6 +728,25 @@ local function updateHop(enemy, dt, root, def, speedMult)
 			enemy.hopState = "air"
 			enemy.hopT = 0
 		end
+	end
+end
+
+-- Animated-mesh enemies: crossfade between the looping idle/walk tracks.
+-- No-op for ArtKit/static-mesh enemies (no tracks) and repeated same-state
+-- calls, so updateEnemy can just declare the state it wants every frame.
+local function setAnimState(enemy, state)
+	local tracks = enemy.tracks
+	if not tracks or enemy.animState == state then
+		return
+	end
+	enemy.animState = state
+	local from = tracks[state == "walk" and "idle" or "walk"]
+	local to = tracks[state]
+	if from and from.IsPlaying then
+		from:Stop(0.2)
+	end
+	if to and not to.IsPlaying then
+		to:Play(0.2)
 	end
 end
 
@@ -741,6 +842,46 @@ end
 
 local dealDamage -- forward-declared: updateEnemy's reflect path needs it
 
+-- Enemies steer by CFrame writes on anchored parts, so physics never pushes
+-- overlapping bodies apart — this does. Each frame a grounded enemy gets
+-- nudged out of any living neighbor closer than the sum of their
+-- half-footprints, horizontal only, capped so the push reads as shuffling
+-- apart rather than teleporting.
+local SEPARATION_SPEED = 6 -- studs/sec max push-apart rate
+
+local function applySeparation(enemy, dt)
+	local part = enemy.part
+	local pos = part.Position
+	local myRadius = math.max(enemy.def.size.X, enemy.def.size.Z) / 2
+	local push = Vector3.zero
+	for _, other in ipairs(spawns) do
+		local neighbor = other.enemy
+		if neighbor and neighbor ~= enemy and not neighbor.dead and neighbor.part then
+			local minDist = (myRadius + math.max(neighbor.def.size.X, neighbor.def.size.Z) / 2) * 0.85
+			local delta = pos - neighbor.part.Position
+			local flat = Vector3.new(delta.X, 0, delta.Z)
+			local dist = flat.Magnitude
+			if dist < minDist then
+				local dir
+				if dist > 0.05 then
+					dir = flat / dist
+				else
+					-- Exactly stacked: no direction to push along — fan out on a
+					-- per-enemy random heading so the pair doesn't drift together.
+					enemy.sepJitter = enemy.sepJitter or math.random() * 2 * math.pi
+					dir = Vector3.new(math.cos(enemy.sepJitter), 0, math.sin(enemy.sepJitter))
+				end
+				push += dir * (minDist - dist)
+			end
+		end
+	end
+	if push.Magnitude > 1e-3 then
+		local step = math.min(push.Magnitude, SEPARATION_SPEED * dt)
+		local newPos = pos + push.Unit * step
+		part.CFrame = (part.CFrame - part.CFrame.Position) + newPos
+	end
+end
+
 local function updateEnemy(entry, dt)
 	local enemy = entry.enemy
 	if not enemy or enemy.dead then
@@ -826,6 +967,12 @@ local function updateEnemy(entry, dt)
 	end
 	local speedMult = slowed and (enemy.slowMult or 0.5) or 1
 
+	-- Keep bodies from stacking (skip mid-air hops: the parabola owns the
+	-- position until it lands, and nudging it mid-flight reads as jitter).
+	if not (def.movement == "hop" and enemy.hopState == "air") then
+		applySeparation(enemy, dt)
+	end
+
 	-- Stunned: no chasing, no winding up new hops, no attacking. A hop already
 	-- in flight still lands (freezing mid-air reads as a bug, not a stun).
 	-- A committed attack windup, though, gets cancelled — getting stunned
@@ -835,7 +982,12 @@ local function updateEnemy(entry, dt)
 			enemy.windingUp = false
 			enemy.windupTarget = nil
 			setStatusMark(enemy, "telegraph", false)
+			-- The interrupted swing also reads on the rig.
+			if enemy.tracks and enemy.tracks.attack and enemy.tracks.attack.IsPlaying then
+				enemy.tracks.attack:Stop(0.1)
+			end
 		end
+		setAnimState(enemy, "idle")
 		if def.movement == "hop" then
 			updateHop(enemy, dt, nil, def, speedMult)
 		end
@@ -844,17 +996,27 @@ local function updateEnemy(entry, dt)
 
 	if def.movement == "hop" then
 		updateHop(enemy, dt, root, def, speedMult)
-	elseif root then
-		-- Walk toward the player along the ground plane, facing the way we move.
-		local from = enemy.part.Position
-		local flatTarget = Vector3.new(root.Position.X, from.Y, root.Position.Z)
-		local toTarget = flatTarget - from
-		local planarDist = toTarget.Magnitude
-		if planarDist > def.attackRange then
-			local pos = from + toTarget.Unit * math.min(def.walkSpeed * speedMult * dt, planarDist)
-			enemy.part.CFrame = CFrame.lookAt(pos, Vector3.new(flatTarget.X, pos.Y, flatTarget.Z))
-		elseif planarDist > 0.05 then
-			enemy.part.CFrame = CFrame.lookAt(from, flatTarget)
+	else
+		local moving = false
+		if root then
+			-- Walk toward the player along the ground plane, facing the way we move.
+			local from = enemy.part.Position
+			local flatTarget = Vector3.new(root.Position.X, from.Y, root.Position.Z)
+			local toTarget = flatTarget - from
+			local planarDist = toTarget.Magnitude
+			if planarDist > def.attackRange then
+				local pos = from + toTarget.Unit * math.min(def.walkSpeed * speedMult * dt, planarDist)
+				enemy.part.CFrame = CFrame.lookAt(pos, Vector3.new(flatTarget.X, pos.Y, flatTarget.Z))
+				moving = true
+			elseif planarDist > 0.05 then
+				enemy.part.CFrame = CFrame.lookAt(from, flatTarget)
+			end
+		end
+		setAnimState(enemy, moving and "walk" or "idle")
+		-- Slows read on the walk cycle too, not just the ground speed.
+		if enemy.tracks and enemy.tracks.walk and enemy.walkAnimSpeed ~= speedMult then
+			enemy.walkAnimSpeed = speedMult
+			enemy.tracks.walk:AdjustSpeed(speedMult)
 		end
 	end
 
@@ -899,7 +1061,19 @@ local function updateEnemy(entry, dt)
 	-- overall attack cadence (attackCooldown) is unchanged from before —
 	-- the windup eats into the existing gap between hits, it doesn't add on
 	-- top of it.
-	if not enemy.windingUp and root and (root.Position - enemy.part.Position).Magnitude <= def.attackRange then
+	-- Range is measured to the body's vertical extent, not the part center:
+	-- a tall enemy (the golem's center sits ~6 studs up, well above a player
+	-- root) would stop walking at planar attackRange yet never pass a
+	-- center-to-root 3D check — parked in a dead zone, never swinging. Only
+	-- Y-overlap with the part is forgiven, so cliff campers still read far.
+	local inAttackRange = false
+	if root then
+		local delta = root.Position - enemy.part.Position
+		local verticalGap = math.max(0, math.abs(delta.Y) - def.size.Y / 2)
+		inAttackRange = math.sqrt(delta.X * delta.X + delta.Z * delta.Z + verticalGap * verticalGap)
+			<= def.attackRange
+	end
+	if not enemy.windingUp and inAttackRange then
 		if now - enemy.lastAttack >= def.attackCooldown then
 			enemy.lastAttack = now
 			local windup = math.clamp(
@@ -912,6 +1086,11 @@ local function updateEnemy(entry, dt)
 			enemy.windupTotal = windup
 			enemy.windupEndsAt = now + windup
 			setStatusMark(enemy, "telegraph", true)
+			-- Action priority, so the swing overrides whatever idle/walk is
+			-- looping underneath and hands back cleanly when it ends.
+			if enemy.tracks and enemy.tracks.attack then
+				enemy.tracks.attack:Play(0.05)
+			end
 		end
 	end
 end
@@ -1494,6 +1673,10 @@ function EnemyService.start()
 	-- as GatheringService's Node_ markers, docs/MAP_AUTHORING.md); the defs'
 	-- `spots` lists stay the fallback for places without a map.
 	if MapMarkers.mapPresent() then
+		-- Strictly marker-driven: on an authored map, what you see in Studio
+		-- is the whole world. An enemy type with zero markers spawns nowhere
+		-- (takeFor prints it), and the def `spots` below only matter for
+		-- map-less places (bare-baseplate dev sessions).
 		local markers = MapMarkers.takeFor("Enemy_", ENEMY_DEFS)
 		for key, def in pairs(ENEMY_DEFS) do
 			for _, marker in ipairs(markers[key] or {}) do

@@ -18,6 +18,7 @@ on:
     paths:
       - "roblox/**"
       - "scripts/deploy-places.mjs"
+      - "scripts/pull-maps.mjs"
       - ".github/workflows/deploy-places.yml"
   workflow_dispatch:
     inputs:

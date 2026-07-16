@@ -153,7 +153,9 @@ stat hooks: crit + dodge + armor (EnemyService), swing cooldown
 `ToolService` (equippable Tools + `registerActivated` hook +
 `registerSwingCooldownMult`; the swing cooldown gates the activation handler
 too, so click spam can't out-DPS attack speed) ·
-`GatheringService` (data-driven resource nodes: trees→wood, rocks→stone;
+`GatheringService` (data-driven resource nodes: oak/conifer/dead trees→wood,
+hardwood tree→hardwood, stone/copper/iron rocks→their yields; every node's
+model carries `NodeTool`/`NodeName` attributes for the client's RMB focus;
 harvests burst node-themed particles and fire the `onGathered` hook — the
 drop system flies the resource from the node to the player as pure show) ·
 `EnemyService` (data-driven enemies: slimes, goblins + `onKilled` +
@@ -234,9 +236,14 @@ key: SpellTrackerUI's trait tracker, equipment paper doll + effects panel,
 Sort/gold utilities bar over the scrollable 10×30 drag & drop grid — left to
 right; R rotates while
 dragging, drop previews green/red, hover + Q throws the item on the ground,
-hover + 3–0 quick-binds tools/consumables,
-hover + 1/2 equips a weapon/tool into weapon/offhand with the occupant
-swapped back to the first free grid spot; tiles show "Lv N" top-right (red =
+hover + 3–0 quick-binds tools/consumables (shift-click binds them to the
+leftmost free hotbar slot),
+hover + 1/2 equips into weapon/offhand with the occupant swapped back to the
+first free grid spot (the weapon slot is weapons-only; the offhand also takes
+a tool — `Items.slotAccepts`, mirrored in backend `items.js`); right-clicking
+a deployable puts its Tool straight in the hand — no equipment slot, no bind —
+closes the panel, and the held item's tile keeps a bright border while it
+stays in hand; tiles show "Lv N" top-right (red =
 above your class level) and gear above the active class level can't be newly
 equipped — gated in every client equip path and server-side in
 `PlayerService.moveItem` (`item_level`), while already-equipped pieces stay
@@ -327,7 +334,12 @@ while an id is still 0).
   `PlayerService.onInventoryChanged(fn)`.
 - Content is **data-driven**: add a resource node via a `NODE_DEFS` entry (+
   builder) in `GatheringService`; add an enemy via an `ENEMY_DEFS` entry in
-  `EnemyService`; add an item to `backend/content/items.json` **and**
+  `EnemyService` (an animated skinned-mesh enemy also registers its rig +
+  animation asset ids in `shared/MeshAssets.animated` — uploaded WITHOUT
+  Studio via `scripts/upload-enemy-assets.mjs`, source FBXs in
+  `new_art_style/roblox/opencloud/` — and sets `animatedMesh = "<key>"` on
+  the def; `meshAsset`/`details` stay the fallback looks); add an item to
+  `backend/content/items.json` **and**
   `Items.lua` (with a `size` footprint; equipment may carry `itemLevel` +
   `traits` points — see `shared/Traits.lua` — and an optional `rarity`
   tier — see `shared/Rarity.lua`); add/reprice a store via

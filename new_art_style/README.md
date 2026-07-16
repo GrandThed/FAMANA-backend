@@ -56,6 +56,22 @@ Contact-sheet renders of each set: `variants/_preview_<Type>.png`.
 | `M_Tree_Snow` | conifer snow | white `#EDF2F6` |
 | `M_Tree_DeadBark` | dead tree | cool grey `#525459` |
 
+## Enemies
+
+Three enemy assets from the `enemies.png` concept, in the same faceted flat-color style (no cel shading):
+
+![Enemies preview](SM_Enemies_preview.png)
+
+| File | Description | Tris | Height |
+|------|-------------|------|--------|
+| `SM_Enemy_Moss_Goblin` | Green goblin — spiked helmet, leather vest + belt, loincloth, wooden club in right hand | 804 | ~1.3 m |
+| `SM_Enemy_Rock_Golem` | Hulking boulder body, moss on all upward-facing rock surfaces, emissive glowing eyes | 1,240 | ~2.1 m |
+| `SM_Enemy_Cave_Spider` | Dark faceted abdomen, tan cephalothorax, 6 bead eyes, fangs, 8 angular two-segment legs | 2,528 | ~1.0 m |
+
+Same game-ready checklist as the trees (single mesh, origin at feet on z = 0, flat shading, UVs, GLB + FBX). Enemy materials are prefixed `M_Enemy_*`; the golem's eyes use an emissive material (`M_Enemy_GlowEyes`). The golem's moss is assigned by face normal — any rock face pointing up became moss — so it stays consistent from every angle.
+
+**Rigging note:** the enemy GLB/FBX files in this folder are static meshes. All three enemies also have **rigged and animated Roblox versions** in `roblox/` — skinned rigs with palette textures and Idle/Walk/Attack clips as FBX, plus `ROBLOX.md` with the full Studio import guide (goblin: 11 bones, golem: 10, spider: 19 with two-bone leg chains).
+
 ## How they were built
 
 All geometry was generated procedurally with Python inside Blender:

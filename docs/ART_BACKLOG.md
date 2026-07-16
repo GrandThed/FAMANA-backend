@@ -75,6 +75,17 @@ unwired — use them via authored-map decoration or future nodes/biomes.
 World defs support `assetIds` variant arrays + random yaw per placement.
 Style rules: [`ART_STYLE.md`](ART_STYLE.md).
 
+## Rocks & ores variant pools — DONE (2026-07-14)
+
+The [`new_art_style/rocks/`](../new_art_style/rocks/) batch
+(`FAMANA_RocksOres.blend`, previews alongside) replaces the single StyleA
+rock meshes with 3-variant structural pools (squat dome / tilted monolith /
+leaning twin slabs, ~200–330 tris, 4–8 studs): `rock` node = copper-flecked
+pool, `iron_rock` = iron pool (`fam_rock_dark` body + flattened `fam_iron`
+lumps), `stone_rock` = plain grey pool, loaded but unwired (authored-map
+decoration). This supersedes the RockStone/RockCopper/RockIron/RockCluster
+rows in the Done table above.
+
 ## To upgrade — ArtKit remnants (all optional)
 
 - [ ] NPCs: **Marla the Trader** (vendor) + quest givers — humanoid meshes,

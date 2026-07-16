@@ -263,14 +263,22 @@ function SynergyService.start()
 	PlayerService.onInventoryChanged(recompute)
 	ToolService.onHeldChanged(recompute)
 
-	Players.PlayerAdded:Connect(function(player)
+	local function watchPlayer(player)
 		player:GetAttributeChangedSignal("Level"):Connect(function()
 			recompute(player)
 		end)
 		player:GetAttributeChangedSignal("Class"):Connect(function()
 			recompute(player)
 		end)
-	end)
+	end
+
+	Players.PlayerAdded:Connect(watchPlayer)
+	-- Players who connected during server boot fired PlayerAdded before the
+	-- connect above (same sweep as PlayerService) — without this their
+	-- Level/Class changes never trigger a synergy recompute.
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchPlayer(player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
 		statsCache[player.UserId] = nil

@@ -29,9 +29,8 @@ roblox/src/server/Secret.lua
 *.rbxlx
 *.rbxm
 *.rbxmx
-# …except authored place maps — they ARE the deploy source (docs/MAP_AUTHORING.md)
-!roblox/maps/*.rbxm
-!roblox/maps/*.rbxmx
+# Maps are NOT tracked: Studio owns them. Deploys pull the live place's Map
+# folder into roblox/maps/<name>/ right before building (docs/MAP_AUTHORING.md).
 
 # Build output
 dist/

@@ -70,10 +70,11 @@ MeshAssets.items = {
 }
 
 -- World models land in ReplicatedStorage.MeshModels[<key>]; the enemy,
--- gathering and crafting services clone them when present. The `rock` node
--- uses the copper-flecked mesh: mining it yields stone plus a copper bonus,
--- and the crystals telegraph that. (The slime keeps its classic translucent
--- ArtKit look by choice — its mesh stays uploaded but unwired.)
+-- gathering and crafting services clone them when present. The rock pools
+-- split by yield: `stone_rock` gives stone only, `copper_rock` copper ore
+-- (the nuggets telegraph it), `iron_rock` iron ore. (The slime keeps its
+-- classic translucent ArtKit look by choice — its mesh stays uploaded but
+-- unwired.)
 MeshAssets.world = {
 	goblin = { assetId = 98715900781376 },
 	-- Gathering trees are VARIANT POOLS (new_art_style/variants — 5 authored
@@ -83,11 +84,15 @@ MeshAssets.world = {
 	-- `scale` multiplies the mesh at placement (MeshAssetService.place).
 	tree = { scale = 1.5, assetIds = { 72344195310639, 107593124794028, 117032412913468, 79125791269192, 105236673635744 } }, -- green oak 01-05
 	hardwood_tree = { scale = 1.5, assetIds = { 138632698344179, 127398703088981, 74528344057829, 71595350168403, 104059734104173 } }, -- autumn oak 01-05
-	-- No node yet: for authored-map decoration / future content.
+	-- Wood-variety nodes: both drop plain wood, different biome flavor.
 	conifer_tree = { assetIds = { 104417345453937, 80497554894490, 112725607111965, 70891102488617, 128070011856338 } },
 	dead_tree = { assetIds = { 97161715709820, 82951960226063, 76183893695357, 119450274004031, 94378359347271 } },
-	rock = { assetId = 122513009887645 },
-	iron_rock = { assetId = 88791112606468 },
+	-- Rock nodes are variant pools too (new_art_style/rocks — 3 structural
+	-- variants each: squat dome / tilted monolith / leaning twin slabs, ore
+	-- nuggets scattered over the host rock's side faces).
+	stone_rock = { assetIds = { 137910844444218, 79520870706483, 134539682454068 } }, -- plain grey 01-03
+	copper_rock = { assetIds = { 104564765245563, 100824972868800, 78565553450595 } }, -- copper-flecked 01-03
+	iron_rock = { assetIds = { 102142981623224, 110129547971909, 123429027243726 } }, -- iron 01-03
 	simple_forge = { assetId = 138958981450463 },
 	-- camp furniture + the tier-scaled campfire dressing
 	chest = { assetId = 115944771848024 },
@@ -98,6 +103,35 @@ MeshAssets.world = {
 	lantern = { assetId = 117384952474171 },
 	trophy = { assetId = 136523617486297 },
 	campfire = { assetId = 135244778048023 },
+}
+
+-- Animated skinned-mesh enemies (new_art_style/roblox — one rigged MeshPart
+-- with Bones + three published animation clips each). Uploaded via Open Cloud
+-- (scripts/upload-enemy-assets.mjs; ids mirror
+-- new_art_style/roblox/opencloud/roblox_asset_ids.json). Unlike the static
+-- world models these keep their instance hierarchy (bones + the
+-- AnimationController the pipeline ships inside the model), so
+-- MeshAssetService loads them un-flattened and EnemyService drives the
+-- idle/walk/attack tracks. `height` is the authored stud height — enemy defs
+-- should keep size.Y close to it so the visual barely rescales (the baked
+-- animation offsets assume the authored size). Fronts are -Z (the enemy
+-- convention), no flip needed.
+MeshAssets.animated = {
+	goblin = {
+		assetId = 97686843371381,
+		height = 3.98,
+		animations = { idle = 121725071555551, walk = 115918753604656, attack = 140720132537222 },
+	},
+	golem = {
+		assetId = 138468365554927,
+		height = 6.3,
+		animations = { idle = 105605400201380, walk = 139612490294747, attack = 81523487745811 },
+	},
+	spider = {
+		assetId = 109971290803819,
+		height = 5.36,
+		animations = { idle = 118884750774521, walk = 86598766801986, attack = 123852831646787 },
+	},
 }
 
 -- Flat colors by Blender material name (what each exported part is called).

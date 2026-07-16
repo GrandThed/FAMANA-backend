@@ -4,29 +4,33 @@
 // project files + authored maps) is driven by roblox/places.json. Full
 // pipeline design: docs/DEPLOYMENT.md.
 //
-// A deploy REPLACES the whole place file. Everything a place needs must
-// therefore live in the repo: code (src/), the authored map
-// (roblox/maps/<name>.rbxm — see docs/MAP_AUTHORING.md) and place settings
-// (the per-place *.project.json). Anything edited only in Studio and never
-// exported is overwritten.
+// A deploy REPLACES the whole place file — but the authored map survives:
+// right before building, each place's live Map folder is PULLED down from
+// Roblox (scripts/pull-maps.mjs) into roblox/maps/<name>/ and built back in.
+// Studio is the source of truth for maps; git is the source of truth for
+// code and place settings (the per-place *.project.json). See
+// docs/MAP_AUTHORING.md.
 //
 // What a run does:
 //   1. Guards: repo must be clean (--force overrides; drafts only warn) and
 //      Secret.lua must exist (the built place needs the backend key).
 //   2. Stamps src/shared/BuildInfo.lua with the git commit + timestamp for
 //      the duration of the build, restoring the checked-in version after.
-//   3. rojo-builds each place and POSTs it to Open Cloud.
-//   4. Records each publish in the backend deploy ledger (POST /deploys) and
-//      warns when Roblox's version number jumped more than +1 since the last
-//      recorded deploy — that means someone published outside the pipeline
-//      (usually a Studio session; unexported map work is at risk).
-//   5. With --restart (and zero failures): one restartServers call migrates
+//   3. Pulls each place's live map (skippable with --no-pull). A FAILED pull
+//      fails that place's deploy — building without the live map would
+//      overwrite it, the one thing this pipeline must never do.
+//   4. rojo-builds each place and POSTs it to Open Cloud.
+//   5. Records each publish in the backend deploy ledger (POST /deploys) and
+//      notes when Roblox's version number jumped more than +1 since the last
+//      recorded deploy (Studio sessions — normal for map work, which was
+//      just pulled into this very build).
+//   6. With --restart (and zero failures): one restartServers call migrates
 //      live servers that run outdated versions to the newest one.
 //
-// Keys: ROBLOX_API_KEY (Open Cloud: universe-places:write, plus universe
-// write for --restart) in a repo-root .env file (gitignored) or the env.
-// The backend ledger authenticates with FAMANA_API_KEY if set, else the key
-// is read from roblox/src/server/Secret.lua.
+// Keys: ROBLOX_API_KEY (Open Cloud: universe-places:write, asset-delivery
+// read for the map pull, plus universe write for --restart) in a repo-root
+// .env file (gitignored) or the env. The backend ledger authenticates with
+// FAMANA_API_KEY if set, else the key is read from roblox/src/server/Secret.lua.
 //
 // Usage:
 //   node scripts/deploy-places.mjs            # build + publish everything
@@ -34,6 +38,7 @@
 //   node scripts/deploy-places.mjs --draft    # upload as Saved, not Published
 //   node scripts/deploy-places.mjs --restart  # migrate live servers after
 //   node scripts/deploy-places.mjs --force    # deploy despite a dirty tree
+//   node scripts/deploy-places.mjs --no-pull  # build with maps already on disk
 //
 // Requires Node 18+ and rojo on PATH (rokit install in roblox/).
 
@@ -41,6 +46,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { pullMap } from "./pull-maps.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ROBLOX_DIR = path.join(ROOT, "roblox");
@@ -96,6 +102,7 @@ const args = process.argv.slice(2);
 const draft = args.includes("--draft");
 const restart = args.includes("--restart");
 const force = args.includes("--force");
+const noPull = args.includes("--no-pull");
 const requested = args.filter((arg) => !arg.startsWith("--"));
 const unknown = requested.filter((name) => !manifest.places[name]);
 if (unknown.length > 0) {
@@ -262,16 +269,22 @@ try {
     const { placeId, project } = manifest.places[name];
     try {
       const latest = await ledgerLatest(placeId);
-      process.stdout.write(`- ${name} (${placeId}): building… `);
+      process.stdout.write(`- ${name} (${placeId}): `);
+      if (!noPull) {
+        process.stdout.write("pulling map… ");
+        const pulled = await pullMap(name, placeId, API_KEY);
+        process.stdout.write(pulled === "pulled" ? "ok, " : "none, ");
+      }
+      process.stdout.write(`building… `);
       const file = build(name, project);
       process.stdout.write(`${versionType.toLowerCase()}… `);
       const version = await publish(placeId, file);
       console.log(`v${version} (${gitCommit})`);
       if (latest && version !== latest.version_number + 1) {
-        console.warn(
-          `  ! version jumped ${latest.version_number} → ${version}: this place was saved/published\n` +
-            "    outside the pipeline since the last deploy (a Studio session?). If map work\n" +
-            "    happened there, make sure it was exported to roblox/maps/ — it was just overwritten."
+        console.log(
+          `  · version jumped ${latest.version_number} → ${version}: the place was saved/published\n` +
+            "    outside the pipeline since the last deploy — normal for Studio map sessions\n" +
+            "    (their Map folder was pulled into this very build, nothing lost)."
         );
       }
       await ledgerRecord({

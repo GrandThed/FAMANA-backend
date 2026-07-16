@@ -9,6 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local GridConfig = require(Shared:WaitForChild("GridConfig"))
+local MapMarkers = require(Shared:WaitForChild("MapMarkers"))
 local Remotes = require(Shared:WaitForChild("Remotes"))
 local PlayerService = require(script.Parent.PlayerService)
 
@@ -76,13 +77,15 @@ local function handoff(player, destCell, entryEdge)
 	end
 end
 
-local function createBorder(edge, destCell)
+-- cframe/size are optional (Border_ marker placement); without them the wall
+-- sits at GridConfig's default edge geometry.
+local function createBorder(edge, destCell, cframe, size)
 	local wall = Instance.new("Part")
 	wall.Name = "Border_" .. edge
 	wall.Anchored = true
 	wall.CanCollide = false
-	wall.Size = Vector3.new(2, 30, 90)
-	wall.Position = Vector3.new(GridConfig.borderX(edge), 15, 0)
+	wall.Size = size or Vector3.new(2, 30, 90)
+	wall.CFrame = cframe or CFrame.new(GridConfig.borderX(edge), 15, 0)
 	wall.Color = Color3.fromRGB(80, 140, 255)
 	wall.Transparency = 0.6
 	wall.Material = Enum.Material.ForceField
@@ -98,6 +101,15 @@ local function createBorder(edge, destCell)
 	end)
 end
 
+-- Which way "into the map" points for each edge, for placing arrivals just
+-- inside a marker-authored wall.
+local INWARD = {
+	east = Vector3.new(-1, 0, 0),
+	west = Vector3.new(1, 0, 0),
+	north = Vector3.new(0, 0, 1),
+	south = Vector3.new(0, 0, -1),
+}
+
 function BorderService.start()
 	teleportingRemote = Remotes.get("Teleporting")
 	cancelledRemote = Remotes.get("TeleportCancelled")
@@ -107,8 +119,42 @@ function BorderService.start()
 	borderFolder.Parent = Workspace
 
 	local cellId = GridConfig.currentCell()
-	for edge, destCell in pairs(GridConfig.neighbors(cellId)) do
-		createBorder(edge, destCell)
+	local neighbors = GridConfig.neighbors(cellId)
+
+	if MapMarkers.mapPresent() then
+		-- Authored maps place the crossings too: a Border_<edge> marker's
+		-- position AND size become the trigger wall, so borders move/resize
+		-- in Studio like everything else. Strictly marker-driven — a neighbor
+		-- edge with no marker gets NO crossing (warned below), same contract
+		-- as every other marker type. Arrivals from a marker-authored edge
+		-- appear just inside its wall (resolver registered with PlayerService).
+		local entryOverrides = {} -- [entryEdge] = Vector3 arrival position
+		local markers = MapMarkers.take("Border_")
+		for edge, list in pairs(markers) do
+			local destCell = neighbors[edge]
+			if destCell then
+				for _, marker in ipairs(list) do
+					createBorder(edge, destCell, marker.cframe, marker.size)
+				end
+				local inward = INWARD[edge] or Vector3.zero
+				local arrive = list[1].cframe.Position + inward * GridConfig.ENTRY_INSET
+				entryOverrides[edge] = Vector3.new(arrive.X, GridConfig.ENTRY_Y, arrive.Z)
+			else
+				warn(("[BorderService] Border_%s marker matches no neighbor of cell '%s' — ignored"):format(edge, cellId))
+			end
+		end
+		for edge, destCell in pairs(neighbors) do
+			if not markers[edge] then
+				warn(("[BorderService] map has no Border_%s marker — the crossing to '%s' is unavailable"):format(edge, destCell))
+			end
+		end
+		PlayerService.setEntryPointResolver(function(entryEdge)
+			return entryOverrides[entryEdge]
+		end)
+	else
+		for edge, destCell in pairs(neighbors) do
+			createBorder(edge, destCell)
+		end
 	end
 
 	Players.PlayerRemoving:Connect(function(player)

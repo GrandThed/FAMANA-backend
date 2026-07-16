@@ -205,11 +205,22 @@ function ClassService.start()
 		return profile and profile.classLevels or {}
 	end
 
-	Players.PlayerAdded:Connect(function(player)
+	local function watchPlayer(player)
 		player.CharacterAdded:Connect(function()
 			ClassService.applyMovementAndMana(player)
 		end)
-	end)
+		if player.Character then
+			ClassService.applyMovementAndMana(player)
+		end
+	end
+
+	Players.PlayerAdded:Connect(watchPlayer)
+	-- Players who connected during server boot fired PlayerAdded before the
+	-- connect above (same sweep as PlayerService) — without this their walk
+	-- speed and class-scaled mana caps stay at the defaults until a respawn.
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchPlayer(player)
+	end
 
 	-- Levels raise HP/Mana caps (see shared/Classes.lua statsAtLevel); hook
 	-- into PlayerService's level-up event to re-derive them live.

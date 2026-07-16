@@ -465,7 +465,7 @@ local function onCharacterAdded(player, character)
 end
 
 function HealthService.start()
-	Players.PlayerAdded:Connect(function(player)
+	local function watchPlayer(player)
 		player.CharacterAdded:Connect(function(character)
 			onCharacterAdded(player, character)
 		end)
@@ -473,7 +473,15 @@ function HealthService.start()
 		if player.Character then
 			onCharacterAdded(player, player.Character)
 		end
-	end)
+	end
+
+	Players.PlayerAdded:Connect(watchPlayer)
+	-- Players who connected during server boot fired PlayerAdded before the
+	-- connect above (same sweep as PlayerService) — without this their saved
+	-- HP/position never restore and they spawn on the default 100-HP humanoid.
+	for _, player in ipairs(Players:GetPlayers()) do
+		watchPlayer(player)
+	end
 
 	Players.PlayerRemoving:Connect(function(player)
 		lastDamage[player.UserId] = nil

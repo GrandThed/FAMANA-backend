@@ -31,6 +31,53 @@ local PICKUP_RANGE = 1.3 -- studs: close enough to be collected
 local MAGNET_SPEED = 14 -- studs/second while flying to a player
 local OWNER_REARM_DISTANCE = MAGNET_RANGE + 2 -- thrower must get this far away once to re-enable pickup
 
+-- Loot tables: [source] = { { itemId, chance, min, max }, ... }
+local LOOT = {
+	slime = {
+		{ itemId = "slime_goo", chance = 1.0, min = 1, max = 1 },
+		{ itemId = "wood", chance = 0.25, min = 1, max = 1 },
+	},
+	goblin = {
+		{ itemId = "goblin_ear", chance = 1.0, min = 1, max = 1 },
+		{ itemId = "stone", chance = 0.4, min = 1, max = 2 },
+		{ itemId = "sword_iron", chance = 0.05, min = 1, max = 1 }, -- rare
+	},
+	golem = {
+		-- A walking quarry: guaranteed stone plus a real shot at ore, so
+		-- fighting one competes with mining rocks for gathering time.
+		{ itemId = "stone", chance = 1.0, min = 1, max = 3 },
+		{ itemId = "copper_ore", chance = 0.5, min = 1, max = 2 },
+		{ itemId = "iron_ore", chance = 0.2, min = 1, max = 1 },
+	},
+	spider = {
+		-- Arrows scavenged from webbed victims — keeps archers farming
+		-- spiders instead of only buying ammo.
+		{ itemId = "arrow", chance = 0.35, min = 2, max = 5 },
+	},
+}
+
+-- Rolled trait gear: [source] = { chance, pool }. On a hit, one base item
+-- from the pool drops with instance meta rolled by shared/Traits — its item
+-- level is the mob's level ±1, so tougher spawns drop stronger rolls.
+local GEAR_LOOT = {
+	slime = { chance = 0.08, pool = { "ring_vitality", "ring_focus" } },
+	goblin = {
+		chance = 1.0, -- goblins ALWAYS drop a rolled piece (decided 2026-07-06)
+		pool = {
+			"sword_basic",
+			"helmet_leather",
+			"chest_leather",
+			"gloves_leather",
+			"legs_leather",
+			"boots_leather",
+		},
+	},
+	-- Tank-flavored pool for the tanky mob, dex-flavored for the fast one —
+	-- each new enemy telegraphs its own build identity through its drops.
+	golem = { chance = 0.35, pool = { "helmet_bastion", "chest_colossus", "ring_vitality", "sword_iron" } },
+	spider = { chance = 0.3, pool = { "boots_evader", "ring_lynx", "bow_basic" } },
+}
+
 local MAX_ROLLED_LEVEL = 20
 
 local function rollGear(source, mobLevel)

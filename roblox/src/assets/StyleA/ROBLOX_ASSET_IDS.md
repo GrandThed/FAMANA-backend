@@ -80,3 +80,12 @@
 | TreeOakGreen3 | 117032412913468 | rbxassetid://117032412913468 |
 | TreeOakGreen4 | 79125791269192 | rbxassetid://79125791269192 |
 | TreeOakGreen5 | 105236673635744 | rbxassetid://105236673635744 |
+| SM_Rock_Copper_01 | 104564765245563 | rbxassetid://104564765245563 |
+| SM_Rock_Copper_02 | 100824972868800 | rbxassetid://100824972868800 |
+| SM_Rock_Copper_03 | 78565553450595 | rbxassetid://78565553450595 |
+| SM_Rock_Iron_01 | 102142981623224 | rbxassetid://102142981623224 |
+| SM_Rock_Iron_02 | 110129547971909 | rbxassetid://110129547971909 |
+| SM_Rock_Iron_03 | 123429027243726 | rbxassetid://123429027243726 |
+| SM_Rock_Stone_01 | 137910844444218 | rbxassetid://137910844444218 |
+| SM_Rock_Stone_02 | 79520870706483 | rbxassetid://79520870706483 |
+| SM_Rock_Stone_03 | 134539682454068 | rbxassetid://134539682454068 |

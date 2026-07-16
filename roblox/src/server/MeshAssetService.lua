@@ -18,6 +18,8 @@ local templates = {} -- [key] = { Model, ... } — world variant pools; most
 -- keys hold one model, gathering trees hold several (same species, small
 -- differences) and every placement draws a random one
 local worldScale = {} -- [key] = default placement scale (MeshAssets def.scale)
+local animatedTemplates = {} -- [key] = rig Model (skinned MeshPart + Bones +
+-- AnimationController), kept UN-flattened — normalize() would strip the rig
 
 local LOAD_TIMEOUT = 15 -- seconds before boot proceeds with fallbacks
 
@@ -159,6 +161,71 @@ function MeshAssetService.weldVisual(part, key, targetHeight)
 	return visual
 end
 
+-- Clones an animated rig template scaled to `targetHeight`, bottom-aligns it
+-- to `part`'s footprint and welds the skinned MeshPart on (massless, no
+-- collide/query — same ride-along contract as weldVisual). The animated
+-- exports already face -Z (the enemy convention), so no FRONT_FLIP here.
+-- Loads the def's animation clips through the rig's AnimationController and
+-- returns { model, tracks = { idle?, walk?, attack? } }, or nil when the
+-- template didn't load (callers fall back to weldVisual/ArtKit looks).
+function MeshAssetService.attachAnimatedVisual(part, key, targetHeight)
+	local template = animatedTemplates[key]
+	local def = MeshAssets.animated and MeshAssets.animated[key]
+	if not template or not def then
+		return nil
+	end
+	local visual = template:Clone()
+	local _, size = visual:GetBoundingBox()
+	if targetHeight and size.Y > 0 and math.abs(size.Y - targetHeight) > 0.01 then
+		visual:ScaleTo(targetHeight / size.Y)
+	end
+	local bounds, scaledSize = visual:GetBoundingBox()
+	local target = part.CFrame * CFrame.new(0, -part.Size.Y / 2 + scaledSize.Y / 2, 0)
+	visual:PivotTo(target * (bounds:Inverse() * visual:GetPivot()))
+
+	local mesh = visual:FindFirstChildWhichIsA("MeshPart", true)
+	if not mesh then
+		visual:Destroy()
+		return nil
+	end
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = part
+	weld.Part1 = mesh
+	weld.Parent = mesh
+	visual.Name = "Visual"
+	visual.Parent = part
+
+	-- The upload pipeline ships an AnimationController inside the model;
+	-- reuse it (a second controller on the same rig silently animates nothing).
+	local controller = visual:FindFirstChildOfClass("AnimationController")
+	if not controller then
+		controller = Instance.new("AnimationController")
+		controller.Parent = visual
+	end
+	local animator = controller:FindFirstChildOfClass("Animator")
+	if not animator then
+		animator = Instance.new("Animator")
+		animator.Parent = controller
+	end
+
+	local tracks = {}
+	for name, id in pairs(def.animations or {}) do
+		local anim = Instance.new("Animation")
+		anim.AnimationId = "rbxassetid://" .. id
+		local ok, track = pcall(animator.LoadAnimation, animator, anim)
+		if ok then
+			track.Looped = name ~= "attack"
+			track.Priority = name == "attack" and Enum.AnimationPriority.Action
+				or name == "walk" and Enum.AnimationPriority.Movement
+				or Enum.AnimationPriority.Idle
+			tracks[name] = track
+		else
+			warn(("[MeshAssetService] %s animation %s (%d) failed to load: %s"):format(key, name, id, tostring(track)))
+		end
+	end
+	return { model = visual, tracks = tracks }
+end
+
 function MeshAssetService.start()
 	local assetsFolder = ReplicatedStorage:FindFirstChild("Assets")
 	if not assetsFolder then
@@ -219,6 +286,40 @@ function MeshAssetService.start()
 				model.Parent = worldFolder
 			end)
 		end
+	end
+	-- Animated rigs skip normalize/canonicalize entirely: flattening would
+	-- strip the Bones and AnimationController, and recoloring is pointless —
+	-- their look comes from the palette texture baked into the MeshPart.
+	for key, def in pairs(MeshAssets.animated or {}) do
+		pending += 1
+		task.spawn(function()
+			local ok, err = pcall(function()
+				local container = InsertService:LoadAsset(def.assetId)
+				local mesh = container:FindFirstChildWhichIsA("MeshPart", true)
+				assert(mesh, "no MeshPart in asset")
+				local model = mesh:FindFirstAncestorOfClass("Model") or container
+				model.Name = "Anim_" .. key
+				mesh.Anchored = false
+				mesh.CanCollide = false
+				mesh.CanQuery = false
+				mesh.Massless = true
+				-- Import bookkeeping the game never reads; drop it so enemy
+				-- clones don't replicate a folder of dead CFrameValues each.
+				local initialPoses = model:FindFirstChild("InitialPoses")
+				if initialPoses then
+					initialPoses:Destroy()
+				end
+				model.Parent = worldFolder
+				animatedTemplates[key] = model
+				if model ~= container then
+					container:Destroy()
+				end
+			end)
+			if not ok then
+				warn(("[MeshAssetService] animated %s (%d) failed to load: %s"):format(key, def.assetId, tostring(err)))
+			end
+			pending -= 1
+		end)
 	end
 
 	-- Boot blocks here: the world builders (nodes, enemies, workbenches) read

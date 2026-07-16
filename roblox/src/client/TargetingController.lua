@@ -87,26 +87,18 @@ local function candidates(category)
 				end
 			end
 		end
-	elseif category == "axe" then
+	elseif category == "axe" or category == "pickaxe" then
+		-- Gathering nodes: GatheringService stamps every node model with
+		-- NodeTool/NodeName attributes at spawn (mesh pools and ArtKit
+		-- fallbacks alike), so new node types show up here with zero client
+		-- changes — matching model names broke the moment nodes went mesh.
 		local folder = Workspace:FindFirstChild("Resources")
 		if folder then
 			for _, m in ipairs(folder:GetChildren()) do
-				if m:IsA("Model") and (m.Name == "Tree" or m.Name == "HardwoodTree") then
-					local trunk = m.PrimaryPart or m:FindFirstChild("Trunk")
-					if trunk and not trunk:GetAttribute("Depleted") then
-						table.insert(out, { adornee = m, anchor = trunk, name = m.Name == "HardwoodTree" and "Old Tree" or "Tree", hasHp = false })
-					end
-				end
-			end
-		end
-	elseif category == "pickaxe" then
-		local folder = Workspace:FindFirstChild("Resources")
-		if folder then
-			for _, r in ipairs(folder:GetChildren()) do
-				if r:IsA("Model") and (r.Name == "Rock" or r.Name == "IronRock") then
-					local boulder = r.PrimaryPart or r:FindFirstChild("Boulder")
-					if boulder and not boulder:GetAttribute("Depleted") then
-						table.insert(out, { adornee = r, anchor = boulder, name = r.Name == "IronRock" and "Iron Vein" or "Rock", hasHp = false })
+				if m:IsA("Model") and m:GetAttribute("NodeTool") == category then
+					local anchor = m.PrimaryPart
+					if anchor and not anchor:GetAttribute("Depleted") then
+						table.insert(out, { adornee = m, anchor = anchor, name = m:GetAttribute("NodeName") or m.Name, hasHp = false })
 					end
 				end
 			end
@@ -492,12 +484,14 @@ function TargetingController.start()
 			originalMinZoom = player.CameraMinZoomDistance
 			originalMaxZoom = player.CameraMaxZoomDistance
 			local camera = Workspace.CurrentCamera
-			local character = player.Character
-			local root = character and character:FindFirstChild("HumanoidRootPart")
+			-- The default camera measures zoom to its Focus (the subject point
+			-- it maintains at head height), NOT to the root — measuring to the
+			-- root pins the bounds slightly past the real zoom, so every RMB
+			-- press made the camera pop out to the too-far pinned distance.
 			local currentDistance = originalMinZoom
-			if camera and root then
+			if camera then
 				currentDistance = math.clamp(
-					(camera.CFrame.Position - root.Position).Magnitude,
+					(camera.CFrame.Position - camera.Focus.Position).Magnitude,
 					originalMinZoom,
 					originalMaxZoom
 				)
