@@ -30,6 +30,7 @@ local CampFurnitureService = require(script:WaitForChild("CampFurnitureService")
 local RestedService = require(script:WaitForChild("RestedService"))
 local CampArchitectService = require(script:WaitForChild("CampArchitectService"))
 local QuestService = require(script:WaitForChild("QuestService"))
+local BestiaryService = require(script:WaitForChild("BestiaryService"))
 local MarkerService = require(script:WaitForChild("MarkerService"))
 local BorderService = require(script:WaitForChild("BorderService"))
 local WorldService = require(script:WaitForChild("WorldService"))
@@ -68,6 +69,7 @@ CampFurnitureService.start() -- después de CampService: mobiliario solo se plan
 RestedService.start() -- banca el buff "Descansado" mientras estás en un camp seguro de noche (reemplaza el viejo bonus de regen por coziness)
 CampArchitectService.start() -- independiente de los otros dos: solo lee/escribe PlayerService.campTier
 QuestService.start() -- after EnemyService/GatheringService: hooks their onKilled/onGathered
+BestiaryService.start() -- after EnemyService: hooks onKilled, bumps lifetime kill counts
 MarkerService.start() -- after PartyService (lee membresía) y EnemyService/DropService (valida anchors)
 if role == "cell" then
 	BorderService.start()

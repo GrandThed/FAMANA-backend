@@ -113,9 +113,6 @@ return {
 		cooldown = 30 * 60, -- 30 min de cooldown tras expirar, por dueño
 		zoneSize = 30, -- cuadrado de N x N studs, centrado en la fogata (tier 0 — ver tiers abajo)
 		maxPlacementDistance = 20, -- distancia jugador -> punto de colocación (anti-exploit)
-		-- Bonus de regen (HP/seg) por estar dentro de la zona segura DE NOCHE
-		-- — la fogata siempre está prendida, pero solo importa cuando afuera
-		-- es peligroso. Placeholder, calibrar jugado. (tier 0 — ver tiers abajo)
 		nightRegenBonus = 3,
 
 		-- Camp tiers (docs/CAMP_TIERS.md): mejora persistente por jugador

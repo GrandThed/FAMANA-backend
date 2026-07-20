@@ -55,6 +55,15 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS camp_layout JSONB NOT NULL DEFAULT 
 -- an already-standing one.
 ALTER TABLE players ADD COLUMN IF NOT EXISTS camp_tier INT NOT NULL DEFAULT 0;
 
+-- Bestiary: lifetime kill counts per enemy lootSource, e.g. { slime: 12,
+-- goblin: 3 }. Flat persistent stat, same shape/lifecycle as quest_progress
+-- (bumped on every EnemyService.onKilled, travels with the profile, never
+-- reset) — see docs/BESTIARY.md. Gates how much of that enemy's Loot.TABLE/
+-- Loot.GEAR the client is shown (EnemyInspectUI, BestiaryUI): shared/
+-- Bestiary.lua turns a count into a tier, and each loot entry's own `tier`
+-- field says which tier reveals it.
+ALTER TABLE players ADD COLUMN IF NOT EXISTS bestiary_kills JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper
 -- doll; x = slot index, y = 0). Legacy rows (pre-grid) have x/y NULL and are

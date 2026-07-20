@@ -30,9 +30,11 @@ local Classes = require(Shared:WaitForChild("Classes"))
 local Items = require(Shared:WaitForChild("Items"))
 local Loot = require(Shared:WaitForChild("Loot"))
 local Rarity = require(Shared:WaitForChild("Rarity"))
+local Bestiary = require(Shared:WaitForChild("Bestiary"))
 local Theme = require(script.Parent.Theme)
 local UIKit = require(script.Parent.UIKit)
 local ClientState = require(script.Parent.ClientState)
+local BestiaryClient = require(script.Parent.BestiaryClient)
 
 local player = Players.LocalPlayer
 local mouse = player:GetMouse()
@@ -211,47 +213,82 @@ function EnemyInspectUI.start()
 	-- attribute): one "Item  chance%" row per guaranteed/chance table drop,
 	-- then a "Gear (random)  chance%" row followed by the pool it can roll
 	-- from (no per-item odds shown — the roll picks one uniformly).
+	--
+	-- Bestiary gate (shared/Bestiary.lua, docs/BESTIARY.md): each entry's
+	-- own `tier` only shows once the local player's lifetime kills against
+	-- `source` (BestiaryClient) reach that tier. Not-yet-revealed entries
+	-- still get a row — "??? " with a hidden chance — so scouting shows
+	-- THAT something drops without spoiling odds/identity early; a status
+	-- row up top reports the current tier and kills left to the next one.
 	local function buildDropRows(source)
 		clearDropRows()
 		local order = 8
 		local hasAny = false
 
 		local tableLoot = source and Loot.TABLE[source]
+		local gear = source and Loot.GEAR[source]
+		local kills = source and BestiaryClient.kills(source) or 0
+
+		if tableLoot or gear then
+			hasAny = true
+			local tier = Bestiary.tierForKills(kills)
+			local toNext = Bestiary.killsToNextTier(kills)
+			local statusLabel, statusValue = addRow(order)
+			statusLabel.Text = "Bestiary"
+			statusValue.Text = toNext and string.format("Tier %d/3 · %d to next", tier, toNext)
+				or string.format("Tier %d/3 · maxed", tier)
+			table.insert(dropRows, statusLabel.Parent)
+			order += 1
+		end
+
 		if tableLoot then
 			for _, entry in ipairs(tableLoot) do
-				local qtyNote = entry.max > 1 and string.format(" x%d-%d", entry.min, entry.max) or ""
-				local name, color = coloredName(entry.itemId, nil)
 				local label, value = addRow(order)
-				label.Text = name .. qtyNote
-				label.TextTruncate = Enum.TextTruncate.AtEnd
-				if color then
-					label.TextColor3 = color
+				if Bestiary.isRevealed(entry.tier, kills) then
+					local qtyNote = entry.max > 1 and string.format(" x%d-%d", entry.min, entry.max) or ""
+					local name, color = coloredName(entry.itemId, nil)
+					label.Text = name .. qtyNote
+					label.TextTruncate = Enum.TextTruncate.AtEnd
+					if color then
+						label.TextColor3 = color
+					end
+					value.Text = string.format("%d%%", math.floor(entry.chance * 100 + 0.5))
+				else
+					label.Text = "??? "
+					label.TextColor3 = Theme.Semantic.TextMuted
+					value.Text = "?"
 				end
-				value.Text = string.format("%d%%", math.floor(entry.chance * 100 + 0.5))
 				table.insert(dropRows, label.Parent)
 				order += 1
-				hasAny = true
 			end
 		end
 
-		local gear = source and Loot.GEAR[source]
 		if gear then
+			local gearRevealed = Bestiary.isRevealed(gear.tier, kills)
 			local gearLabel, gearValue = addRow(order)
-			gearLabel.Text = "Gear (random)"
-			gearValue.Text = string.format("%d%%", math.floor(gear.chance * 100 + 0.5))
+			if gearRevealed then
+				gearLabel.Text = "Gear (random)"
+				gearValue.Text = string.format("%d%%", math.floor(gear.chance * 100 + 0.5))
+			else
+				gearLabel.Text = "??? "
+				gearLabel.TextColor3 = Theme.Semantic.TextMuted
+				gearValue.Text = "?"
+			end
 			table.insert(dropRows, gearLabel.Parent)
 			order += 1
-			for _, itemId in ipairs(gear.pool) do
-				local name, color = coloredName(itemId, "  · ")
-				local label, value = addRow(order)
-				label.Text = name
-				label.TextTruncate = Enum.TextTruncate.AtEnd
-				label.TextColor3 = color or Theme.Semantic.TextDim
-				value.Text = ""
-				table.insert(dropRows, label.Parent)
-				order += 1
+
+			if gearRevealed then
+				for _, itemId in ipairs(gear.pool) do
+					local name, color = coloredName(itemId, "  · ")
+					local label, value = addRow(order)
+					label.Text = name
+					label.TextTruncate = Enum.TextTruncate.AtEnd
+					label.TextColor3 = color or Theme.Semantic.TextDim
+					value.Text = ""
+					table.insert(dropRows, label.Parent)
+					order += 1
+				end
 			end
-			hasAny = true
 		end
 
 		dropsHeader.Visible = hasAny

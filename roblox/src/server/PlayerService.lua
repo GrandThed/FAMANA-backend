@@ -245,6 +245,14 @@ local function loadProfile(player)
 	data.campTier = data.campTier or 0
 	player:SetAttribute("CampTier", data.campTier)
 
+	-- Bestiary: lifetime kill counts per enemy lootSource ({ [lootSource] =
+	-- count }, docs/BESTIARY.md). Profiles saved before this existed come
+	-- back without it. Published as JSON (same pattern as PlayerSettings/
+	-- HotbarBinds) so the client's Bestiary/EnemyInspect UI can read its own
+	-- reveal tier without a remote round-trip.
+	data.bestiaryKills = typeof(data.bestiaryKills) == "table" and data.bestiaryKills or {}
+	player:SetAttribute("BestiaryKills", HttpService:JSONEncode(data.bestiaryKills))
+
 	-- Recetas "secretas" desbloqueadas para este jugador (ver Recipes.<id>.locked
 	-- — hoy solo "acampada", otorgada por Quests.camp_basics). Set table
 	-- { [recipeId] = true }, publicado como attribute comma-joined (mismo
@@ -491,6 +499,32 @@ function PlayerService.setCampTier(player, tier)
 	return true
 end
 
+-- Lifetime kill count for `player` against `lootSource` (0 if never killed
+-- or the profile hasn't loaded). Used by BestiaryService's bump and by
+-- anything server-side that wants to know a reveal tier without going
+-- through the client's own JSON attribute (shared/Bestiary.lua).
+function PlayerService.getBestiaryKills(player, lootSource)
+	local profile = cache[player.UserId]
+	return profile and profile.bestiaryKills[lootSource] or 0
+end
+
+-- +1 to the lifetime kill count for `lootSource`. Mutates the cache +
+-- republishes the BestiaryKills attribute immediately (cheap: small table,
+-- read by the client's own UI); the row itself travels to the backend on
+-- the next autosave/leave, same as quest kill/gather bumps — no immediate
+-- save here. Returns the new count, or nil if the profile isn't ready
+-- (temporary/no-backend session — kills just don't accumulate that visit).
+function PlayerService.bumpBestiaryKill(player, lootSource)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary or typeof(lootSource) ~= "string" then
+		return nil
+	end
+	local count = (profile.bestiaryKills[lootSource] or 0) + 1
+	profile.bestiaryKills[lootSource] = count
+	player:SetAttribute("BestiaryKills", HttpService:JSONEncode(profile.bestiaryKills))
+	return count
+end
+
 -- true si `player` ya desbloqueó `recipeId` (ver Recipes.<id>.locked). Solo
 -- tiene sentido preguntarlo para recetas locked — una receta sin ese flag
 -- ya es craftable para cualquiera, sin pasar por acá (ver CraftingService).
@@ -641,6 +675,7 @@ local function buildSaveFields(player)
 		trackedQuestId = profile.trackedQuestId,
 		campLayout = profile.campLayout,
 		campTier = profile.campTier,
+		bestiaryKills = profile.bestiaryKills,
 		unlockedRecipes = profile.unlockedRecipes,
 		cell = profile.cell,
 		position = profile.position,
