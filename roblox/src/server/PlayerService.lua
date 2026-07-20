@@ -34,6 +34,21 @@ local function xpToNext(level)
 end
 PlayerService.xpToNext = xpToNext
 
+-- Recomputes + republishes the "MaxClassLevel" attribute (highest level
+-- reached by any class) from profile.classLevels. Called wherever
+-- classLevels can change: initial load, addXp's level-up, and admin
+-- applyStats — feeds shared/Achievements.lua's "level" metric without
+-- needing the full classLevels table replicated to the client.
+local function publishMaxClassLevel(player, profile)
+	local best = 0
+	for _, entry in pairs(profile.classLevels) do
+		if entry.level and entry.level > best then
+			best = entry.level
+		end
+	end
+	player:SetAttribute("MaxClassLevel", best)
+end
+
 -- [userId] = { health, maxHealth, gold, cell, position = {x,y,z}, inventory = {...}, _temporary? }
 local cache = {}
 
@@ -190,6 +205,7 @@ local function loadProfile(player)
 	player:SetAttribute("Level", data.level)
 	player:SetAttribute("Xp", data.xp)
 	player:SetAttribute("XpToNext", xpToNext(data.level))
+	publishMaxClassLevel(player, data)
 
 	-- Hotbar quick binds (keys 3–0) persist with the profile as THREE
 	-- swappable pages ({ active, pages }); the client seeds its HotbarBinds
@@ -252,6 +268,19 @@ local function loadProfile(player)
 	-- reveal tier without a remote round-trip.
 	data.bestiaryKills = typeof(data.bestiaryKills) == "table" and data.bestiaryKills or {}
 	player:SetAttribute("BestiaryKills", HttpService:JSONEncode(data.bestiaryKills))
+
+	-- Achievements (docs/ACHIEVEMENTS.md): a generic counter bag
+	-- (data.stats — gathered/crafted/questsCompleted, kills reuse
+	-- bestiaryKills above) plus the set of unlocked achievement ids. Same
+	-- "publish as JSON attribute, no remote needed" pattern as bestiary.
+	data.stats = typeof(data.stats) == "table" and data.stats or {}
+	data.stats.gathered = typeof(data.stats.gathered) == "table" and data.stats.gathered or {}
+	data.stats.crafted = typeof(data.stats.crafted) == "number" and data.stats.crafted or 0
+	data.stats.questsCompleted = typeof(data.stats.questsCompleted) == "number" and data.stats.questsCompleted or 0
+	player:SetAttribute("PlayerStats", HttpService:JSONEncode(data.stats))
+
+	data.achievementsUnlocked = typeof(data.achievementsUnlocked) == "table" and data.achievementsUnlocked or {}
+	player:SetAttribute("AchievementsUnlocked", HttpService:JSONEncode(data.achievementsUnlocked))
 
 	-- Recetas "secretas" desbloqueadas para este jugador (ver Recipes.<id>.locked
 	-- — hoy solo "acampada", otorgada por Quests.camp_basics). Set table
@@ -525,6 +554,79 @@ function PlayerService.bumpBestiaryKill(player, lootSource)
 	return count
 end
 
+local function publishStats(player, profile)
+	player:SetAttribute("PlayerStats", HttpService:JSONEncode(profile.stats))
+end
+
+-- +`amount` to the lifetime gathered count for `itemId` (AchievementsService,
+-- hooked into GatheringService.onGathered). No-op on a not-ready/temporary
+-- profile, same as bumpBestiaryKill.
+function PlayerService.bumpGathered(player, itemId, amount)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary or typeof(itemId) ~= "string" then
+		return
+	end
+	profile.stats.gathered[itemId] = (profile.stats.gathered[itemId] or 0) + (amount or 1)
+	publishStats(player, profile)
+end
+
+-- +`amount` to the lifetime crafted-batches count (AchievementsService,
+-- hooked into CraftingService.onCrafted).
+function PlayerService.bumpCrafted(player, amount)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary then
+		return
+	end
+	profile.stats.crafted += (amount or 1)
+	publishStats(player, profile)
+end
+
+-- +1 to the lifetime completed-quests count (AchievementsService, hooked
+-- into QuestService.onCompleted).
+function PlayerService.bumpQuestsCompleted(player)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary then
+		return
+	end
+	profile.stats.questsCompleted += 1
+	publishStats(player, profile)
+end
+
+-- Read-only snapshot of everything shared/Achievements.progress needs:
+-- { bestiaryKills, gathered, crafted, maxClassLevel, questsCompleted }.
+-- Same table shape the client's AchievementsClient mirrors via attributes.
+function PlayerService.getAchievementStats(player)
+	local profile = cache[player.UserId]
+	if not profile then
+		return nil
+	end
+	local maxClassLevel = 0
+	for _, entry in pairs(profile.classLevels) do
+		if entry.level and entry.level > maxClassLevel then
+			maxClassLevel = entry.level
+		end
+	end
+	return {
+		bestiaryKills = profile.bestiaryKills,
+		gathered = profile.stats.gathered,
+		crafted = profile.stats.crafted,
+		maxClassLevel = maxClassLevel,
+		questsCompleted = profile.stats.questsCompleted,
+	}
+end
+
+-- true if `achievementId` was newly unlocked just now (false if the player
+-- already had it — caller should only grant the reward on a true return).
+function PlayerService.unlockAchievement(player, achievementId)
+	local profile = cache[player.UserId]
+	if not profile or profile._temporary or profile.achievementsUnlocked[achievementId] then
+		return false
+	end
+	profile.achievementsUnlocked[achievementId] = true
+	player:SetAttribute("AchievementsUnlocked", HttpService:JSONEncode(profile.achievementsUnlocked))
+	return true
+end
+
 -- true si `player` ya desbloqueó `recipeId` (ver Recipes.<id>.locked). Solo
 -- tiene sentido preguntarlo para recetas locked — una receta sin ese flag
 -- ya es craftable para cualquiera, sin pasar por acá (ver CraftingService).
@@ -592,6 +694,7 @@ function PlayerService.addXp(player, amount)
 	player:SetAttribute("XpToNext", xpToNext(profile.level))
 
 	if leveledUp then
+		publishMaxClassLevel(player, profile)
 		for _, fn in ipairs(levelUpHandlers) do
 			task.spawn(fn, player)
 		end
@@ -619,6 +722,7 @@ function PlayerService.applyStats(player, stats)
 	end
 	if typeof(stats.classLevels) == "table" then
 		profile.classLevels = stats.classLevels
+		publishMaxClassLevel(player, profile)
 	end
 
 	local classChanged = false
@@ -676,6 +780,8 @@ local function buildSaveFields(player)
 		campLayout = profile.campLayout,
 		campTier = profile.campTier,
 		bestiaryKills = profile.bestiaryKills,
+		stats = profile.stats,
+		achievementsUnlocked = profile.achievementsUnlocked,
 		unlockedRecipes = profile.unlockedRecipes,
 		cell = profile.cell,
 		position = profile.position,

@@ -231,6 +231,16 @@ function CraftingService.registerDoubleCraftChance(fn)
 	table.insert(doubleCraftHooks, fn)
 end
 
+-- Fired after a successful craft (batch, not per-unit) as (player, recipeId,
+-- quantity) — quantity is the batch size the player asked for, not
+-- multiplied by def.result.quantity or bonus units. Used by
+-- AchievementsService to bump the "crafted" stat; nothing else hooks into
+-- crafting yet.
+local craftedHandlers = {}
+function CraftingService.onCrafted(fn)
+	table.insert(craftedHandlers, fn)
+end
+
 local function hookedDoubleCraftChance(player, recipeDef)
 	local sum = 0
 	for _, fn in ipairs(doubleCraftHooks) do
@@ -326,6 +336,11 @@ local function handleCraft(player, recipeId, quantity)
 			notifyRemote:FireClient(player, bonusUnits > 1 and (bonusUnits .. "x Double craft!") or "Double craft!")
 		end
 	end
+
+	for _, fn in ipairs(craftedHandlers) do
+		task.spawn(fn, player, recipeId, quantity)
+	end
+
 	return { ok = true, crafted = quantity }
 end
 

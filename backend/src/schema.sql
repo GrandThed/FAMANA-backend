@@ -64,6 +64,19 @@ ALTER TABLE players ADD COLUMN IF NOT EXISTS camp_tier INT NOT NULL DEFAULT 0;
 -- field says which tier reveals it.
 ALTER TABLE players ADD COLUMN IF NOT EXISTS bestiary_kills JSONB NOT NULL DEFAULT '{}'::jsonb;
 
+-- Generic counter bag feeding the achievements system (shared/Achievements.
+-- lua), decoupled from any single feature: { gathered: { [itemId]: count },
+-- crafted: count }. Bumped by AchievementsService's hooks into
+-- GatheringService.onGathered / CraftingService.onCrafted — see
+-- docs/ACHIEVEMENTS.md. Kill counts reuse bestiary_kills above rather than
+-- duplicating them here.
+ALTER TABLE players ADD COLUMN IF NOT EXISTS stats JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- Which shared/Achievements.lua entries this player has unlocked, e.g.
+-- { first_blood: true, artisan: true }. Set-once (AchievementsService never
+-- clears an entry) — see docs/ACHIEVEMENTS.md.
+ALTER TABLE players ADD COLUMN IF NOT EXISTS achievements_unlocked JSONB NOT NULL DEFAULT '{}'::jsonb;
+
 -- Grid inventory: items occupy a WxH footprint at (x, y) in a
 -- container. container_id is 'main' (the 10x30 grid) or 'equipment' (paper
 -- doll; x = slot index, y = 0). Legacy rows (pre-grid) have x/y NULL and are
@@ -177,3 +190,40 @@ CREATE TABLE IF NOT EXISTS player_events (
 );
 
 CREATE INDEX IF NOT EXISTS idx_player_events_player ON player_events (player_id);
+
+-- Territory: settlement *definitions* (position, guardian, buff) live in
+-- Roblox code (shared/Settlements.lua) since they're static content, not
+-- player data — same split as ENEMY_DEFS. This table is only the mutable
+-- part: who currently owns each settlement. settlement_id is the def's key
+-- (e.g. "ruins_north"), not FK'd to anything — the backend doesn't need to
+-- know the full roster of settlements to record a claim on one.
+--
+-- guild_id is nullable and ON DELETE SET NULL: a disbanded guild's
+-- settlements fall back to neutral rather than leaving a dangling owner,
+-- same reasoning as guild_members cascading on player delete.
+--
+-- grace_until protects a fresh claim from being immediately flipped back
+-- (e.g. by an alt of the guild that just lost it) — a capture attempt
+-- inside the grace window is rejected. It also doubles as "is this row a
+-- real claim": grace_until IS NULL means never captured / currently neutral
+-- with no history worth keeping distinct from "no row at all".
+CREATE TABLE IF NOT EXISTS settlement_claims (
+    settlement_id TEXT        PRIMARY KEY,
+    guild_id      BIGINT      REFERENCES guilds(id) ON DELETE SET NULL,
+    claimed_at    TIMESTAMPTZ,
+    grace_until   TIMESTAMPTZ
+);
+
+-- Append-only history of captures, mainly for the admin dashboard / a future
+-- "territory feed" UI. Kept separate from settlement_claims (current state)
+-- so the hot path (checking/writing current ownership) never scans history.
+CREATE TABLE IF NOT EXISTS settlement_captures (
+    id            BIGSERIAL   PRIMARY KEY,
+    settlement_id TEXT        NOT NULL,
+    guild_id      BIGINT      REFERENCES guilds(id) ON DELETE SET NULL,
+    captured_from BIGINT      REFERENCES guilds(id) ON DELETE SET NULL, -- NULL if it was neutral
+    player_id     BIGINT      REFERENCES players(id) ON DELETE SET NULL, -- top-damage killer credited
+    captured_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_settlement_captures_settlement ON settlement_captures (settlement_id, captured_at DESC);

@@ -31,6 +31,8 @@ local LevelUpUI = require(script:WaitForChild("LevelUpUI"))
 local EnemyLevelUI = require(script:WaitForChild("EnemyLevelUI"))
 local EnemyInspectUI = require(script:WaitForChild("EnemyInspectUI"))
 local BestiaryUI = require(script:WaitForChild("BestiaryUI"))
+local AchievementsUI = require(script:WaitForChild("AchievementsUI"))
+local LeaderboardUI = require(script:WaitForChild("LeaderboardUI"))
 local PlayerNameplateUI = require(script:WaitForChild("PlayerNameplateUI"))
 local PlayerFeedbackSfx = require(script:WaitForChild("PlayerFeedbackSfx"))
 local PlayerHurtFeedbackUI = require(script:WaitForChild("PlayerHurtFeedbackUI"))
@@ -77,6 +79,8 @@ LevelUpUI.start()
 EnemyLevelUI.start()
 EnemyInspectUI.start() -- click-to-inspect stat card (any enemy or player, any distance)
 BestiaryUI.start() -- "Bestiary" panel (K key / top-right button): kill counts + tiered drop reveal
+AchievementsUI.start() -- "Achievements" panel (L key / top-right button): progress bars + gold rewards
+LeaderboardUI.start() -- "Leaderboard" panel (T key / top-right button): top players by level/gold/kills
 PlayerNameplateUI.start()
 PlayerFeedbackSfx.start()
 PlayerHurtFeedbackUI.start() -- flash/shake/sonido/rumble al recibir daño

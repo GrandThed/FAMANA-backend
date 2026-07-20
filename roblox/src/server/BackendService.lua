@@ -208,6 +208,21 @@ function BackendService.getContent()
 	return nil
 end
 
+-- Top-N players by `metricType` ("level" | "gold" | "kills", see backend
+-- routes/leaderboards.js). Returns { type, label, entries = { { rank,
+-- playerId, username, score }, ... } } or nil on failure.
+function BackendService.getLeaderboard(metricType, limit)
+	local path = "/leaderboards?type=" .. HttpService:UrlEncode(metricType)
+	if limit then
+		path ..= "&limit=" .. tostring(math.floor(limit))
+	end
+	local ok, data = request("GET", path)
+	if ok then
+		return data
+	end
+	return nil
+end
+
 -- Drain pending events for the given online user ids. Returns a list of
 -- { playerId, kind, message, payload } or nil on failure.
 function BackendService.pollEvents(userIds)
@@ -278,6 +293,36 @@ function BackendService.leaveGuild(guildId, userId)
 		return data.disbanded == true, data.guild
 	end
 	return nil, data and data.error or nil
+end
+
+-- All settlements with a current owner: { { settlementId, guildId,
+-- claimedAt, graceUntil }, ... }. Called on server start to paint initial
+-- ownership; SettlementService keeps its own copy in sync after that from
+-- local claim/kill events rather than re-polling.
+function BackendService.listSettlementClaims()
+	local ok, data = request("GET", "/settlements")
+	if ok and data then
+		return data.claims
+	end
+	return nil
+end
+
+-- Reports a guardian/challenger kill: `guildId` takes ownership of
+-- `settlementId`, credited to `killerUserId`. Returns (claim) on success,
+-- (nil, "in_grace") if the backend rejected it as still-protected (should be
+-- rare — SettlementService should already be enforcing the grace window
+-- before it even lets a challenger die), (nil, "error") on transport
+-- failure.
+function BackendService.claimSettlement(settlementId, guildId, killerUserId, graceSeconds)
+	local ok, data = request(
+		"POST",
+		"/settlements/" .. settlementId .. "/claim",
+		{ guildId = guildId, killerId = killerUserId, graceSeconds = graceSeconds }
+	)
+	if ok and data then
+		return data.claim
+	end
+	return nil, (data and data.error) or "error"
 end
 
 return BackendService

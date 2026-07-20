@@ -35,6 +35,15 @@ local GatheringService = require(script.Parent.GatheringService)
 
 local QuestService = {}
 
+-- Fired as (player, questId) right after a quest's status flips to
+-- "completed" (QuestService.completeQuest). Same decoupled-hook shape as
+-- EnemyService.onKilled/GatheringService.onGathered — AchievementsService
+-- is the only current subscriber (bumps the "questsCompleted" stat).
+local completedHandlers = {}
+function QuestService.onCompleted(fn)
+	table.insert(completedHandlers, fn)
+end
+
 local notifyRemote -- RemoteEvent, resolved in start()
 local questUpdatedRemote -- RemoteEvent, resolved in start() — pushes progress to the client (future quest log UI)
 
@@ -481,6 +490,9 @@ function QuestService.completeQuest(player, questId)
 	pushUpdate(player, questId, "completed")
 	pushMarkers(player)
 	saveNow(player)
+	for _, fn in ipairs(completedHandlers) do
+		task.spawn(fn, player, questId)
+	end
 	-- Si `questId` era la trackeada, esto la reemplaza por otra activa (si
 	-- hay) o limpia el tracker (si no) — nunca deja el HUD mostrando una
 	-- quest ya completada.

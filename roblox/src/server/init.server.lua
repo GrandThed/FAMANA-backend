@@ -17,6 +17,7 @@ local ToolService = require(script:WaitForChild("ToolService"))
 local TargetService = require(script:WaitForChild("TargetService"))
 local GatheringService = require(script:WaitForChild("GatheringService"))
 local EnemyService = require(script:WaitForChild("EnemyService"))
+local SettlementService = require(script:WaitForChild("SettlementService"))
 local EffectService = require(script:WaitForChild("EffectService"))
 local SpellService = require(script:WaitForChild("SpellService"))
 local SynergyService = require(script:WaitForChild("SynergyService"))
@@ -31,6 +32,8 @@ local RestedService = require(script:WaitForChild("RestedService"))
 local CampArchitectService = require(script:WaitForChild("CampArchitectService"))
 local QuestService = require(script:WaitForChild("QuestService"))
 local BestiaryService = require(script:WaitForChild("BestiaryService"))
+local AchievementsService = require(script:WaitForChild("AchievementsService"))
+local LeaderboardService = require(script:WaitForChild("LeaderboardService"))
 local MarkerService = require(script:WaitForChild("MarkerService"))
 local BorderService = require(script:WaitForChild("BorderService"))
 local WorldService = require(script:WaitForChild("WorldService"))
@@ -56,6 +59,7 @@ ToolService.start()
 TargetService.start()
 GatheringService.start()
 EnemyService.start()
+SettlementService.start() -- after EnemyService (hooks onKilled), GatheringService (registers yield bonus) and GuildService (guild lookups/notify)
 EffectService.start() -- after EnemyService: hooks onPlayerHit
 SpellService.start() -- after EnemyService/EffectService: registers damage hooks
 SynergyService.start() -- equipment trait synergies: registers stat hooks everywhere
@@ -70,6 +74,8 @@ RestedService.start() -- banca el buff "Descansado" mientras estás en un camp s
 CampArchitectService.start() -- independiente de los otros dos: solo lee/escribe PlayerService.campTier
 QuestService.start() -- after EnemyService/GatheringService: hooks their onKilled/onGathered
 BestiaryService.start() -- after EnemyService: hooks onKilled, bumps lifetime kill counts
+AchievementsService.start() -- after EnemyService/GatheringService/CraftingService/QuestService: hooks all of their completion events
+LeaderboardService.start() -- serves the GetLeaderboard remote (proxies to the backend)
 MarkerService.start() -- after PartyService (lee membresía) y EnemyService/DropService (valida anchors)
 if role == "cell" then
 	BorderService.start()

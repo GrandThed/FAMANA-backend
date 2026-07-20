@@ -6,6 +6,8 @@ import playerRoutes from "./routes/player.js";
 import inventoryRoutes from "./routes/inventory.js";
 import contentRoutes from "./routes/content.js";
 import guildRoutes from "./routes/guilds.js";
+import settlementRoutes from "./routes/settlements.js";
+import leaderboardRoutes from "./routes/leaderboards.js";
 import deployRoutes from "./routes/deploys.js";
 import adminRoutes from "./routes/admin.js";
 import { pool } from "./db.js";
@@ -28,6 +30,8 @@ await fastify.register(async (instance) => {
   await instance.register(inventoryRoutes);
   await instance.register(contentRoutes);
   await instance.register(guildRoutes);
+  await instance.register(settlementRoutes);
+  await instance.register(leaderboardRoutes);
   await instance.register(deployRoutes);
 });
 

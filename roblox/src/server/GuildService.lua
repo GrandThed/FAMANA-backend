@@ -102,6 +102,14 @@ function GuildService.getGuildId(player)
 	return player:GetAttribute("GuildId")
 end
 
+-- Public wrapper around the internal broadcast helper — for systems outside
+-- this file (e.g. SettlementService announcing a capture) that need to
+-- notify a whole guild's online roster without re-implementing the "scan
+-- Players for a matching GuildId attribute" pattern.
+function GuildService.notifyGuild(guildId, message)
+	broadcast(guildId, message)
+end
+
 -- Full roster (including offline members) for `player`'s current guild, or
 -- nil if they're not in one. A live backend read, same pattern as
 -- QuestLogUI's RequestQuestLog — small payload, no cache to go stale.

@@ -28,6 +28,17 @@ function BestiaryClient.kills(lootSource)
 	return kills[lootSource] or 0
 end
 
+-- Shallow copy of the full { [lootSource] = count } map — used by
+-- AchievementsClient for metrics that sum across all enemies (kills_total).
+-- A copy (not the live table) so callers can't mutate our cache.
+function BestiaryClient.allKills()
+	local copy = {}
+	for source, count in pairs(kills) do
+		copy[source] = count
+	end
+	return copy
+end
+
 local function apply(raw)
 	if typeof(raw) ~= "string" or raw == "" then
 		return

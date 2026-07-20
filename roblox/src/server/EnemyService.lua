@@ -26,6 +26,8 @@ local Remotes = require(Shared:WaitForChild("Remotes"))
 local ArtKit = require(Shared:WaitForChild("ArtKit"))
 local Classes = require(Shared:WaitForChild("Classes"))
 local Items = require(Shared:WaitForChild("Items"))
+local GridConfig = require(Shared:WaitForChild("GridConfig"))
+local Settlements = require(Shared:WaitForChild("Settlements"))
 
 local V = Vector3.new
 
@@ -220,9 +222,11 @@ local ENEMY_DEFS = {
 }
 
 local spawns = {} -- { def, pos, enemy = { part, fill, hp, lastAttack, dead, def } | nil }
+local settlementEntries = {} -- [settlementId] = entry (subset of `spawns`, for direct respawn lookups)
 local enemyFolder
 
--- [n] = function(lootSource, position, killer)  registered by the drop system.
+-- [n] = function(lootSource, position, killer, level, settlementId, damageBy)
+-- registered by the drop system, quests, SettlementService, etc.
 EnemyService.killedHandlers = {}
 function EnemyService.onKilled(fn)
 	table.insert(EnemyService.killedHandlers, fn)
@@ -646,6 +650,20 @@ end
 
 local function spawnAt(entry)
 	entry.enemy = buildEnemy(entry.pos, entry.def)
+end
+
+-- Spawns the guardian/challenger for `settlementId` if it's currently dead
+-- (a no-op if it's already up, e.g. a stray double-call). SettlementService
+-- calls this after its own grace/challenger-timer logic decides it's time —
+-- EnemyService only owns "how a guardian is built and dies", not when one
+-- should reappear. No-ops silently if this server doesn't run that
+-- settlement's cell (settlementEntries is only populated for the local
+-- cell in start()).
+function EnemyService.respawnSettlementGuardian(settlementId)
+	local entry = settlementEntries[settlementId]
+	if entry and not entry.enemy then
+		spawnAt(entry)
+	end
 end
 
 local function nearestPlayer(position, range)
@@ -1104,6 +1122,8 @@ local function killEnemy(entry, enemy, killer)
 	local lootSource = enemy.def.lootSource
 	local respawn = enemy.def.respawn
 	local level = enemy.level
+	local settlementId = enemy.def.settlementId
+	local damageBy = enemy.damageBy
 	enemy.part:Destroy()
 	entry.enemy = nil
 
@@ -1126,15 +1146,22 @@ local function killEnemy(entry, enemy, killer)
 	end
 
 	-- lootSource/position/killer stay first for backward compatibility;
-	-- level is appended for handlers that want to scale on it (e.g. future
-	-- quest tracking) — existing handlers can simply ignore the extra arg.
+	-- level/settlementId/damageBy are appended for handlers that want them
+	-- (e.g. quest tracking, SettlementService's capture logic) — existing
+	-- handlers can simply ignore the extra args.
 	for _, fn in ipairs(EnemyService.killedHandlers) do
-		task.spawn(fn, lootSource, position, killer, level)
+		task.spawn(fn, lootSource, position, killer, level, settlementId, damageBy)
 	end
 
-	task.delay(respawn, function()
-		spawnAt(entry)
-	end)
+	-- Settlement guardians/challengers don't respawn on the ordinary mob
+	-- timer — SettlementService decides when a challenger should reappear
+	-- (grace period + challengerRespawn from shared/Settlements.lua) and
+	-- calls EnemyService.respawnSettlementGuardian for it explicitly.
+	if not settlementId then
+		task.delay(respawn, function()
+			spawnAt(entry)
+		end)
+	end
 end
 
 -- Finds the enemy entry backed by a given part (the client's focused target).
@@ -1197,6 +1224,17 @@ dealDamage = function(entry, enemy, damage, killer, isCrit, damageKind)
 		end
 	end
 	enemy.hp -= damage
+	-- Cumulative damage per player, keyed by userId, using the final
+	-- (post-mitigation/amp) number actually removed from HP. Only
+	-- settlement guardians consume this (see killEnemy) — for ordinary mobs
+	-- it's dead weight destroyed with the rest of `enemy` on death, so it's
+	-- cheap to track unconditionally rather than special-casing every call
+	-- site of dealDamage.
+	if killer then
+		enemy.damageBy = enemy.damageBy or {}
+		local uid = killer.UserId
+		enemy.damageBy[uid] = (enemy.damageBy[uid] or 0) + damage
+	end
 	updateHealthBar(enemy)
 	if killer and damageIndicatorRemote then
 		damageIndicatorRemote:FireClient(killer, damage, isCrit, enemy.part.Position)
@@ -1905,6 +1943,22 @@ function EnemyService.start()
 				table.insert(spawns, entry)
 				spawnAt(entry)
 			end
+		end
+	end
+
+	-- Settlement guardians: one entry per settlement whose `cell` matches
+	-- this running server. Reuses the same buildEnemy/spawns machinery as
+	-- ordinary mobs; killEnemy special-cases anything with settlementId set
+	-- (no auto-respawn — SettlementService drives that, see there).
+	local currentCell = GridConfig.currentCell()
+	for settlementId, settlement in pairs(Settlements.defs) do
+		if settlement.cell == currentCell then
+			local def = table.clone(settlement.guardian)
+			def.settlementId = settlementId
+			local entry = { def = def, pos = settlement.position, enemy = nil }
+			settlementEntries[settlementId] = entry
+			table.insert(spawns, entry)
+			spawnAt(entry)
 		end
 	end
 

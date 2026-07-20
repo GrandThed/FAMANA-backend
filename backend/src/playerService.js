@@ -63,6 +63,8 @@ function rowToPlayer(row, inventory) {
     campLayout: row.camp_layout || {},
     campTier: row.camp_tier || 0,
     bestiaryKills: row.bestiary_kills || {},
+    stats: row.stats || {},
+    achievementsUnlocked: row.achievements_unlocked || {},
 
     cell: row.cell,
     position: { x: row.pos_x, y: row.pos_y, z: row.pos_z },
@@ -112,7 +114,7 @@ export async function createPlayer(playerId, username) {
 
 // Saves the coarse mutable fields. Only provided fields are updated.
 // Returns false if the player doesn't exist.
-export async function savePlayer(playerId, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, trackedQuestId, cell, position, campLayout, campTier, bestiaryKills }) {
+export async function savePlayer(playerId, { health, gold, level, xp, currentClass, classLevels, hotbarBinds, settings, questProgress, trackedQuestId, cell, position, campLayout, campTier, bestiaryKills, stats, achievementsUnlocked }) {
   const sets = [];
   const params = [];
   let i = 1;
@@ -161,6 +163,14 @@ export async function savePlayer(playerId, { health, gold, level, xp, currentCla
     // Same JSONB-stringify caveat as hotbarBinds/settings/questProgress.
     sets.push(`bestiary_kills = $${i++}::jsonb`);
     params.push(JSON.stringify(bestiaryKills ?? {}));
+  }
+  if (stats !== undefined) {
+    sets.push(`stats = $${i++}::jsonb`);
+    params.push(JSON.stringify(stats ?? {}));
+  }
+  if (achievementsUnlocked !== undefined) {
+    sets.push(`achievements_unlocked = $${i++}::jsonb`);
+    params.push(JSON.stringify(achievementsUnlocked ?? {}));
   }
   if (cell !== undefined) { sets.push(`cell = $${i++}`); params.push(cell); }
   if (position !== undefined) {
