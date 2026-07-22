@@ -907,6 +907,8 @@
       "type": "tool",
       "toolType": "sickle",
       "toolTier": 1,
+      "stackable": false,
+      "maxStack": 1,
       "size": [1, 2]
     },
     "bolsa_dormir": {
@@ -915,6 +917,7 @@
       "flavor": "Permite acostarse a descansar en el campamento para rolear y acumular el bufo Descansado al doble de velocidad.",
       "type": "placeable",
       "stackable": false,
+      "maxStack": 1,
       "size": [2, 1]
     },
     "cama_campamento": {
@@ -923,6 +926,7 @@
       "flavor": "Cama rústica de madera y tela. Ofrece mayor confort para descansar y regenerar salud.",
       "type": "placeable",
       "stackable": false,
+      "maxStack": 1,
       "size": [2, 2]
     },
     "mesa_investigacion_gremio": {
@@ -931,6 +935,7 @@
       "flavor": "Mesa de proyectos para la Sede del Gremio. Permite investigar recetas de rasgos avanzados y mejoras colectivas.",
       "type": "placeable",
       "stackable": false,
+      "maxStack": 1,
       "size": [2, 2]
     },
     "silla_campamento": {
@@ -939,6 +944,7 @@
       "flavor": "Silla de madera rústica para sentarse a descansar y rolear en el campamento.",
       "type": "placeable",
       "stackable": false,
+      "maxStack": 1,
       "size": [1, 1]
     },
     "banco_campamento": {
@@ -947,6 +953,7 @@
       "flavor": "Banco largo para sentarse varios aliados juntos alrededor del fuego.",
       "type": "placeable",
       "stackable": false,
+      "maxStack": 1,
       "size": [2, 1]
     },
     "plano_construccion": {
@@ -956,6 +963,8 @@
       "type": "tool",
       "toolType": "building_plan",
       "toolTier": 1,
+      "stackable": false,
+      "maxStack": 1,
       "size": [1, 2]
     }
   },
