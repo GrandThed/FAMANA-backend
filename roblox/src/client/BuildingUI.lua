@@ -19,19 +19,62 @@ local camera = Workspace.CurrentCamera
 
 local BuildingUI = {}
 
+local previewPart = nil
+
 local function mouseWorldPoint()
 	local mouseLoc = UserInputService:GetMouseLocation()
 	local ray = camera:ViewportPointToRay(mouseLoc.X, mouseLoc.Y)
 	local params = RaycastParams.new()
 	local character = player.Character
+	local filter = {}
+	if character then
+		table.insert(filter, character)
+	end
+	if previewPart then
+		table.insert(filter, previewPart)
+	end
 	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = character and { character } or {}
+	params.FilterDescendantsInstances = filter
 
 	local result = Workspace:Raycast(ray.Origin, ray.Direction * 300, params)
 	if result then
 		return result.Position, result.Instance
 	end
 	return ray.Origin + ray.Direction * 50, nil
+end
+
+local PLOT_POSITIONS = {
+	Vector3.new(0, 0, -100),
+	Vector3.new(100, 0, 0),
+	Vector3.new(0, 0, 100),
+	Vector3.new(-100, 0, 0),
+}
+
+local function snapPointToGrid(point)
+	local nearestPlotPos = PLOT_POSITIONS[1]
+	local minDist = (point - nearestPlotPos).Magnitude
+	for i = 2, #PLOT_POSITIONS do
+		local d = (point - PLOT_POSITIONS[i]).Magnitude
+		if d < minDist then
+			minDist = d
+			nearestPlotPos = PLOT_POSITIONS[i]
+		end
+	end
+
+	local relX = point.X - nearestPlotPos.X
+	local relZ = point.Z - nearestPlotPos.Z
+
+	local colX = math.clamp(math.floor((relX + 24) / 12), 0, 3)
+	local colZ = math.clamp(math.floor((relZ + 24) / 12), 0, 3)
+
+	local tileCenterX = -18 + colX * 12
+	local tileCenterZ = -18 + colZ * 12
+
+	local finalX = nearestPlotPos.X + tileCenterX
+	local finalZ = nearestPlotPos.Z + tileCenterZ
+	local finalY = math.floor(point.Y / 5 + 0.5) * 5
+
+	return Vector3.new(finalX, finalY, finalZ)
 end
 
 function BuildingUI.start()
@@ -78,7 +121,6 @@ function BuildingUI.start()
 	local activePieceId = "piso_madera"
 	local rotationY = 0
 	local active = false
-	local previewPart = nil
 	local renderConn = nil
 
 	local piecesOrder = { "piso_madera", "pared_madera", "puerta_madera", "pared_ventana", "techo_madera" }
@@ -121,6 +163,8 @@ function BuildingUI.start()
 		previewPart.Material = Enum.Material.ForceField
 		previewPart.Transparency = 0.4
 		previewPart.CanCollide = false
+		previewPart.CanQuery = false
+		previewPart.CanTouch = false
 		previewPart.Anchored = true
 		previewPart.Parent = Workspace
 
@@ -129,15 +173,11 @@ function BuildingUI.start()
 				return
 			end
 			local point = mouseWorldPoint()
-			local grid = BuildingConfig.GRID_SIZE
-			local snappedX = math.floor(point.X / grid + 0.5) * grid
-			local snappedZ = math.floor(point.Z / grid + 0.5) * grid
-			local snappedY = math.floor(point.Y / 5 + 0.5) * 5
-
+			local snappedPos = snapPointToGrid(point)
 			local pDef = BuildingConfig.getPiece(activePieceId)
 			if pDef then
 				previewPart.Size = pDef.size
-				local pos = Vector3.new(snappedX, snappedY, snappedZ) + (pDef.offset or Vector3.zero)
+				local pos = snappedPos + (pDef.offset or Vector3.zero)
 				previewPart.CFrame = CFrame.new(pos) * CFrame.Angles(0, math.rad(rotationY), 0)
 			end
 		end)
@@ -181,16 +221,12 @@ function BuildingUI.start()
 		elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
 			if previewPart then
 				local point = mouseWorldPoint()
-				local grid = BuildingConfig.GRID_SIZE
-				local snappedX = math.floor(point.X / grid + 0.5) * grid
-				local snappedZ = math.floor(point.Z / grid + 0.5) * grid
-				local snappedY = math.floor(point.Y / 5 + 0.5) * 5
-				local pos = Vector3.new(snappedX, snappedY, snappedZ)
+				local snappedPos = snapPointToGrid(point)
 
 				Sfx.play("equip")
 				placeRemote:InvokeServer({
 					pieceId = activePieceId,
-					position = pos,
+					position = snappedPos,
 					rotationY = rotationY,
 				})
 			end

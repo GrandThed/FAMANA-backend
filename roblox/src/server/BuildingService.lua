@@ -17,6 +17,9 @@ local BuildingService = {}
 
 local structuresFolder
 
+-- [guildId] = { { pieceId = "...", x = 0, y = 0, z = 0, rotY = 0, model = Model }, ... }
+local savedGuildStructures = {}
+
 local function notify(player, text)
 	Remotes.get("Notify"):FireClient(player, text)
 end
@@ -101,6 +104,14 @@ function BuildingService.placeStructure(player, payload)
 	end
 
 	model.Parent = structuresFolder
+	savedGuildStructures[guildId] = savedGuildStructures[guildId] or {}
+	table.insert(savedGuildStructures[guildId], {
+		pieceId = pieceId,
+		position = position,
+		rotationY = rotationY,
+		model = model,
+	})
+
 	notify(player, string.format("¡Construiste: %s!", pieceDef.name))
 	return { ok = true }
 end
@@ -118,6 +129,16 @@ function BuildingService.demolishStructure(player, targetModel)
 
 	local pieceId = targetModel:GetAttribute("PieceId")
 	local pieceDef = BuildingConfig.getPiece(pieceId)
+
+	-- Remove from saved structures list
+	if savedGuildStructures[guildId] then
+		for i, entry in ipairs(savedGuildStructures[guildId]) do
+			if entry.model == targetModel then
+				table.remove(savedGuildStructures[guildId], i)
+				break
+			end
+		end
+	end
 
 	targetModel:Destroy()
 

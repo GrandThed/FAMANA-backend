@@ -40,7 +40,12 @@ function SleepingService.wakeUp(player)
 		humanoid.PlatformStand = false
 	end
 	if root then
-		root.CFrame = root.CFrame * CFrame.new(0, 3, 0) * CFrame.Angles(0, 0, 0)
+		root.Anchored = false
+		root.CFrame = root.CFrame * CFrame.new(0, 3, 0)
+	end
+
+	if humanoid then
+		humanoid.PlatformStand = false
 	end
 
 	Remotes.get("ToggleSleeping"):FireClient(player, { sleeping = false })
@@ -63,6 +68,7 @@ function SleepingService.lieDown(player, bedPart)
 
 	local targetCFrame = bedPart.CFrame * CFrame.new(0, 1.2, 0) * CFrame.Angles(math.rad(-90), 0, 0)
 	root.CFrame = targetCFrame
+	root.Anchored = true
 	humanoid.PlatformStand = true
 
 	sleepingPlayers[player.UserId] = {
@@ -76,6 +82,12 @@ end
 
 function SleepingService.start()
 	local toggleSleepingRemote = Remotes.get("ToggleSleeping")
+
+	toggleSleepingRemote.OnServerEvent:Connect(function(player, payload)
+		if typeof(payload) == "table" and payload.wakeUp then
+			SleepingService.wakeUp(player)
+		end
+	end)
 
 	-- Periodic HP/Mana regen while sleeping
 	task.spawn(function()

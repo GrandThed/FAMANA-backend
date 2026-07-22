@@ -15,12 +15,12 @@ local GuildService = require(script.Parent.GuildService)
 
 local GuildPlotService = {}
 
--- Defined Village Plots in the safe zone town
+-- Defined Village Plots in the safe zone town (48x48 studs = 4x4 12-stud modular grid)
 GuildPlotService.PLOTS = {
-	plot_center_north = { id = "plot_center_north", name = "Parcela del Norte", position = Vector3.new(0, 0, -80), size = Vector3.new(30, 1, 30), costGold = 500 },
-	plot_center_east = { id = "plot_center_east", name = "Parcela del Este", position = Vector3.new(80, 0, 0), size = Vector3.new(30, 1, 30), costGold = 500 },
-	plot_center_south = { id = "plot_center_south", name = "Parcela del Sur", position = Vector3.new(0, 0, 80), size = Vector3.new(30, 1, 30), costGold = 500 },
-	plot_center_west = { id = "plot_center_west", name = "Parcela del Oeste", position = Vector3.new(-80, 0, 0), size = Vector3.new(30, 1, 30), costGold = 500 },
+	plot_center_north = { id = "plot_center_north", name = "Parcela del Norte", position = Vector3.new(0, 0, -100), size = Vector3.new(48, 1, 48), costGold = 500 },
+	plot_center_east = { id = "plot_center_east", name = "Parcela del Este", position = Vector3.new(100, 0, 0), size = Vector3.new(48, 1, 48), costGold = 500 },
+	plot_center_south = { id = "plot_center_south", name = "Parcela del Sur", position = Vector3.new(0, 0, 100), size = Vector3.new(48, 1, 48), costGold = 500 },
+	plot_center_west = { id = "plot_center_west", name = "Parcela del Oeste", position = Vector3.new(-100, 0, 0), size = Vector3.new(48, 1, 48), costGold = 500 },
 }
 
 -- [plotId] = { guildId, guildName, guildTag, bannerModel, signModel }
@@ -185,6 +185,56 @@ local function spawnPlotSigns()
 		label.TextScaled = true
 		label.Font = Enum.Font.SourceSansBold
 		label.Parent = billboard
+
+		-- Draw visual 30x30 perimeter borders & ground pad
+		local halfX, halfZ = plotDef.size.X / 2, plotDef.size.Z / 2
+		local borderThick = 0.6
+
+		local pad = Instance.new("Part")
+		pad.Name = "PlotPad"
+		pad.Size = Vector3.new(plotDef.size.X, 0.05, plotDef.size.Z)
+		pad.CFrame = CFrame.new(plotDef.position + Vector3.new(0, 0.02, 0))
+		pad.Color = Color3.fromRGB(0, 180, 255)
+		pad.Material = Enum.Material.SmoothPlastic
+		pad.Transparency = 0.92
+		pad.Anchored = true
+		pad.CanCollide = false
+		pad.CanQuery = false
+		pad.Parent = signModel
+
+		local edgeN = ArtKit.part("stoneDark")
+		edgeN.Size = Vector3.new(plotDef.size.X, 0.3, borderThick)
+		edgeN.CFrame = CFrame.new(plotDef.position + Vector3.new(0, 0.15, -halfZ))
+		edgeN.Parent = signModel
+
+		local edgeS = ArtKit.part("stoneDark")
+		edgeS.Size = Vector3.new(plotDef.size.X, 0.3, borderThick)
+		edgeS.CFrame = CFrame.new(plotDef.position + Vector3.new(0, 0.15, halfZ))
+		edgeS.Parent = signModel
+
+		local edgeE = ArtKit.part("stoneDark")
+		edgeE.Size = Vector3.new(borderThick, 0.3, plotDef.size.Z)
+		edgeE.CFrame = CFrame.new(plotDef.position + Vector3.new(halfX, 0.15, 0))
+		edgeE.Parent = signModel
+
+		local edgeW = ArtKit.part("stoneDark")
+		edgeW.Size = Vector3.new(borderThick, 0.3, plotDef.size.Z)
+		edgeW.CFrame = CFrame.new(plotDef.position + Vector3.new(-halfX, 0.15, 0))
+		edgeW.Parent = signModel
+
+		local corners = {
+			Vector3.new(-halfX, 1, -halfZ),
+			Vector3.new(halfX, 1, -halfZ),
+			Vector3.new(-halfX, 1, halfZ),
+			Vector3.new(halfX, 1, halfZ),
+		}
+		for _, cOffset in ipairs(corners) do
+			local postCorner = ArtKit.part("gold")
+			postCorner.Material = Enum.Material.Neon
+			postCorner.Size = Vector3.new(1.2, 2, 1.2)
+			postCorner.CFrame = CFrame.new(plotDef.position + cOffset)
+			postCorner.Parent = signModel
+		end
 
 		signModel.Parent = folder
 		plotSignModels[plotId] = signModel

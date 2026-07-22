@@ -44,6 +44,7 @@ function SittingService.standUp(player)
 	end
 
 	if root then
+		root.Anchored = false
 		root.CFrame = root.CFrame * CFrame.new(0, 2.5, 0)
 	end
 
@@ -67,6 +68,7 @@ function SittingService.sitDown(player, seatPart)
 
 	local targetCFrame = seatPart.CFrame * CFrame.new(0, 1.2, 0)
 	root.CFrame = targetCFrame
+	root.Anchored = true
 	humanoid.Sit = true
 
 	local weld = Instance.new("WeldConstraint")
@@ -85,6 +87,12 @@ end
 
 function SittingService.start()
 	local toggleSittingRemote = Remotes.get("ToggleSitting")
+
+	toggleSittingRemote.OnServerEvent:Connect(function(player, payload)
+		if typeof(payload) == "table" and payload.standUp then
+			SittingService.standUp(player)
+		end
+	end)
 
 	-- Periodic HP regen while sitting
 	task.spawn(function()

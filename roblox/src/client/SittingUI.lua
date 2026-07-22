@@ -53,12 +53,31 @@ function SittingUI.start()
 		hintFrame.Visible = isSeated
 	end)
 
+	local function requestStandUp()
+		if isSeated then
+			toggleSittingRemote:FireServer({ standUp = true })
+		end
+	end
+
 	UserInputService.InputBegan:Connect(function(input, gpe)
 		if not isSeated then
 			return
 		end
-		if input.KeyCode == Enum.KeyCode.E or input.KeyCode == Enum.KeyCode.Space or input.KeyCode == Enum.KeyCode.W then
-			toggleSittingRemote:FireServer({ standUp = true })
+		local k = input.KeyCode
+		if k == Enum.KeyCode.E or k == Enum.KeyCode.Space or k == Enum.KeyCode.W or k == Enum.KeyCode.A or k == Enum.KeyCode.S or k == Enum.KeyCode.D or k == Enum.KeyCode.Up or k == Enum.KeyCode.Down or k == Enum.KeyCode.Left or k == Enum.KeyCode.Right then
+			requestStandUp()
+		end
+	end)
+
+	local RunService = game:GetService("RunService")
+	RunService.Heartbeat:Connect(function()
+		if not isSeated then
+			return
+		end
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		if hum and (hum.MoveDirection.Magnitude > 0.1 or hum.Jump) then
+			requestStandUp()
 		end
 	end)
 end

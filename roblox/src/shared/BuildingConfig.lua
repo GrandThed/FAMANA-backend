@@ -3,7 +3,7 @@
 
 local BuildingConfig = {}
 
-BuildingConfig.GRID_SIZE = 6 -- studs for snapping grid
+BuildingConfig.GRID_SIZE = 12 -- 12-stud modular grid for 48x48 plots
 
 BuildingConfig.PIECES = {
 	piso_madera = {
