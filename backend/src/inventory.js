@@ -272,10 +272,11 @@ export async function addItem(
 // (meta) are never consumed by generic id-based removal — selling/crafting a
 // unique instance needs an instance-aware verb (future work).
 // Throws { code: 'insufficient' } if the player doesn't have that many.
-export async function removeItem(client, playerId, itemId, quantity) {
+export async function removeItem(client, playerId, itemId, quantity, options = {}) {
   if (!Number.isInteger(quantity) || quantity <= 0) {
     throw err("quantity must be a positive integer", "bad_quantity");
   }
+  const { includeMeta = false } = options;
 
   // Equippable-and-consumable items (acampada, crafting_table, simple_forge,
   // ...) get moved to the "equipment" container the moment they're equipped
@@ -286,7 +287,7 @@ export async function removeItem(client, playerId, itemId, quantity) {
     (r) =>
       (r.containerId === "main" || r.containerId === "equipment") &&
       r.itemId === itemId &&
-      !r.meta
+      (includeMeta || !r.meta)
   );
   const total = rows.reduce((sum, r) => sum + r.quantity, 0);
   if (total < quantity) {

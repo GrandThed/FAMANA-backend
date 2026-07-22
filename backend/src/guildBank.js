@@ -66,7 +66,7 @@ export async function depositItem(guildId, playerId, itemId, quantity) {
   if (!getItem(itemId)) throw bankError("unknown_item");
   return withTransaction(async (client) => {
     await requireMembership(client, guildId, playerId);
-    await removeItem(client, playerId, itemId, quantity); // throws insufficient/bad_quantity
+    await removeItem(client, playerId, itemId, quantity, { includeMeta: true }); // throws insufficient/bad_quantity
     await client.query(
       `INSERT INTO guild_bank_items (guild_id, item_id, quantity)
             VALUES ($1, $2, $3)

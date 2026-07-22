@@ -315,14 +315,16 @@ end
 -- chest's own "Open" prompt so both can coexist on the same part.
 local function attachManagePrompt(piece, model)
 	local prompt = Instance.new("ProximityPrompt")
-	prompt.ActionText = "Manage"
+	prompt.ActionText = "Administrar"
 	local itemDef = Items.get(piece.itemId)
-	prompt.ObjectText = itemDef and itemDef.name or "Furniture"
+	prompt.ObjectText = itemDef and itemDef.name or "Mueble"
 	prompt.KeyboardKeyCode = Enum.KeyCode.F
 	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
 	prompt.HoldDuration = 0.15
 	prompt.MaxActivationDistance = MAX_CHEST_DISTANCE
 	prompt.RequiresLineOfSight = false
+	prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+	prompt.UIOffset = Vector2.new(0, 55)
 	prompt.Parent = model.PrimaryPart
 
 	prompt.Triggered:Connect(function(triggeringPlayer)
@@ -403,9 +405,15 @@ local function buildPiece(kind, itemId, center, ownerId)
 		prompt.HoldDuration = 0.15
 		prompt.MaxActivationDistance = MAX_CHEST_DISTANCE
 		prompt.RequiresLineOfSight = false
+		prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+		prompt.UIOffset = Vector2.new(0, 0)
 		prompt.Parent = model.PrimaryPart
 
-		prompt.Triggered:Connect(function(triggeringPlayer)
+		local clickDetector = Instance.new("ClickDetector")
+		clickDetector.MaxActivationDistance = MAX_CHEST_DISTANCE
+		clickDetector.Parent = model.PrimaryPart
+
+		local function triggerChest(triggeringPlayer)
 			if not nearOwnChest(triggeringPlayer, piece) then
 				notify(triggeringPlayer, "You need to be in this camp's party to use its chest.")
 				return
@@ -417,7 +425,11 @@ local function buildPiece(kind, itemId, center, ownerId)
 				items = snapshotChest(piece.storage),
 				position = model.PrimaryPart.Position,
 			})
-		end)
+		end
+
+		prompt.Triggered:Connect(triggerChest)
+		clickDetector.MouseClick:Connect(triggerChest)
+		clickDetector.RightMouseClick:Connect(triggerChest)
 
 		attachManagePrompt(piece, model)
 	elseif kind == "guild_chest" then
@@ -431,9 +443,15 @@ local function buildPiece(kind, itemId, center, ownerId)
 		prompt.HoldDuration = 0.15
 		prompt.MaxActivationDistance = MAX_CHEST_DISTANCE
 		prompt.RequiresLineOfSight = false
+		prompt.Exclusivity = Enum.ProximityPromptExclusivity.OnePerButton
+		prompt.UIOffset = Vector2.new(0, 0)
 		prompt.Parent = model.PrimaryPart
 
-		prompt.Triggered:Connect(function(triggeringPlayer)
+		local clickDetector = Instance.new("ClickDetector")
+		clickDetector.MaxActivationDistance = MAX_CHEST_DISTANCE
+		clickDetector.Parent = model.PrimaryPart
+
+		local function triggerGuildChest(triggeringPlayer)
 			if not triggeringPlayer:GetAttribute("GuildId") then
 				notify(triggeringPlayer, "Necesitás pertenecer a un gremio para acceder a su banco.")
 				return
@@ -441,7 +459,11 @@ local function buildPiece(kind, itemId, center, ownerId)
 			if openGuildBankRemote then
 				openGuildBankRemote:FireClient(triggeringPlayer)
 			end
-		end)
+		end
+
+		prompt.Triggered:Connect(triggerGuildChest)
+		clickDetector.MouseClick:Connect(triggerGuildChest)
+		clickDetector.RightMouseClick:Connect(triggerGuildChest)
 
 		attachManagePrompt(piece, model)
 	elseif kind == "tent" then

@@ -290,6 +290,7 @@ end
 local DEFAULT_SPECS = {
 	weapon = { { name = "Handle", size = Vector3.new(0.35, 3, 0.35), color = "steel" } },
 	tool = { { name = "Handle", size = Vector3.new(0.4, 3, 0.4), color = "trunk" } },
+	placeable = { { name = "Handle", size = Vector3.new(0.8, 0.8, 0.8), color = "trunk" } },
 }
 
 -- Builds the Tool's part assembly: if a custom model exists in
@@ -360,7 +361,7 @@ local function buildHandle(def)
 		end
 	end
 
-	local specs = ItemModels.get(def.id) or DEFAULT_SPECS[def.type]
+	local specs = ItemModels.get(def.id) or DEFAULT_SPECS[def.type] or DEFAULT_SPECS.placeable
 	local handle = ArtKit.part(specs[1])
 	handle.Name = "Handle"
 	handle.Anchored = false

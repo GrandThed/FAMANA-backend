@@ -25,9 +25,14 @@ local FurniturePlacementUI = {}
 -- CampFurnitureService.lua's FURNITURE_DEFS.
 local FURNITURE_ITEMS = {
 	cofre_campamento = { size = 3 },
+	cofre_gremio = { size = 3 },
 	carpa_campamento = { size = 4 },
 	crafting_table = { size = 4 },
 	simple_forge = { size = 3 },
+	olla_campamento = { size = 3 },
+	alfombra_campamento = { size = 3 },
+	farol_campamento = { size = 2 },
+	trofeo_campamento = { size = 2 },
 }
 
 local MAX_DISTANCE = Config.Camp.maxPlacementDistance

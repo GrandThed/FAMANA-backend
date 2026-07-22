@@ -342,6 +342,10 @@ function ItemGrid.create(parent, opts)
 		tile.InputBegan:Connect(function(input)
 			if input.UserInputType == Enum.UserInputType.MouseButton1 and not record.entry.locked then
 				beginDragSession(record)
+			elseif input.UserInputType == Enum.UserInputType.MouseButton2 and not record.entry.locked then
+				if grid.callbacks.onRightClick then
+					grid.callbacks.onRightClick(record.entry, Vector2.new(input.Position.X, input.Position.Y))
+				end
 			end
 		end)
 
