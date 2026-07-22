@@ -47,6 +47,7 @@ local FURNITURE_ITEMS = {
 	mesa_arquitectura_gremio = { size = 4 },
 	maceta_hierbas = { size = 2 },
 	letrero_bienvenida = { size = 3 },
+	portal_gremio = { size = 4 },
 }
 
 local MAX_DISTANCE = Config.Camp.maxPlacementDistance

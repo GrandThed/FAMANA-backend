@@ -1110,13 +1110,16 @@ local function handlePlaceFurniture(player, itemId, x, z, rotY)
 	end
 
 	local camp = CampService.campFor(player)
-	if not camp then
-		notify(player, "You need an active Acampada to place that.")
+	local guildId = player:GetAttribute("GuildId")
+	local inHQ = guildId and GuildPlotService.isPositionInGuildHQ(Vector3.new(x, 0, z), guildId)
+
+	if not camp and not inHQ then
+		notify(player, "Debes tener una Acampada activa o estar en la Sede de tu Gremio para colocar este mueble.")
 		return { ok = false, error = "no_camp" }
 	end
 
-	if def.minCampTier and (camp.tier or 0) < def.minCampTier then
-		notify(player, "Your camp needs a higher tier to place that.")
+	if def.minCampTier and camp and (camp.tier or 0) < def.minCampTier then
+		notify(player, "Tu acampada necesita un nivel más alto para colocar este objeto.")
 		return { ok = false, error = "tier_too_low" }
 	end
 
@@ -1126,18 +1129,19 @@ local function handlePlaceFurniture(player, itemId, x, z, rotY)
 		return { ok = false, error = "no_character" }
 	end
 
-	-- Anti-exploit: never trust the client's claimed point (same posture as
-	-- CampService/CraftingService/ToolService).
+	-- Anti-exploit: distance check
 	local flatDistance = (Vector3.new(x, root.Position.Y, z) - root.Position).Magnitude
 	if flatDistance > CAMP.maxPlacementDistance then
-		notify(player, "Too far away to place it there.")
+		notify(player, "Demasiado lejos para colocarlo ahí.")
 		return { ok = false, error = "too_far" }
 	end
 
-	local half = camp.zoneHalf
-	if math.abs(x - camp.center.X) > half or math.abs(z - camp.center.Z) > half then
-		notify(player, "Furniture has to go inside the camp's zone.")
-		return { ok = false, error = "outside_zone" }
+	if camp then
+		local half = camp.zoneHalf
+		if not inHQ and (math.abs(x - camp.center.X) > half or math.abs(z - camp.center.Z) > half) then
+			notify(player, "El mueble debe colocarse dentro del área de tu Acampada o Sede.")
+			return { ok = false, error = "outside_zone" }
+		end
 	end
 
 	if itemId == "mesa_investigacion_gremio" then
@@ -1148,30 +1152,26 @@ local function handlePlaceFurniture(player, itemId, x, z, rotY)
 		end
 	end
 
-	-- Reserved fire-pit radius (docs/CAMP_TIERS.md §6.1): sized to the
-	-- BIGGEST tier's campfire footprint and enforced from tier 0 onward, so
-	-- upgrading tiers later never clips/pushes a piece already sitting near
-	-- the fire — nothing could ever be planted there in the first place.
-	do
+	-- Camp specific radius and capacity checks (bypassed in Guild HQ)
+	if not inHQ and camp then
 		local dx, dz = x - camp.center.X, z - camp.center.Z
 		if math.sqrt(dx * dx + dz * dz) < CAMP.firePitRadius then
-			notify(player, "Too close to the campfire.")
+			notify(player, "Demasiado cerca de la hoguera del campamento.")
 			return { ok = false, error = "too_close_to_fire" }
 		end
-	end
 
-	local pieces = piecesByCamp[camp.ownerUserId]
-
-	local maxFurniture = (CAMP.tiers[camp.tier] or CAMP.tiers[0]).maxFurniture
-	local currentCount = 0
-	if pieces then
-		for _ in pairs(pieces) do
-			currentCount += 1
+		local pieces = piecesByCamp[camp.ownerUserId]
+		local maxFurniture = (CAMP.tiers[camp.tier] or CAMP.tiers[0]).maxFurniture
+		local currentCount = 0
+		if pieces then
+			for _ in pairs(pieces) do
+				currentCount += 1
+			end
 		end
-	end
-	if currentCount >= maxFurniture then
-		notify(player, "This camp can't hold any more furniture — upgrade its tier for more room.")
-		return { ok = false, error = "camp_full" }
+		if currentCount >= maxFurniture then
+			notify(player, "No entran más muebles en este campamento personal. ¡Usa la Sede del Gremio para amueblar sin límite!")
+			return { ok = false, error = "camp_full" }
+		end
 	end
 
 	if pieces then

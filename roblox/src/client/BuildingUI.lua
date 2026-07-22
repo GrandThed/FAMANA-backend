@@ -44,10 +44,10 @@ local function mouseWorldPoint()
 end
 
 local PLOT_POSITIONS = {
-	Vector3.new(0, 0, -100),
-	Vector3.new(100, 0, 0),
-	Vector3.new(0, 0, 100),
-	Vector3.new(-100, 0, 0),
+	Vector3.new(2000, 0, 1900),
+	Vector3.new(2100, 0, 2000),
+	Vector3.new(2000, 0, 2100),
+	Vector3.new(1900, 0, 2000),
 }
 
 local function snapPointToGrid(point, pieceId, manualRotationY)

@@ -195,9 +195,9 @@ function BuildingService.buildDirectStructure(guildId, pieceId, position, rotati
 			mainPart.CastShadow = false
 			local indoorLight = Instance.new("PointLight")
 			indoorLight.Name = "RoofAmbientLight"
-			indoorLight.Color = Color3.fromRGB(240, 220, 190)
-			indoorLight.Range = 32
-			indoorLight.Brightness = 0.30
+			indoorLight.Color = Color3.fromRGB(255, 215, 160)
+			indoorLight.Range = 36
+			indoorLight.Brightness = 0.20
 			indoorLight.Shadows = false
 			indoorLight.Parent = mainPart
 		end

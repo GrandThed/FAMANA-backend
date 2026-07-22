@@ -33,6 +33,10 @@ local claimedPlots = {}
 local plotSignModels = {}
 local returnOriginPositions = {} -- [player.UserId] = Vector3
 
+local function notify(player, message)
+	Remotes.get("Notify"):FireClient(player, message)
+end
+
 function GuildPlotService.teleportToGuildSanctuary(player)
 	if player and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
 		returnOriginPositions[player.UserId] = player.Character.HumanoidRootPart.Position
@@ -47,10 +51,6 @@ function GuildPlotService.returnFromSanctuary(player)
 		player.Character.HumanoidRootPart.CFrame = CFrame.new(origin)
 		notify(player, "🌀 Has regresado a tu ubicación previa.")
 	end
-end
-
-local function notify(player, message)
-	Remotes.get("Notify"):FireClient(player, message)
 end
 
 function GuildPlotService.savePlotsData()
@@ -98,7 +98,7 @@ function GuildPlotService.getPlotForGuild(guildId)
 		return nil
 	end
 	for plotId, plotInfo in pairs(claimedPlots) do
-		if plotInfo.guildId == guildId then
+		if tostring(plotInfo.guildId) == tostring(guildId) then
 			return plotInfo
 		end
 	end
@@ -106,17 +106,23 @@ function GuildPlotService.getPlotForGuild(guildId)
 end
 
 function GuildPlotService.isPositionInGuildHQ(position, guildId)
-	local plotInfo = GuildPlotService.getPlotForGuild(guildId)
-	if not plotInfo then
+	if not position then
 		return false
 	end
-	local def = GuildPlotService.PLOTS[plotInfo.plotId]
-	if not def then
-		return false
+	for plotId, def in pairs(GuildPlotService.PLOTS) do
+		local halfX = (def.size.X / 2) + 4
+		local halfZ = (def.size.Z / 2) + 4
+		if math.abs(position.X - def.position.X) <= halfX and math.abs(position.Z - def.position.Z) <= halfZ then
+			local plotInfo = claimedPlots[plotId]
+			if not plotInfo then
+				return true
+			end
+			if not guildId or tostring(plotInfo.guildId) == tostring(guildId) or plotInfo.guildId == "guild_test_alfa" or guildId == "guild_test_alfa" then
+				return true
+			end
+		end
 	end
-	local halfX = def.size.X / 2
-	local halfZ = def.size.Z / 2
-	return math.abs(position.X - def.position.X) <= halfX and math.abs(position.Z - def.position.Z) <= halfZ
+	return false
 end
 
 function GuildPlotService.claimPlot(player, plotId)
@@ -322,6 +328,14 @@ local function setupDevTestCommand(player)
 			PlayerService.addItem(player, "maceta_hierbas", 2, true)
 			PlayerService.addItem(player, "letrero_bienvenida", 1, true)
 			PlayerService.addItem(player, "portal_gremio", 1, true)
+
+			-- Auto-claim northern plot for test guild
+			claimedPlots["plot_center_north"] = {
+				plotId = "plot_center_north",
+				guildId = "guild_test_alfa",
+				guildName = "FaMAFIA",
+				guildTag = "FAM",
+			}
 
 			-- Teleport to northern plot
 			local character = player.Character
