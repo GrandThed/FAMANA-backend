@@ -44,6 +44,12 @@ MeshAssetService.start() -- loads the Style-A mesh models before the world build
 DayNightService.start() -- ticks Lighting.ClockTime; runs everywhere (not gated by role) so isNight() is always meaningful
 if role == "cell" then
 	WorldService.start()
+	-- Terrain is HAND-SCULPTED in Studio and saved with the place — nothing
+	-- regenerates it (shared/TerrainGen stays available as a command-bar
+	-- tool: .generateCell() for a procedural base, .applyPalette() to tint
+	-- terrain materials to the map palette). Deploys preserve it: the map
+	-- pull carries Workspace.Terrain alongside Workspace.Map (pull-maps.mjs
+	-- -> maps/<name>.terrain.rbxm, mounted back by the per-place projects).
 end
 PlayerService.start()
 HealthService.start()

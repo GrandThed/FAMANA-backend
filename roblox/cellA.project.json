@@ -26,18 +26,6 @@
       "$properties": {
         "FilteringEnabled": true
       },
-      "Baseplate": {
-        "$className": "Part",
-        "$properties": {
-          "Anchored": true,
-          "Locked": true,
-          "Size": [512, 4, 512],
-          "Position": [0, -2, 0],
-          "Color": [0.39, 0.37, 0.39],
-          "TopSurface": "Smooth",
-          "BottomSurface": "Smooth"
-        }
-      },
       "SpawnLocation": {
         "$className": "SpawnLocation",
         "$properties": {
@@ -45,7 +33,7 @@
           "Duration": 0,
           "Neutral": true,
           "Size": [6, 1, 6],
-          "Position": [0, 0.5, 0],
+          "Position": [72, 9, 162],
           "TopSurface": "Smooth",
           "BottomSurface": "Smooth"
         }
@@ -53,6 +41,11 @@
       "Map": {
         "$path": {
           "optional": "maps/cellA.rbxm"
+        }
+      },
+      "Terrain": {
+        "$path": {
+          "optional": "maps/cellA.terrain.rbxm"
         }
       }
     },

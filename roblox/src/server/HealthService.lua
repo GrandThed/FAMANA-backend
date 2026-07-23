@@ -420,6 +420,29 @@ local function hookedSpawnPosition(player)
 	return nil
 end
 
+-- Ground height at (x, z) against the generated voxel terrain + authored
+-- map, EnemyService.groundY-style. nil when nothing is hit.
+local spawnGroundParams
+local function spawnGroundY(x, z)
+	if not spawnGroundParams then
+		spawnGroundParams = RaycastParams.new()
+		spawnGroundParams.FilterType = Enum.RaycastFilterType.Include
+		spawnGroundParams.IgnoreWater = true
+		spawnGroundParams.RespectCanCollide = true
+		local include = { workspace.Terrain }
+		for _, name in ipairs({ "Map", "Baseplate" }) do
+			local inst = workspace:FindFirstChild(name)
+			if inst then
+				table.insert(include, inst)
+			end
+		end
+		spawnGroundParams.FilterDescendantsInstances = include
+	end
+	local result = workspace:Raycast(
+		Vector3.new(x, 500, z), Vector3.new(0, -1500, 0), spawnGroundParams)
+	return result and result.Position.Y or nil
+end
+
 local function onCharacterAdded(player, character)
 	local humanoid = character:WaitForChild("Humanoid")
 	local profile = PlayerService.get(player)
@@ -449,7 +472,14 @@ local function onCharacterAdded(player, character)
 		local p = profile.position
 		if not (p.x == 0 and p.y == 0 and p.z == 0) then
 			local root = character:WaitForChild("HumanoidRootPart")
-			root.CFrame = CFrame.new(p.x, p.y, p.z)
+			-- Positions saved before the terrain existed (or after a recipe
+			-- change) can sit under the generated ground — lift to the surface.
+			local y = p.y
+			local ground = spawnGroundY(p.x, p.z)
+			if ground and y < ground + 3 then
+				y = ground + 3
+			end
+			root.CFrame = CFrame.new(p.x, y, p.z)
 		end
 	end
 

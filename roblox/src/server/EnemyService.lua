@@ -102,6 +102,7 @@ local ENEMY_DEFS = {
 		-- Slimes only move by hopping (parabolic jumps with squash & stretch).
 		movement = "hop",
 		hop = { distance = 6, height = 2.5, time = 0.5, pause = 0.35 },
+		turnSpeed = 220, -- deg/s: an ooze pivots, it doesn't whip around
 		-- No meshAsset on purpose: the classic translucent squash-and-stretch
 		-- cube IS the slime's look (the mesh version was tried and reverted).
 		-- Welded onto the body part; offsets from its center, front is -Z.
@@ -131,6 +132,7 @@ local ENEMY_DEFS = {
 		xpReward = 35,
 		attackCooldown = 1.2,
 		walkSpeed = 12,
+		turnSpeed = 320,
 		aggroRange = 35,
 		attackRange = 6,
 		respawn = 20,
@@ -171,6 +173,7 @@ local ENEMY_DEFS = {
 		xpReward = 80,
 		attackCooldown = 2.4, -- slow two-fist slam, hits like a truck
 		walkSpeed = 7, -- lumbering stomp
+		turnSpeed = 120, -- a pile of boulders pivots like one
 		aggroRange = 25, -- short-sighted pile of rocks
 		attackRange = 9, -- big body, long arms
 		respawn = 35,
@@ -200,6 +203,7 @@ local ENEMY_DEFS = {
 		xpReward = 50,
 		attackCooldown = 1.1, -- rapid strikes
 		walkSpeed = 16, -- fast alternating-tetrapod scuttle
+		turnSpeed = 480, -- twitchy: whips around almost instantly
 		aggroRange = 32, -- longest leash in the game, but it must NOT reach
 		-- the forge/village from the nest spots below — check distances when
 		-- moving either
@@ -425,12 +429,47 @@ function EnemyService.computePlayerDamage(player, baseDamage, damageKind, opts)
 	return math.max(1, math.floor(damage + 0.5)), isCrit
 end
 
+-- Ground = the authored map (mesh terrain, buildings) or the fallback
+-- Baseplate — NOT trees, drops, characters or other enemies, which used to
+-- catch this ray and leave whoever spawned there standing on a canopy.
+-- IgnoreWater so enemies over the river/lake track the BED, not the surface.
+local groundParams
 local function groundY(x, z)
-	local params = RaycastParams.new()
-	params.FilterType = Enum.RaycastFilterType.Exclude
-	params.FilterDescendantsInstances = { enemyFolder }
-	local result = Workspace:Raycast(Vector3.new(x, 200, z), Vector3.new(0, -1000, 0), params)
+	if not groundParams then
+		groundParams = RaycastParams.new()
+		groundParams.FilterType = Enum.RaycastFilterType.Include
+		groundParams.IgnoreWater = true
+		groundParams.RespectCanCollide = true
+		-- Terrain first: the generated voxel ground (TerrainGen) is the floor
+		-- wherever it rises above the authored Map's parts.
+		local include = { Workspace.Terrain }
+		for _, name in ipairs({ "Map", "Baseplate" }) do
+			local inst = Workspace:FindFirstChild(name)
+			if inst then
+				table.insert(include, inst)
+			end
+		end
+		groundParams.FilterDescendantsInstances = include
+	end
+	local result = Workspace:Raycast(Vector3.new(x, 500, z), Vector3.new(0, -1500, 0), groundParams)
 	return result and result.Position.Y or 0
+end
+
+-- Enemies never snap to a new facing: the yaw eases toward the target
+-- direction at def.turnSpeed (deg/s, DEFAULT_TURN_SPEED when unset). One
+-- shared helper so hoppers and walkers turn alike — the position is applied
+-- as given, only the rotation is rate-limited (yaw-only; bodies stay upright).
+local DEFAULT_TURN_SPEED = 280
+local function faceTowards(part, pos, lookDir, dt, turnSpeed)
+	local cur = part.CFrame.LookVector
+	local yaw = math.atan2(-cur.X, -cur.Z)
+	if lookDir.Magnitude > 0.05 then
+		local targetYaw = math.atan2(-lookDir.X, -lookDir.Z)
+		local diff = (targetYaw - yaw + math.pi) % (2 * math.pi) - math.pi
+		local maxStep = math.rad(turnSpeed or DEFAULT_TURN_SPEED) * dt
+		yaw += math.clamp(diff, -maxStep, maxStep)
+	end
+	part.CFrame = CFrame.new(pos) * CFrame.Angles(0, yaw, 0)
 end
 
 -- Colors mirror client/Theme.lua's Orb ramp (HpTop/HpBottom/HpRing) so the
@@ -696,11 +735,7 @@ local function updateHop(enemy, dt, root, def, speedMult)
 		local pos = enemy.hopFrom:Lerp(enemy.hopTo, a)
 			+ Vector3.new(0, math.sin(a * math.pi) * hop.height, 0)
 		local look = Vector3.new(enemy.hopTo.X - enemy.hopFrom.X, 0, enemy.hopTo.Z - enemy.hopFrom.Z)
-		if look.Magnitude > 0.05 then
-			part.CFrame = CFrame.lookAt(pos, pos + look)
-		else
-			part.CFrame = (part.CFrame - part.CFrame.Position) + pos
-		end
+		faceTowards(part, pos, look, dt, def.turnSpeed)
 		setSquash(enemy, 1 + 0.25 * math.sin(a * math.pi))
 		if a >= 1 then
 			enemy.hopState = "squash"
@@ -718,9 +753,7 @@ local function updateHop(enemy, dt, root, def, speedMult)
 		local flatTarget = Vector3.new(root.Position.X, from.Y, root.Position.Z)
 		local toTarget = flatTarget - from
 		local planarDist = toTarget.Magnitude
-		if planarDist > 0.05 then
-			part.CFrame = CFrame.lookAt(from, flatTarget)
-		end
+		faceTowards(part, from, toTarget, dt, def.turnSpeed)
 		if planarDist > def.attackRange and enemy.hopT >= hop.pause / (speedMult or 1) then
 			local to = from + toTarget.Unit * math.min(hop.distance, planarDist)
 			enemy.hopFrom = from
@@ -999,17 +1032,24 @@ local function updateEnemy(entry, dt)
 	else
 		local moving = false
 		if root then
-			-- Walk toward the player along the ground plane, facing the way we move.
+			-- Walk toward the player, following the ground. Pre-map worlds
+			-- were flat, so walkers kept their spawn height forever — on a
+			-- mesh terrain that walks them into hillsides and off cliffs
+			-- into thin air. The climb clamp keeps a raycast blip from
+			-- teleporting them vertically: slopes, not elevators.
 			local from = enemy.part.Position
 			local flatTarget = Vector3.new(root.Position.X, from.Y, root.Position.Z)
 			local toTarget = flatTarget - from
 			local planarDist = toTarget.Magnitude
 			if planarDist > def.attackRange then
 				local pos = from + toTarget.Unit * math.min(def.walkSpeed * speedMult * dt, planarDist)
-				enemy.part.CFrame = CFrame.lookAt(pos, Vector3.new(flatTarget.X, pos.Y, flatTarget.Z))
+				local feetY = groundY(pos.X, pos.Z) + def.size.Y / 2
+				local climb = def.walkSpeed * 2 * speedMult * dt
+				pos = Vector3.new(pos.X, from.Y + math.clamp(feetY - from.Y, -climb, climb), pos.Z)
+				faceTowards(enemy.part, pos, toTarget, dt, def.turnSpeed)
 				moving = true
 			elseif planarDist > 0.05 then
-				enemy.part.CFrame = CFrame.lookAt(from, flatTarget)
+				faceTowards(enemy.part, from, toTarget, dt, def.turnSpeed)
 			end
 		end
 		setAnimState(enemy, moving and "walk" or "idle")

@@ -199,11 +199,11 @@ local function buildMeshNode(spot, def, key, look)
 end
 
 local function buildTree(spot, def)
-	-- Anchor sized for the 1.5x mesh scale (MeshAssets.world.tree.scale).
+	-- Anchor sized for the 2.25x mesh scale (MeshAssets.world.tree.scale).
 	local meshNode = buildMeshNode(spot, def, "tree", {
-		anchorSize = Vector3.new(2.7, 12, 2.7),
+		anchorSize = Vector3.new(4, 18, 4),
 		fit = "trunk",
-		remnantSize = Vector3.new(2.7, 2.4, 2.7),
+		remnantSize = Vector3.new(4, 3.6, 4),
 		remnantColor = "trunkDark",
 	})
 	if meshNode then
@@ -256,11 +256,11 @@ end
 -- the regular Tree, so it visually reads as "needs a better axe" up front —
 -- same idea as IronRock vs. Rock.
 local function buildHardwoodTree(spot, def)
-	-- Anchor sized for the 1.5x mesh scale (MeshAssets.world.hardwood_tree.scale).
+	-- Anchor sized for the 2.25x mesh scale (MeshAssets.world.hardwood_tree.scale).
 	local meshNode = buildMeshNode(spot, def, "hardwood_tree", {
-		anchorSize = Vector3.new(3.9, 13.5, 3.9),
+		anchorSize = Vector3.new(5.9, 20, 5.9),
 		fit = "trunk",
-		remnantSize = Vector3.new(3.9, 2.7, 3.9),
+		remnantSize = Vector3.new(5.9, 4, 5.9),
 		remnantColor = "stoneDark",
 	})
 	if meshNode then
@@ -314,9 +314,9 @@ end
 -- stacked shrinking pine slabs.
 local function buildConiferTree(spot, def)
 	local meshNode = buildMeshNode(spot, def, "conifer_tree", {
-		anchorSize = Vector3.new(2.4, 14, 2.4),
+		anchorSize = Vector3.new(3.6, 21, 3.6),
 		fit = "trunk",
-		remnantSize = Vector3.new(2.4, 2.4, 2.4),
+		remnantSize = Vector3.new(3.6, 3.6, 3.6),
 		remnantColor = "stoneLight",
 	})
 	if meshNode then
@@ -367,9 +367,9 @@ end
 -- tree. ArtKit fallback: grey trunk + two bare angled branches.
 local function buildDeadTree(spot, def)
 	local meshNode = buildMeshNode(spot, def, "dead_tree", {
-		anchorSize = Vector3.new(2.2, 9, 2.2),
+		anchorSize = Vector3.new(3.3, 13.5, 3.3),
 		fit = "trunk",
-		remnantSize = Vector3.new(2.2, 2, 2.2),
+		remnantSize = Vector3.new(3.3, 3, 3.3),
 		remnantColor = "stoneDark",
 	})
 	if meshNode then

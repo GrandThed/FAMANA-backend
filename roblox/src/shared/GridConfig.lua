@@ -11,7 +11,7 @@ local GridConfig = {}
 GridConfig.cells = {
 	A = {
 		placeId = 130890869057243, -- Cell A (start place)
-		neighbors = { east = "B" },
+		neighbors = { south = "B" }, -- per the world map: B lies across the strait
 		theme = {
 			name = "CELL A",
 			ground = Color3.fromRGB(86, 140, 78), -- grassy green
@@ -20,7 +20,7 @@ GridConfig.cells = {
 	},
 	B = {
 		placeId = 96623482055191, -- Cell B
-		neighbors = { west = "A" },
+		neighbors = { north = "A" },
 		theme = {
 			name = "CELL B",
 			ground = Color3.fromRGB(168, 130, 92), -- sandy brown

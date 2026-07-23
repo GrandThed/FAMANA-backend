@@ -82,11 +82,11 @@ MeshAssets.world = {
 	-- counts, palette bias); every placed node draws a random one so forests
 	-- read less regular.
 	-- `scale` multiplies the mesh at placement (MeshAssetService.place).
-	tree = { scale = 1.5, assetIds = { 72344195310639, 107593124794028, 117032412913468, 79125791269192, 105236673635744 } }, -- green oak 01-05
-	hardwood_tree = { scale = 1.5, assetIds = { 138632698344179, 127398703088981, 74528344057829, 71595350168403, 104059734104173 } }, -- autumn oak 01-05
+	tree = { scale = 2.25, assetIds = { 72344195310639, 107593124794028, 117032412913468, 79125791269192, 105236673635744 } }, -- green oak 01-05
+	hardwood_tree = { scale = 2.25, assetIds = { 138632698344179, 127398703088981, 74528344057829, 71595350168403, 104059734104173 } }, -- autumn oak 01-05
 	-- Wood-variety nodes: both drop plain wood, different biome flavor.
-	conifer_tree = { assetIds = { 104417345453937, 80497554894490, 112725607111965, 70891102488617, 128070011856338 } },
-	dead_tree = { assetIds = { 97161715709820, 82951960226063, 76183893695357, 119450274004031, 94378359347271 } },
+	conifer_tree = { scale = 1.5, assetIds = { 104417345453937, 80497554894490, 112725607111965, 70891102488617, 128070011856338 } },
+	dead_tree = { scale = 1.5, assetIds = { 97161715709820, 82951960226063, 76183893695357, 119450274004031, 94378359347271 } },
 	-- Rock nodes are variant pools too (new_art_style/rocks — 3 structural
 	-- variants each: squat dome / tilted monolith / leaning twin slabs, ore
 	-- nuggets scattered over the host rock's side faces).

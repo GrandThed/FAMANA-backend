@@ -43,6 +43,7 @@ local ChestUI = require(script:WaitForChild("ChestUI"))
 local MarkerUI = require(script:WaitForChild("MarkerUI"))
 local ArrowSelectUI = require(script:WaitForChild("ArrowSelectUI"))
 local SwingCooldownUI = require(script:WaitForChild("SwingCooldownUI"))
+local RiftEffects = require(script:WaitForChild("RiftEffects"))
 
 ContentSync.start() -- first: overlays backend item defs onto the mirror
 SpellsClient.start() -- seeds/auto-places spell hotbar binds (HudUI renders them)
@@ -86,3 +87,4 @@ ChestUI.start()
 MarkerUI.start() -- click medio: marcar enemigo/loot/piso (solo o para la party con Shift)
 ArrowSelectUI.start() -- T key: cycle bow ammo type between owned arrows
 SwingCooldownUI.start() -- Minecraft-style bar under the crosshair, same cooldown data as HudUI's hotbar veil
+RiftEffects.start() -- oscurece/desatura el mundo al acercarse al borde de la grieta (experimento del rift)

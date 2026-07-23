@@ -52,6 +52,17 @@ local function fireIfChanged()
 end
 
 function DayNightService.start()
+	-- Pin the lighting environment. Fresh place templates ship
+	-- EnvironmentSpecularScale = 1 (+ 2022 materials), which makes flat-color
+	-- SmoothPlastic — the entire art style — reflect the sky like brushed
+	-- metal. Studio-only Lighting tweaks reset on deploy (places rebuild from
+	-- the project json), so the look is pinned here in code where every place
+	-- gets it.
+	Lighting.EnvironmentSpecularScale = 0.15
+	pcall(function()
+		game:GetService("MaterialService").Use2022Materials = false
+	end)
+
 	Lighting.ClockTime = DayNight.dawn -- fresh server boots at sunrise, not pitch black
 	wasNight = DayNightService.isNight()
 

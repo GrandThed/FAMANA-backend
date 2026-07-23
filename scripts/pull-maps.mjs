@@ -1,7 +1,8 @@
-// Pulls each live place's authored Map folder down into roblox/maps/<name>/
-// so Studio stays the source of truth for maps while git stays the source of
-// truth for code. deploy-places.mjs calls pullMap() before every build; this
-// file is also runnable standalone to refresh maps without deploying:
+// Pulls each live place's authored Map folder AND hand-sculpted Terrain down
+// into roblox/maps/ so Studio stays the source of truth for world content
+// while git stays the source of truth for code. deploy-places.mjs calls
+// pullMap() before every build; this file is also runnable standalone to
+// refresh maps without deploying:
 //
 //   node scripts/pull-maps.mjs           # pull every place in places.json
 //   node scripts/pull-maps.mjs cellA     # only the named place(s)
@@ -14,9 +15,11 @@
 //      opaque .rbxm file (no naming constraints INSIDE Map this way; rojo
 //      only requires unique names among instances it maps to project nodes,
 //      and here that's just Workspace's direct children). The script then
-//      keeps Map.rbxm as roblox/maps/<name>.rbxm and discards the rest
-//      (Baseplate, Terrain, …). The per-place project mounts that file back
-//      as Workspace.Map, so the next build reproduces the live map exactly.
+//      keeps Map.rbxm as roblox/maps/<name>.rbxm and Terrain.rbxm (the
+//      hand-sculpted voxel terrain + its material tints) as
+//      roblox/maps/<name>.terrain.rbxm, discarding the rest (Baseplate, …).
+//      The per-place projects mount both files back as Workspace.Map /
+//      Workspace.Terrain, so the next build reproduces the live world exactly.
 //
 // A live place WITHOUT a Map folder removes roblox/maps/<name>.rbxm (the
 // game then runs on the def-`spots` fallback, same as pre-map days). Maps
@@ -97,14 +100,32 @@ function extractMap(name, placeFile) {
   }
   const stderr = result.stderr || "";
   if (stderr.includes("must have a unique name")) {
+    const detail = stderr
+      .split("\n")
+      .filter((line) => line.includes("duplicated"))
+      .map((line) => line.trim())
+      .join("\n    ");
     throw new Error(
-      "two instances sitting DIRECTLY under Workspace (outside Map) share a name — Rojo\n" +
-        "    can't extract that. In Studio, keep everything you build inside the Map folder.\n" +
-        `    Rojo said: ${stderr.trim().split("\n")[1] || stderr.trim().split("\n")[0]}`
+      "instances sitting DIRECTLY under Workspace (outside Map) share a name — Rojo can't\n" +
+        "    extract that. In Studio, delete stray objects loose in Workspace (leftover test\n" +
+        "    models, unparented parts…) or move them inside Map, then Publish and retry.\n" +
+        `    ${detail || stderr.trim().split("\n").slice(-2).join("\n    ")}`
     );
   }
   if (result.status !== 0 || stderr.includes("[ERROR")) {
     throw new Error(`rojo syncback failed:\n${stderr || result.stdout}`);
+  }
+
+  // Terrain: always emitted by syncback (the instance always exists) — an
+  // unsculpted place just yields a tiny empty-grid rbxm. Same optional-mount
+  // contract as Map.
+  const pulledTerrain = path.join(outDir, "Terrain.rbxm");
+  const destTerrain = path.join(MAPS_DIR, `${name}.terrain.rbxm`);
+  fs.mkdirSync(MAPS_DIR, { recursive: true });
+  if (fs.existsSync(pulledTerrain)) {
+    fs.copyFileSync(pulledTerrain, destTerrain);
+  } else {
+    fs.rmSync(destTerrain, { force: true });
   }
 
   const pulled = path.join(outDir, "Map.rbxm");
@@ -116,7 +137,6 @@ function extractMap(name, placeFile) {
     fs.rmSync(dest, { force: true });
     return "no-map";
   }
-  fs.mkdirSync(MAPS_DIR, { recursive: true });
   fs.copyFileSync(pulled, dest);
   return "pulled";
 }

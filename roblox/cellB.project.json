@@ -54,6 +54,11 @@
         "$path": {
           "optional": "maps/cellB.rbxm"
         }
+      },
+      "Terrain": {
+        "$path": {
+          "optional": "maps/cellB.terrain.rbxm"
+        }
       }
     },
     "HttpService": {
